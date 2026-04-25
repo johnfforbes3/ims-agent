@@ -1,0 +1,784 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns="http://schemas.microsoft.com/project">
+  <Name>ATLAS Radar System Development</Name>
+  <StartDate>2026-01-05T08:00:00</StartDate>
+  <FinishDate>2026-12-18T17:00:00</FinishDate>
+
+  <!-- ================================================================
+       RESOURCES (5 CAMs)
+       ================================================================ -->
+  <Resources>
+    <Resource>
+      <UID>1</UID>
+      <Name>Alice Nguyen</Name>
+    </Resource>
+    <Resource>
+      <UID>2</UID>
+      <Name>Bob Martinez</Name>
+    </Resource>
+    <Resource>
+      <UID>3</UID>
+      <Name>Carol Smith</Name>
+    </Resource>
+    <Resource>
+      <UID>4</UID>
+      <Name>David Lee</Name>
+    </Resource>
+    <Resource>
+      <UID>5</UID>
+      <Name>Eva Johnson</Name>
+    </Resource>
+  </Resources>
+
+  <!-- ================================================================
+       TASKS (57 tasks + 1 summary = 58 total)
+       UIDs 1–10:   WBS 1 — Systems Engineering (Alice Nguyen)
+       UIDs 11–20:  WBS 2 — Hardware Development (Bob Martinez)
+       UIDs 21–30:  WBS 3 — Software Development (Carol Smith)
+       UIDs 31–40:  WBS 4 — Integration & Test (David Lee)
+       UIDs 41–50:  WBS 5 — Program Management (Eva Johnson)
+       UIDs 51–57:  Program Milestones
+       ================================================================ -->
+  <Tasks>
+
+    <!-- UID 0: Project summary (always present in MSPDI) -->
+    <Task>
+      <UID>0</UID>
+      <Name>ATLAS Radar System Development</Name>
+      <Start>2026-01-05T08:00:00</Start>
+      <Finish>2026-12-18T17:00:00</Finish>
+      <PercentComplete>32</PercentComplete>
+      <Summary>1</Summary>
+    </Task>
+
+    <!-- ============================================================
+         WBS 1 — Systems Engineering (Alice Nguyen)
+         ============================================================ -->
+    <Task>
+      <UID>1</UID>
+      <Name>SE-01 System Requirements Review (SRR)</Name>
+      <Start>2026-01-05T08:00:00</Start>
+      <Finish>2026-02-13T17:00:00</Finish>
+      <BaselineStart>2026-01-05T08:00:00</BaselineStart>
+      <BaselineFinish>2026-02-13T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+    </Task>
+    <Task>
+      <UID>2</UID>
+      <Name>SE-02 System Design Document</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-04-03T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-04-03T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>85</PercentComplete>
+      <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>3</UID>
+      <Name>SE-03 Interface Control Documents (ICDs)</Name>
+      <Start>2026-03-02T08:00:00</Start>
+      <Finish>2026-04-17T17:00:00</Finish>
+      <BaselineStart>2026-03-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-04-17T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>60</PercentComplete>
+      <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>4</UID>
+      <Name>SE-04 CONOPS Development</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-03-20T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-03-20T17:00:00</BaselineFinish>
+      <Duration>PT160H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+      <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>5</UID>
+      <Name>SE-05 Requirements Traceability Matrix</Name>
+      <Start>2026-03-23T08:00:00</Start>
+      <Finish>2026-05-01T17:00:00</Finish>
+      <BaselineStart>2026-03-23T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-01T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>40</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>6</UID>
+      <Name>SE-06 Preliminary Design Review (PDR) Package</Name>
+      <Start>2026-04-20T08:00:00</Start>
+      <Finish>2026-05-29T17:00:00</Finish>
+      <BaselineStart>2026-04-20T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-29T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>10</PercentComplete>
+      <PredecessorLink><PredecessorUID>2</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>5</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>7</UID>
+      <Name>SE-07 System Safety Analysis</Name>
+      <Start>2026-04-06T08:00:00</Start>
+      <Finish>2026-06-12T17:00:00</Finish>
+      <BaselineStart>2026-04-06T08:00:00</BaselineStart>
+      <BaselineFinish>2026-06-12T17:00:00</BaselineFinish>
+      <Duration>PT480H0M0S</Duration>
+      <PercentComplete>5</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>8</UID>
+      <Name>SE-08 Reliability Analysis</Name>
+      <Start>2026-04-06T08:00:00</Start>
+      <Finish>2026-05-15T17:00:00</Finish>
+      <BaselineStart>2026-04-06T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-15T17:00:00</BaselineFinish>
+      <Duration>MS-240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>9</UID>
+      <Name>SE-09 Critical Design Review (CDR) Package</Name>
+      <Start>2026-07-06T08:00:00</Start>
+      <Finish>2026-08-14T17:00:00</Finish>
+      <BaselineStart>2026-07-06T08:00:00</BaselineStart>
+      <BaselineFinish>2026-08-14T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>6</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>10</UID>
+      <Name>SE-10 Verification &amp; Validation Plan</Name>
+      <Start>2026-06-01T08:00:00</Start>
+      <Finish>2026-07-10T17:00:00</Finish>
+      <BaselineStart>2026-06-01T08:00:00</BaselineStart>
+      <BaselineFinish>2026-07-10T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>6</PredecessorUID></PredecessorLink>
+    </Task>
+
+    <!-- ============================================================
+         WBS 2 — Hardware Development (Bob Martinez)
+         ============================================================ -->
+    <Task>
+      <UID>11</UID>
+      <Name>HW-01 RF Front End Design</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-04-17T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-04-17T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>75</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>12</UID>
+      <Name>HW-02 Signal Processing Board Design</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-04-24T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-04-24T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>55</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>13</UID>
+      <Name>HW-03 Power Supply Design</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-03-27T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-03-27T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>14</UID>
+      <Name>HW-04 Antenna Array Design</Name>
+      <Start>2026-03-02T08:00:00</Start>
+      <Finish>2026-05-08T17:00:00</Finish>
+      <BaselineStart>2026-03-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-08T17:00:00</BaselineFinish>
+      <Duration>PT400H0M0S</Duration>
+      <PercentComplete>45</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>15</UID>
+      <Name>HW-05 RF Front End Prototype Fabrication</Name>
+      <Start>2026-04-20T08:00:00</Start>
+      <Finish>2026-06-05T17:00:00</Finish>
+      <BaselineStart>2026-04-20T08:00:00</BaselineStart>
+      <BaselineFinish>2026-06-05T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>11</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>16</UID>
+      <Name>HW-06 Signal Processing Board Fabrication</Name>
+      <Start>2026-04-27T08:00:00</Start>
+      <Finish>2026-06-19T17:00:00</Finish>
+      <BaselineStart>2026-04-27T08:00:00</BaselineStart>
+      <BaselineFinish>2026-06-19T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>12</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>17</UID>
+      <Name>HW-07 Antenna Array Fabrication</Name>
+      <Start>2026-05-11T08:00:00</Start>
+      <Finish>2026-07-17T17:00:00</Finish>
+      <BaselineStart>2026-05-11T08:00:00</BaselineStart>
+      <BaselineFinish>2026-07-17T17:00:00</BaselineFinish>
+      <Duration>PT480H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>14</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>18</UID>
+      <Name>HW-08 Hardware Unit Testing</Name>
+      <Start>2026-06-22T08:00:00</Start>
+      <Finish>2026-08-07T17:00:00</Finish>
+      <BaselineStart>2026-06-22T08:00:00</BaselineStart>
+      <BaselineFinish>2026-08-07T17:00:00</BaselineFinish>
+      <Duration>PT320H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>15</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>16</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>19</UID>
+      <Name>HW-09 Environmental Stress Screening</Name>
+      <Start>2026-08-10T08:00:00</Start>
+      <Finish>2026-09-04T17:00:00</Finish>
+      <BaselineStart>2026-08-10T08:00:00</BaselineStart>
+      <BaselineFinish>2026-09-04T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>18</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>20</UID>
+      <Name>HW-10 Hardware Acceptance Test</Name>
+      <Start>2026-09-07T08:00:00</Start>
+      <Finish>2026-10-02T17:00:00</Finish>
+      <BaselineStart>2026-09-07T08:00:00</BaselineStart>
+      <BaselineFinish>2026-10-02T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>19</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>17</PredecessorUID></PredecessorLink>
+    </Task>
+
+    <!-- ============================================================
+         WBS 3 — Software Development (Carol Smith)
+         ============================================================ -->
+    <Task>
+      <UID>21</UID>
+      <Name>SW-01 Software Requirements Specification</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-03-27T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-03-27T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+      <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>22</UID>
+      <Name>SW-02 Software Architecture Design</Name>
+      <Start>2026-03-30T08:00:00</Start>
+      <Finish>2026-05-08T17:00:00</Finish>
+      <BaselineStart>2026-03-30T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-08T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>70</PercentComplete>
+      <PredecessorLink><PredecessorUID>21</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>23</UID>
+      <Name>SW-03 Signal Processing Algorithm Development</Name>
+      <Start>2026-04-06T08:00:00</Start>
+      <Finish>2026-06-19T17:00:00</Finish>
+      <BaselineStart>2026-04-06T08:00:00</BaselineStart>
+      <BaselineFinish>2026-06-19T17:00:00</BaselineFinish>
+      <Duration>PT480H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+      <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>24</UID>
+      <Name>SW-04 Tracking Algorithm Development</Name>
+      <Start>2026-04-06T08:00:00</Start>
+      <Finish>2026-06-26T17:00:00</Finish>
+      <BaselineStart>2026-04-06T08:00:00</BaselineStart>
+      <BaselineFinish>2026-06-26T17:00:00</BaselineFinish>
+      <Duration>PT480H0M0S</Duration>
+      <PercentComplete>20</PercentComplete>
+      <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>25</UID>
+      <Name>SW-05 User Interface Development</Name>
+      <Start>2026-05-11T08:00:00</Start>
+      <Finish>2026-07-10T17:00:00</Finish>
+      <BaselineStart>2026-05-11T08:00:00</BaselineStart>
+      <BaselineFinish>2026-07-10T17:00:00</BaselineFinish>
+      <Duration>PT400H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>26</UID>
+      <Name>SW-06 Database Design and Implementation</Name>
+      <Start>2026-04-20T08:00:00</Start>
+      <Finish>2026-05-29T17:00:00</Finish>
+      <BaselineStart>2026-04-20T08:00:00</BaselineStart>
+      <BaselineFinish>2026-05-29T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>15</PercentComplete>
+      <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>27</UID>
+      <Name>SW-07 Software Unit Testing</Name>
+      <Start>2026-06-22T08:00:00</Start>
+      <Finish>2026-07-31T17:00:00</Finish>
+      <BaselineStart>2026-06-22T08:00:00</BaselineStart>
+      <BaselineFinish>2026-07-31T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>23</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>24</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>26</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>28</UID>
+      <Name>SW-08 Software Integration Testing</Name>
+      <Start>2026-08-03T08:00:00</Start>
+      <Finish>2026-09-04T17:00:00</Finish>
+      <BaselineStart>2026-08-03T08:00:00</BaselineStart>
+      <BaselineFinish>2026-09-04T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>27</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>25</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>29</UID>
+      <Name>SW-09 Software Qualification Testing</Name>
+      <Start>2026-09-07T08:00:00</Start>
+      <Finish>2026-10-16T17:00:00</Finish>
+      <BaselineStart>2026-09-07T08:00:00</BaselineStart>
+      <BaselineFinish>2026-10-16T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>28</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>30</UID>
+      <Name>SW-10 Software Documentation Complete</Name>
+      <Start>2026-09-07T08:00:00</Start>
+      <Finish>2026-10-02T17:00:00</Finish>
+      <BaselineStart>2026-09-07T08:00:00</BaselineStart>
+      <BaselineFinish>2026-10-02T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>28</PredecessorUID></PredecessorLink>
+    </Task>
+
+    <!-- ============================================================
+         WBS 4 — Integration & Test (David Lee)
+         ============================================================ -->
+    <Task>
+      <UID>31</UID>
+      <Name>IT-01 Integration Test Plan</Name>
+      <Start>2026-06-01T08:00:00</Start>
+      <Finish>2026-07-10T17:00:00</Finish>
+      <BaselineStart>2026-06-01T08:00:00</BaselineStart>
+      <BaselineFinish>2026-07-10T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>10</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>32</UID>
+      <Name>IT-02 Lab Setup and Calibration</Name>
+      <Start>2026-07-13T08:00:00</Start>
+      <Finish>2026-08-07T17:00:00</Finish>
+      <BaselineStart>2026-07-13T08:00:00</BaselineStart>
+      <BaselineFinish>2026-08-07T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>31</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>33</UID>
+      <Name>IT-03 Hardware-Software Integration</Name>
+      <Start>2026-10-05T08:00:00</Start>
+      <Finish>2026-11-06T17:00:00</Finish>
+      <BaselineStart>2026-10-05T08:00:00</BaselineStart>
+      <BaselineFinish>2026-11-06T17:00:00</BaselineFinish>
+      <Duration>PT240H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>20</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>29</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>32</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>34</UID>
+      <Name>IT-04 System Functional Testing</Name>
+      <Start>2026-11-09T08:00:00</Start>
+      <Finish>2026-11-27T17:00:00</Finish>
+      <BaselineStart>2026-11-09T08:00:00</BaselineStart>
+      <BaselineFinish>2026-11-27T17:00:00</BaselineFinish>
+      <Duration>PT120H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>33</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>35</UID>
+      <Name>IT-05 System Performance Testing</Name>
+      <Start>2026-11-09T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-11-09T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT160H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>33</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>36</UID>
+      <Name>IT-06 Environmental Testing</Name>
+      <Start>2026-11-30T08:00:00</Start>
+      <Finish>2026-12-11T17:00:00</Finish>
+      <BaselineStart>2026-11-30T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-11T17:00:00</BaselineFinish>
+      <Duration>PT80H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>34</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>35</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>37</UID>
+      <Name>IT-07 Regression Testing</Name>
+      <Start>2026-12-07T08:00:00</Start>
+      <Finish>2026-12-11T17:00:00</Finish>
+      <BaselineStart>2026-12-07T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-11T17:00:00</BaselineFinish>
+      <Duration>PT40H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>36</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>38</UID>
+      <Name>IT-08 Test Readiness Review</Name>
+      <Start>2026-09-14T08:00:00</Start>
+      <Finish>2026-09-25T17:00:00</Finish>
+      <BaselineStart>2026-09-14T08:00:00</BaselineStart>
+      <BaselineFinish>2026-09-25T17:00:00</BaselineFinish>
+      <Duration>PT80H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>9</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>32</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>39</UID>
+      <Name>IT-09 Acceptance Test Procedure Development</Name>
+      <Start>2026-08-17T08:00:00</Start>
+      <Finish>2026-09-11T17:00:00</Finish>
+      <BaselineStart>2026-08-17T08:00:00</BaselineStart>
+      <BaselineFinish>2026-09-11T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>31</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>40</UID>
+      <Name>IT-10 System Acceptance Test</Name>
+      <Start>2026-12-14T08:00:00</Start>
+      <Finish>2026-12-18T17:00:00</Finish>
+      <BaselineStart>2026-12-14T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-18T17:00:00</BaselineFinish>
+      <Duration>PT40H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink><PredecessorUID>37</PredecessorUID></PredecessorLink>
+      <PredecessorLink><PredecessorUID>39</PredecessorUID></PredecessorLink>
+    </Task>
+
+    <!-- ============================================================
+         WBS 5 — Program Management (Eva Johnson)
+         ============================================================ -->
+    <Task>
+      <UID>41</UID>
+      <Name>PM-01 Program Management Plan</Name>
+      <Start>2026-01-05T08:00:00</Start>
+      <Finish>2026-02-06T17:00:00</Finish>
+      <BaselineStart>2026-01-05T08:00:00</BaselineStart>
+      <BaselineFinish>2026-02-06T17:00:00</BaselineFinish>
+      <Duration>PT200H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+    </Task>
+    <Task>
+      <UID>42</UID>
+      <Name>PM-02 Risk Management Plan</Name>
+      <Start>2026-01-05T08:00:00</Start>
+      <Finish>2026-01-23T17:00:00</Finish>
+      <BaselineStart>2026-01-05T08:00:00</BaselineStart>
+      <BaselineFinish>2026-01-23T17:00:00</BaselineFinish>
+      <Duration>PT120H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+    </Task>
+    <Task>
+      <UID>43</UID>
+      <Name>PM-03 Monthly Status Reports</Name>
+      <Start>2026-02-02T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-02-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1600H0M0S</Duration>
+      <PercentComplete>28</PercentComplete>
+      <PredecessorLink><PredecessorUID>41</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>44</UID>
+      <Name>PM-04 Earned Value Management Reporting</Name>
+      <Start>2026-02-02T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-02-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1600H0M0S</Duration>
+      <PercentComplete>28</PercentComplete>
+      <PredecessorLink><PredecessorUID>41</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>45</UID>
+      <Name>PM-05 IMS Baseline Maintenance</Name>
+      <Start>2026-01-26T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-01-26T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1760H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+    </Task>
+    <Task>
+      <UID>46</UID>
+      <Name>PM-06 Subcontractor Management</Name>
+      <Start>2026-02-16T08:00:00</Start>
+      <Finish>2026-10-16T17:00:00</Finish>
+      <BaselineStart>2026-02-16T08:00:00</BaselineStart>
+      <BaselineFinish>2026-10-16T17:00:00</BaselineFinish>
+      <Duration>PT1360H0M0S</Duration>
+      <PercentComplete>25</PercentComplete>
+    </Task>
+    <Task>
+      <UID>47</UID>
+      <Name>PM-07 Configuration Management</Name>
+      <Start>2026-02-02T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-02-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1680H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+    </Task>
+    <Task>
+      <UID>48</UID>
+      <Name>PM-08 Quality Assurance</Name>
+      <Start>2026-02-02T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-02-02T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1680H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+    </Task>
+    <Task>
+      <UID>49</UID>
+      <Name>PM-09 Customer Coordination Meetings</Name>
+      <Start>2026-01-12T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-01-12T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1840H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+    </Task>
+    <Task>
+      <UID>50</UID>
+      <Name>PM-10 Data Management</Name>
+      <Start>2026-01-12T08:00:00</Start>
+      <Finish>2026-12-04T17:00:00</Finish>
+      <BaselineStart>2026-01-12T08:00:00</BaselineStart>
+      <BaselineFinish>2026-12-04T17:00:00</BaselineFinish>
+      <Duration>PT1840H0M0S</Duration>
+      <PercentComplete>30</PercentComplete>
+    </Task>
+
+    <!-- ============================================================
+         Program Milestones (UIDs 51–57)
+         ============================================================ -->
+    <Task>
+      <UID>51</UID>
+      <Name>MS-01 System Requirements Review (SRR) Complete</Name>
+      <Start>2026-02-13T17:00:00</Start>
+      <Finish>2026-02-13T17:00:00</Finish>
+      <BaselineStart>2026-02-13T17:00:00</BaselineStart>
+      <BaselineFinish>2026-02-13T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>100</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>52</UID>
+      <Name>MS-02 Preliminary Design Review (PDR) Complete</Name>
+      <Start>2026-05-29T17:00:00</Start>
+      <Finish>2026-05-29T17:00:00</Finish>
+      <BaselineStart>2026-05-29T17:00:00</BaselineStart>
+      <BaselineFinish>2026-05-29T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>6</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>53</UID>
+      <Name>MS-03 Critical Design Review (CDR) Complete</Name>
+      <Start>2026-08-14T17:00:00</Start>
+      <Finish>2026-08-14T17:00:00</Finish>
+      <BaselineStart>2026-08-14T17:00:00</BaselineStart>
+      <BaselineFinish>2026-08-14T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>9</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>54</UID>
+      <Name>MS-04 Test Readiness Review (TRR) Complete</Name>
+      <Start>2026-09-25T17:00:00</Start>
+      <Finish>2026-09-25T17:00:00</Finish>
+      <BaselineStart>2026-09-25T17:00:00</BaselineStart>
+      <BaselineFinish>2026-09-25T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>38</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>55</UID>
+      <Name>MS-05 Hardware-Software Integration Complete</Name>
+      <Start>2026-11-06T17:00:00</Start>
+      <Finish>2026-11-06T17:00:00</Finish>
+      <BaselineStart>2026-11-06T17:00:00</BaselineStart>
+      <BaselineFinish>2026-11-06T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>33</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>56</UID>
+      <Name>MS-06 System Acceptance Test (SAT) Complete</Name>
+      <Start>2026-12-18T17:00:00</Start>
+      <Finish>2026-12-18T17:00:00</Finish>
+      <BaselineStart>2026-12-18T17:00:00</BaselineStart>
+      <BaselineFinish>2026-12-18T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>40</PredecessorUID></PredecessorLink>
+    </Task>
+    <Task>
+      <UID>57</UID>
+      <Name>MS-07 Program Complete / Delivery</Name>
+      <Start>2026-12-18T17:00:00</Start>
+      <Finish>2026-12-18T17:00:00</Finish>
+      <BaselineStart>2026-12-18T17:00:00</BaselineStart>
+      <BaselineFinish>2026-12-18T17:00:00</BaselineFinish>
+      <Duration>PT0H0M0S</Duration>
+      <PercentComplete>0</PercentComplete>
+      <Milestone>1</Milestone>
+      <PredecessorLink><PredecessorUID>56</PredecessorUID></PredecessorLink>
+    </Task>
+
+  </Tasks>
+
+  <!-- ================================================================
+       ASSIGNMENTS — maps tasks to CAMs (resources)
+       ================================================================ -->
+  <Assignments>
+    <!-- Alice Nguyen — WBS 1 (SE) -->
+    <Assignment><UID>101</UID><TaskUID>1</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>102</UID><TaskUID>2</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>103</UID><TaskUID>3</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>104</UID><TaskUID>4</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>105</UID><TaskUID>5</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>106</UID><TaskUID>6</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>107</UID><TaskUID>7</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>108</UID><TaskUID>8</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>109</UID><TaskUID>9</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <Assignment><UID>110</UID><TaskUID>10</TaskUID><ResourceUID>1</ResourceUID></Assignment>
+    <!-- Bob Martinez — WBS 2 (HW) -->
+    <Assignment><UID>111</UID><TaskUID>11</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>112</UID><TaskUID>12</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>113</UID><TaskUID>13</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>114</UID><TaskUID>14</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>115</UID><TaskUID>15</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>116</UID><TaskUID>16</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>117</UID><TaskUID>17</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>118</UID><TaskUID>18</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>119</UID><TaskUID>19</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <Assignment><UID>120</UID><TaskUID>20</TaskUID><ResourceUID>2</ResourceUID></Assignment>
+    <!-- Carol Smith — WBS 3 (SW) -->
+    <Assignment><UID>121</UID><TaskUID>21</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>122</UID><TaskUID>22</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>123</UID><TaskUID>23</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>124</UID><TaskUID>24</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>125</UID><TaskUID>25</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>126</UID><TaskUID>26</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>127</UID><TaskUID>27</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>128</UID><TaskUID>28</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>129</UID><TaskUID>29</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <Assignment><UID>130</UID><TaskUID>30</TaskUID><ResourceUID>3</ResourceUID></Assignment>
+    <!-- David Lee — WBS 4 (I&T) -->
+    <Assignment><UID>131</UID><TaskUID>31</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>132</UID><TaskUID>32</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>133</UID><TaskUID>33</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>134</UID><TaskUID>34</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>135</UID><TaskUID>35</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>136</UID><TaskUID>36</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>137</UID><TaskUID>37</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>138</UID><TaskUID>38</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>139</UID><TaskUID>39</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <Assignment><UID>140</UID><TaskUID>40</TaskUID><ResourceUID>4</ResourceUID></Assignment>
+    <!-- Eva Johnson — WBS 5 (PM) + Milestones -->
+    <Assignment><UID>141</UID><TaskUID>41</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>142</UID><TaskUID>42</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>143</UID><TaskUID>43</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>144</UID><TaskUID>44</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>145</UID><TaskUID>45</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>146</UID><TaskUID>46</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>147</UID><TaskUID>47</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>148</UID><TaskUID>48</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>149</UID><TaskUID>49</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>150</UID><TaskUID>50</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>151</UID><TaskUID>51</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>152</UID><TaskUID>52</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>153</UID><TaskUID>53</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>154</UID><TaskUID>54</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>155</UID><TaskUID>55</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>156</UID><TaskUID>56</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+    <Assignment><UID>157</UID><TaskUID>57</TaskUID><ResourceUID>5</ResourceUID></Assignment>
+  </Assignments>
+
+</Project>

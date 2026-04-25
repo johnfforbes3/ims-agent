@@ -1,0 +1,648 @@
+# IMS Agent — Enterprise Program Plan
+**Program:** Integrated Master Schedule (IMS) AI Agent  
+**Version:** 1.0  
+**Created:** 2026-04-25  
+**Status:** Phase 1 — In Progress  
+**Owner:** John Forbes  
+
+---
+
+## AGENT READING INSTRUCTIONS
+
+This document is the authoritative, single source of truth for the IMS Agent program. If you are an AI agent working on this program, you must:
+
+1. Read this entire document before taking any action
+2. Check the status of each phase and task before starting work
+3. Update checkboxes as tasks are completed (`[ ]` → `[x]`)
+4. Never skip a phase gate without explicit human approval
+5. When in doubt, stop and ask the human operator
+6. All code, configs, and artifacts must be committed to the project repository
+7. Reference the acceptance criteria before marking any phase complete
+
+---
+
+## EXECUTIVE SUMMARY
+
+### The Problem
+
+Defense program planners at large aerospace and defense contractors (e.g., L3Harris) manage Integrated Master Schedules (IMS) using Microsoft Project files. The current process for maintaining, updating, and analyzing the IMS is manual, time-consuming, and error-prone:
+
+- **Program Managers** must interrupt their planners to get answers about critical path, schedule risk, and milestone status
+- **Planners** spend significant time each week exporting the Project file to Excel, distributing filtered sheets to 15-25 Cost Account Managers (CAMs), collecting responses, manually re-integrating updates, and re-running analysis
+- **CAMs** receive flat spreadsheets with no context, provide bare percent-complete numbers with no explanation, and have no mechanism to flag blockers or risks proactively
+- **Program Teams** receive status information days after it is collected, by which time it may already be stale
+- **Schedule Risk Assessments (SRA)** using Monte Carlo simulation are run infrequently because they require manual effort — meaning teams fly blind on schedule risk between formal reviews
+
+### The Vision
+
+An AI agent that:
+1. **Conducts voice-based status interviews** with each CAM via Microsoft Teams — asking not just for percent complete but capturing blockers, risks, and context
+2. **Automatically updates the IMS** with all collected data after validation
+3. **Runs critical path analysis** and SRA (Monte Carlo) automatically after every full update cycle
+4. **Synthesizes intelligence** by connecting schedule data with the contextual information captured in CAM conversations
+5. **Delivers multi-channel output** — a live dashboard, Slack/email alerts with structured summaries, and an optional voice briefing for the program manager
+
+### Why This Wins
+
+- **Not a chatbot** — it acts autonomously on a recurring schedule
+- **Not a dashboard** — it gathers the data that feeds the dashboard
+- **Not a reporting tool** — it understands what the numbers mean and flags what matters
+- **Defensible moat** — deep integration with defense program management workflows, ITAR-aware data handling, and audit trails make this hard to replicate quickly
+
+### Target Users
+
+| Role | Pain Solved |
+|---|---|
+| Program Manager | Gets instant answers about schedule health without interrupting the planner |
+| Planner | Eliminates 4-8 hours/week of manual Excel orchestration |
+| Cost Account Manager (CAM) | Short structured voice conversation replaces tedious spreadsheet updates |
+| Program Control | Automatic SRA and critical path analysis available after every update cycle |
+| Leadership | Live dashboard and weekly voice briefing replace static slide decks |
+
+---
+
+## ARCHITECTURE OVERVIEW
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    IMS AGENT CORE                           │
+│                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │  Schedule   │  │    Voice     │  │    Analysis      │  │
+│  │  Manager   │  │  Interview   │  │    Engine        │  │
+│  │            │  │    Agent     │  │                  │  │
+│  │ Read/write │  │              │  │  Critical Path   │  │
+│  │ .mpp files │  │ Teams calls  │  │  Monte Carlo SRA │  │
+│  │ Parse IMS  │  │ Capture data │  │  Risk scoring    │  │
+│  └─────────────┘  └──────────────┘  └──────────────────┘  │
+│                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │   Output    │  │    Audit     │  │   Q&A Interface  │  │
+│  │   Engine    │  │    Logger    │  │                  │  │
+│  │            │  │              │  │  PM asks agent   │  │
+│  │ Dashboard  │  │ Immutable    │  │  questions about │  │
+│  │ Slack/email│  │ action log   │  │  the schedule    │  │
+│  │ Voice brief│  │              │  │                  │  │
+│  └─────────────┘  └──────────────┘  └──────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+           │                    │                    │
+    ┌──────┴──────┐    ┌────────┴──────┐   ┌────────┴──────┐
+    │  Microsoft  │    │  Microsoft    │   │  Slack/Email  │
+    │   Project   │    │    Teams      │   │   APIs        │
+    │  .mpp files │    │  Voice API    │   │               │
+    └─────────────┘    └───────────────┘   └───────────────┘
+```
+
+### Data Flow
+
+```
+IMS .mpp File
+    │
+    ▼
+Parse Tasks → Identify Status-Due Tasks → Group by CAM
+    │
+    ▼
+Voice Interview Loop (per CAM):
+  → Initiate Teams call
+  → Ask: percent complete
+  → If behind: ask: what is blocking you?
+  → Ask: any risks to flag?
+  → Capture structured data + unstructured context
+    │
+    ▼
+Validation Layer:
+  → Flag anomalies (sudden changes, impossible values)
+  → Human review gate (configurable)
+    │
+    ▼
+Schedule Update:
+  → Write percent completes to .mpp file
+  → Write CAM notes to task comments
+    │
+    ▼
+Analysis Engine:
+  → Critical path recalculation
+  → Monte Carlo SRA (N=1000 simulations)
+  → Risk scoring per milestone
+    │
+    ▼
+Intelligence Synthesis:
+  → Connect schedule data + CAM context + risk scores
+  → Identify top 5 risks
+  → Draft PM briefing
+    │
+    ▼
+Output Distribution:
+  → Update live dashboard
+  → Send Slack/email to stakeholders
+  → Generate optional voice briefing (1-2 min)
+  → Log all actions to audit trail
+```
+
+### Deployment Model
+
+- **Containerized** — Docker container(s) deployable to client Kubernetes or standalone server
+- **On-premises** — runs inside client network; no data leaves the boundary
+- **Least-privilege access** — agent only has access to the specific files, APIs, and systems it needs
+- **ITAR-aware** — no CUI/ITAR data sent to external APIs; all LLM inference via local or on-prem model
+- **Audit trail** — every action logged with actor, timestamp, before/after state
+
+---
+
+## PHASE OVERVIEW
+
+| Phase | Name | Description | Duration Estimate |
+|---|---|---|---|
+| **1** | Proof of Concept | Local agent reads .mpp, parses tasks, simulates CAM input, runs analysis, outputs text report | 2-3 weeks |
+| **2** | Voice Interview Layer | Agent conducts real Teams voice conversations with CAMs; captures structured + unstructured data | 4-6 weeks |
+| **3** | Full Automation Loop | End-to-end: scheduled trigger → interviews → update → analysis → output → dashboard | 4-6 weeks |
+| **4** | Q&A Interface | PM can ask the agent natural language questions about the schedule at any time | 3-4 weeks |
+| **5** | Production Hardening | Containerization, security review, ITAR compliance, deployment playbook, customer handoff | 4-6 weeks |
+
+**Total estimated duration:** 17-25 weeks (4-6 months)
+
+---
+
+## PHASE 1 — PROOF OF CONCEPT
+
+### Objective
+
+Prove that the agent logic works end-to-end on a local machine with a real or sample IMS file. No external integrations. No voice. No dashboard. Just: can the agent read the schedule, understand it, simulate status input, update it, run analysis, and produce a useful output?
+
+**Phase Gate:** A planner or PM reviews the output and says "yes, this tells me something useful and accurate about the schedule."
+
+---
+
+### Phase 1 Checklist
+
+#### 1.1 — Environment Setup
+- [x] Create project repository (`ims-agent`)
+- [x] Set up Python 3.11+ virtual environment
+- [x] Install core dependencies: `anthropic`, `pandas`, `numpy`, `python-dotenv`, `pytest`
+- [x] IMS file parser: MSPDI XML via stdlib `xml.etree.ElementTree` (see docs/decisions.md ADR-001)
+- [x] Create `.env.example` with all required environment variables documented
+- [x] Create `README.md` with setup instructions
+- [x] Verify agent can run with `python main.py` from a clean clone
+
+#### 1.2 — IMS File Parsing
+- [x] Obtain a sample .mpp file (real or synthetic — must have 50+ tasks, multiple CAMs, dependencies)
+- [x] Parse .mpp file and extract: task ID, task name, start date, finish date, percent complete, predecessor dependencies, assigned CAM/resource, baseline start, baseline finish
+- [x] Identify which tasks are "status-due" for the current reporting period
+- [x] Group tasks by CAM (Cost Account Manager)
+- [x] Export grouped task list to structured Python dict/JSON
+- [x] Unit test: parsed task count matches expected; no data loss
+- [x] Unit test: CAM grouping is correct; every task assigned to exactly one CAM
+
+#### 1.3 — Simulated CAM Status Input
+- [x] Build a simple CLI interface: "Simulating CAM: [Name]. Task: [Task Name]. Current: [X]%. Expected: [Y]%. Enter actual percent complete:"
+- [x] Accept percent complete input per task
+- [x] If percent complete is behind expected: prompt for blocker reason (free text)
+- [x] If percent complete is behind expected: prompt for risk flag (yes/no; if yes, describe)
+- [x] Store all inputs in structured JSON: `{task_id, cam_name, percent_complete, blocker, risk_flag, risk_description, timestamp}`
+- [x] Validate inputs: percent complete 0-100; no empty required fields
+- [x] Unit test: validation catches invalid inputs
+
+#### 1.4 — Schedule Update
+- [x] Write updated percent completes back to the .mpp file (or a copy of it)
+- [x] Write CAM notes/blockers to task notes field
+- [ ] Verify the updated .mpp file opens correctly in Microsoft Project (manual check — requires MS Project)
+- [x] Log every write operation: `{task_id, field, old_value, new_value, timestamp}`
+- [x] Unit test: written values match input values when file is re-parsed
+
+#### 1.5 — Critical Path Analysis
+- [x] Calculate the critical path from the updated schedule
+- [x] Identify which tasks are on the critical path
+- [x] Identify which tasks moved onto or off the critical path since last update
+- [x] Calculate total float for all non-critical tasks
+- [x] Flag tasks with float < 5 days as "near-critical"
+- [x] Unit test: critical path result matches known expected result on sample file
+
+#### 1.6 — Schedule Risk Assessment (SRA)
+- [x] Research and select SRA approach: Python Monte Carlo from scratch (see docs/decisions.md ADR-002)
+- [x] Implement or integrate Monte Carlo simulation (N=1000 minimum)
+- [x] Input: task duration distributions (use ±10% of remaining duration as default if no three-point estimates available)
+- [x] Output per milestone: P50 date, P80 date, P95 date, probability of hitting baseline date
+- [x] Flag milestones with <50% probability of hitting baseline as HIGH RISK
+- [x] Flag milestones with 50-75% probability as MEDIUM RISK
+- [x] Unit test: simulation output is reproducible within expected variance
+
+#### 1.7 — Intelligence Synthesis (LLM Layer)
+- [x] Connect to LLM (Claude claude-sonnet-4-6 via Anthropic API — see docs/decisions.md ADR-003)
+- [x] Build system prompt: agent persona, program context, instructions for synthesizing schedule data + CAM inputs
+- [x] Pass to LLM: critical path summary, SRA results, CAM blocker/risk inputs
+- [x] Receive from LLM: narrative summary of top risks, recommended PM actions, key questions to investigate
+- [x] Ensure LLM never hallucinates task data — all specific numbers come from the parsed schedule, not LLM generation
+- [ ] Unit test: LLM output references only tasks/dates/numbers that appear in input data (requires live API key — manual verification)
+
+#### 1.8 — Phase 1 Output: Text Report
+- [x] Generate a structured text/markdown report containing:
+  - [x] Report date and reporting period
+  - [x] Overall schedule health (green/yellow/red with rationale)
+  - [x] Critical path summary (which tasks, total duration, projected finish)
+  - [x] Top 5 risks (from SRA + CAM inputs combined)
+  - [x] Tasks behind schedule (list with CAM name, percent behind, blocker if provided)
+  - [x] Milestones at risk (with P50/P80/P95 dates)
+  - [x] Recommended actions for PM
+- [x] Save report to `/reports/{date}_ims_report.md`
+- [x] Unit test: report contains all required sections; no missing data
+
+#### 1.9 — Phase 1 Acceptance Test
+- [ ] Run full Phase 1 flow on sample .mpp file end-to-end
+- [ ] Have a real planner or PM review the output report
+- [ ] Collect feedback: Is the data accurate? Is anything missing? Is anything confusing?
+- [ ] Document feedback in `PHASE1-FEEDBACK.md`
+- [ ] Address all critical feedback before proceeding to Phase 2
+- [ ] **Human approval required to proceed to Phase 2** ✋
+
+---
+
+### Phase 1 Dependencies
+
+| Dependency | Owner | Status |
+|---|---|---|
+| Sample .mpp file (real or synthetic) | John Forbes | Not Started |
+| Python MPXJ bridge working on dev machine | Engineering | Not Started |
+| Anthropic API key (or local Ollama setup) | John Forbes | Not Started |
+| SRA tool decision (build vs integrate) | John Forbes + Engineering | Not Started |
+
+### Phase 1 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| .mpp parsing library doesn't work reliably | Medium | High | Test early; fall back to Project XML export if needed |
+| SRA from scratch takes too long | Medium | Medium | Use simplified ±10% distribution first; improve later |
+| LLM hallucinates schedule data | Medium | High | Strict prompt engineering; all numbers injected, not generated |
+
+---
+
+## PHASE 2 — VOICE INTERVIEW LAYER
+
+### Objective
+
+Replace the simulated CLI input with real voice conversations via Microsoft Teams. The agent calls each CAM, conducts a structured but conversational interview, and captures the same structured data + rich unstructured context that would have been entered manually.
+
+**Phase Gate:** Agent successfully conducts a real voice interview with a real CAM and captures accurate, usable data. The planner confirms the data quality matches or exceeds what they'd get from the Excel spreadsheet process.
+
+---
+
+### Phase 2 Checklist
+
+#### 2.1 — Teams Integration Research
+- [ ] Research Microsoft Teams voice calling API options: Teams Bot Framework, Azure Communication Services, Power Automate
+- [ ] Evaluate: can the agent initiate outbound calls? What are the authentication requirements?
+- [ ] Evaluate: can the agent conduct real-time voice conversations (speech-to-text + text-to-speech)?
+- [ ] Document chosen approach and rationale in `docs/teams-integration-decision.md`
+- [ ] Obtain necessary API credentials and permissions from Teams admin
+- [ ] Build a simple "Hello World" Teams bot that can initiate a call and say one sentence
+- [ ] Unit test: bot successfully initiates and completes a call
+
+#### 2.2 — Speech-to-Text Pipeline
+- [ ] Select STT engine: Azure Cognitive Services, Whisper (local), or equivalent
+- [ ] Implement real-time STT during CAM conversations
+- [ ] Handle: background noise, accents, technical jargon (program-specific terms)
+- [ ] Build confidence scoring: flag low-confidence transcriptions for human review
+- [ ] Unit test: transcription accuracy >95% on clean audio
+
+#### 2.3 — Text-to-Speech Pipeline
+- [ ] Select TTS engine (must sound professional and clear, not robotic)
+- [ ] Implement agent voice for interviewing CAMs
+- [ ] Build library of interview prompts (percent complete, blocker follow-up, risk follow-up, confirmation)
+- [ ] Unit test: TTS output is clear and intelligible
+
+#### 2.4 — Interview Agent Logic
+- [ ] Build conversation state machine: greeting → task loop → closing
+- [ ] Per task: ask percent complete → if behind, ask blocker → ask risk flag → confirm and move to next task
+- [ ] Handle: CAM says "I don't know yet" (flag for follow-up), CAM corrects themselves, CAM goes off-script
+- [ ] Implement graceful fallback: if call fails, fall back to email/Slack with structured form
+- [ ] Implement timeout handling: if no response in X seconds, prompt again; after 3 attempts, mark as no-response
+- [ ] Build CAM-specific context injection: agent knows which tasks belong to this CAM before calling
+- [ ] Unit test: state machine handles all expected conversation paths correctly
+
+#### 2.5 — Data Extraction from Conversation
+- [ ] After each CAM call, pass transcript to LLM for structured data extraction
+- [ ] Extract: percent complete per task, blocker description, risk flag, risk description
+- [ ] LLM returns structured JSON matching Phase 1 format
+- [ ] Validate extracted data against expected format
+- [ ] Flag any extraction failures for human review
+- [ ] Unit test: extraction accuracy against known transcripts >95%
+
+#### 2.6 — CAM Communication Management
+- [ ] Build CAM directory: name, Teams ID, email, phone, program/CAM assignment
+- [ ] Build scheduling logic: determine optimal time to call (business hours, not during known meetings)
+- [ ] Build retry logic: if no answer, retry after X hours; after 2 retries, escalate to email
+- [ ] Build status tracking: per CAM, per cycle: called, answered, completed, no-response, escalated
+- [ ] Unit test: scheduling logic respects business hours and retry limits
+
+#### 2.7 — Phase 2 Acceptance Test
+- [ ] Conduct real voice interviews with minimum 3 real CAMs using live .mpp data
+- [ ] Compare data quality (accuracy, completeness, context richness) vs traditional Excel process
+- [ ] Measure: time saved vs traditional process per CAM
+- [ ] Measure: CAM satisfaction (brief survey: was this easier than the spreadsheet?)
+- [ ] Document results in `PHASE2-FEEDBACK.md`
+- [ ] **Human approval required to proceed to Phase 3** ✋
+
+---
+
+### Phase 2 Dependencies
+
+| Dependency | Owner | Status |
+|---|---|---|
+| Microsoft Teams admin access for bot registration | Client IT / John Forbes | Not Started |
+| Azure subscription for Cognitive Services (or local Whisper setup) | John Forbes | Not Started |
+| 3+ willing CAMs for acceptance test | John Forbes | Not Started |
+| Real .mpp file with active program data for test | John Forbes | Not Started |
+
+### Phase 2 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Teams bot API restrictions block outbound calls | High | High | Research thoroughly before committing; have email fallback ready |
+| CAMs resist voice interviews vs spreadsheet habit | Medium | Medium | Keep calls short (<5 min); demonstrate time savings |
+| STT accuracy poor on defense jargon | Medium | Medium | Fine-tune or build custom vocabulary; always show transcript to CAM for confirmation |
+| Client IT blocks Teams bot registration | Medium | High | Engage IT early; document security posture of bot |
+
+---
+
+## PHASE 3 — FULL AUTOMATION LOOP
+
+### Objective
+
+The agent runs on a schedule without human initiation. The full cycle — trigger, interview all CAMs, update the schedule, run analysis, synthesize intelligence, and distribute output — happens automatically every reporting period.
+
+**Phase Gate:** Agent completes one full unattended cycle end-to-end with no human intervention. Output is reviewed and approved by a real program manager.
+
+---
+
+### Phase 3 Checklist
+
+#### 3.1 — Scheduler and Trigger System
+- [ ] Implement cron-based scheduler: configurable reporting period (weekly, biweekly, monthly)
+- [ ] Build trigger logic: at start of reporting period, automatically initiate the full cycle
+- [ ] Build status tracking for the full cycle: initiated, interviewing, updating, analyzing, distributing, complete
+- [ ] Implement cycle locking: prevent duplicate cycles from running simultaneously
+- [ ] Build admin override: human can manually trigger a cycle, pause a running cycle, or cancel
+- [ ] Unit test: scheduler fires at correct times; cycle locking works
+
+#### 3.2 — CAM Interview Orchestration
+- [ ] Call all CAMs in parallel (configurable: sequential vs parallel with max concurrent calls)
+- [ ] Handle partial completion: if some CAMs are unreachable, proceed with available data; flag missing inputs
+- [ ] Build completion threshold: require X% of CAMs to respond before proceeding to update (configurable, default 80%)
+- [ ] If threshold not met: send escalation alert to planner before proceeding
+- [ ] Log every call attempt and outcome
+
+#### 3.3 — Automated Schedule Update with Validation
+- [ ] After all CAM data collected: run validation pass before writing to schedule
+- [ ] Validation rules: no task can go backwards (percent complete can't decrease without explanation), no task can jump >50% in one period without explanation, all tasks in a CAM's scope must have a response
+- [ ] Flag validation failures for human review: hold update until human approves or overrides
+- [ ] Write updates to a STAGING copy of the .mpp file first
+- [ ] Diff staging vs previous: show what changed before committing
+- [ ] Commit final updates to the authoritative .mpp file only after validation passes
+- [ ] Version the .mpp file: save timestamped copy before every update
+- [ ] Unit test: validation catches all defined anomaly types
+
+#### 3.4 — Automated Analysis Pipeline
+- [ ] After schedule update: automatically trigger critical path analysis
+- [ ] After critical path: automatically trigger SRA (Monte Carlo)
+- [ ] After SRA: automatically trigger intelligence synthesis (LLM layer)
+- [ ] Total analysis pipeline should complete within 10 minutes of schedule update
+- [ ] If analysis fails: alert planner; do not distribute output until resolved
+
+#### 3.5 — Dashboard
+- [ ] Select dashboard technology: options are (a) simple HTML/JS served locally, (b) Grafana, (c) custom React app
+- [ ] Build dashboard showing:
+  - [ ] Schedule health indicator (green/yellow/red) with last-updated timestamp
+  - [ ] Critical path visualization (Gantt-style or list)
+  - [ ] Milestone risk table (milestone name, baseline date, P50/P80/P95 dates, risk level)
+  - [ ] Top 5 risks (with source: SRA or CAM input)
+  - [ ] Tasks behind schedule (table with CAM, percent behind, blocker)
+  - [ ] CAM response status (who responded, who didn't, when)
+  - [ ] Historical trend: schedule health over last N cycles
+- [ ] Dashboard auto-refreshes after each cycle completes
+- [ ] Dashboard is read-only for all users except admin
+
+#### 3.6 — Slack/Email Output
+- [ ] Build Slack integration: post structured summary to designated channel after each cycle
+- [ ] Slack message format: overall health, top 3 risks, any milestones at risk, link to full dashboard
+- [ ] Build email integration: send same summary to stakeholder distribution list
+- [ ] Email format: concise, mobile-readable, key metrics in first 3 sentences, full details in attached report
+- [ ] Both Slack and email: include link to live dashboard
+
+#### 3.7 — Voice Briefing (Optional)
+- [ ] After synthesis: LLM generates 1-2 minute voice briefing script for PM
+- [ ] TTS converts script to audio file
+- [ ] Audio file attached to email / linked in Slack message
+- [ ] Briefing covers: overall health, biggest risks, recommended actions
+
+#### 3.8 — Phase 3 Acceptance Test
+- [ ] Run 3 consecutive automated cycles with no human intervention
+- [ ] Each cycle reviewed by a real PM for accuracy and usefulness
+- [ ] Measure: total cycle time from trigger to output distribution
+- [ ] Measure: data accuracy vs manual process baseline
+- [ ] Document results in `PHASE3-FEEDBACK.md`
+- [ ] **Human approval required to proceed to Phase 4** ✋
+
+---
+
+### Phase 3 Dependencies
+
+| Dependency | Owner | Status |
+|---|---|---|
+| Phase 2 complete and stable | Engineering | Not Started |
+| Slack workspace and bot token | Client / John Forbes | Not Started |
+| Email SMTP credentials | Client IT | Not Started |
+| Dashboard hosting decision | John Forbes | Not Started |
+
+### Phase 3 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Validation logic too strict (blocks valid updates) | Medium | Medium | Make all thresholds configurable; start permissive, tighten over time |
+| Dashboard performance with large programs (500+ tasks) | Low | Medium | Paginate; lazy load; test with large files early |
+| Cycle takes too long (CAMs don't answer promptly) | High | Medium | Make completion threshold configurable; allow partial cycles |
+
+---
+
+## PHASE 4 — Q&A INTERFACE
+
+### Objective
+
+The PM (and other authorized users) can ask the agent natural language questions about the schedule at any time — not just after a status cycle. The agent answers using the latest schedule data, CAM context, and analysis results.
+
+**Phase Gate:** PM asks 20 real questions and receives accurate, useful answers. Zero hallucinated task data or dates.
+
+---
+
+### Phase 4 Checklist
+
+#### 4.1 — Q&A Interface Build
+- [ ] Build chat interface (options: Slack slash command, web chat widget, Teams bot chat)
+- [ ] Implement authentication: only authorized users can query the agent
+- [ ] Build rate limiting: max N queries per user per day (configurable)
+
+#### 4.2 — Schedule RAG (Retrieval Augmented Generation)
+- [ ] Index the current schedule data into a vector store (pgvector or local Chroma)
+- [ ] Index: CAM interview transcripts, risk flags, blocker descriptions, historical cycles
+- [ ] On each query: retrieve relevant schedule context, pass to LLM with strict grounding instructions
+- [ ] LLM answers using only retrieved context (never hallucinates)
+- [ ] Every answer includes source citation (which task, which cycle, which CAM provided data)
+- [ ] Update index after every new status cycle
+
+#### 4.3 — Query Types to Support
+- [ ] "What is the current critical path?" → returns task list with dates
+- [ ] "What is the probability of hitting [milestone] on [date]?" → returns SRA result with confidence
+- [ ] "What is [CAM name] behind on?" → returns task list with percent behind and blockers
+- [ ] "What are the top risks right now?" → returns ranked risk list with sources
+- [ ] "What changed since last cycle?" → returns diff of schedule changes
+- [ ] "Show me all tasks with float less than 10 days" → returns filtered task list
+- [ ] "Why is [task name] behind?" → returns CAM input from interview
+- [ ] "What should I focus on this week?" → LLM synthesizes recommendations from all data
+- [ ] Build test suite: 30 known questions with expected answers; regression test after every change
+
+#### 4.4 — Phase 4 Acceptance Test
+- [ ] PM asks 20 real questions using live program data
+- [ ] Evaluate: accuracy (data correct?), usefulness (answer actionable?), hallucination rate (must be 0%)
+- [ ] Document results in `PHASE4-FEEDBACK.md`
+- [ ] **Human approval required to proceed to Phase 5** ✋
+
+---
+
+## PHASE 5 — PRODUCTION HARDENING
+
+### Objective
+
+The agent is ready to deploy at a real client. It is containerized, secured, documented, and compliant with defense contractor data handling requirements.
+
+**Phase Gate:** A security-conscious senior engineer who did not build the system reviews it and signs off. A deployment playbook exists and has been tested by someone other than the builder.
+
+---
+
+### Phase 5 Checklist
+
+#### 5.1 — Containerization
+- [ ] Dockerfile for agent core (Python FastAPI backend)
+- [ ] Dockerfile for dashboard (if separate)
+- [ ] `docker-compose.yml` for local development
+- [ ] `docker-compose.prod.yml` for production deployment
+- [ ] All secrets passed via environment variables (never hardcoded)
+- [ ] Container runs as non-root user
+- [ ] Health check endpoints implemented
+- [ ] Container image size minimized (use slim base images)
+
+#### 5.2 — Security Review
+- [ ] All API credentials stored in environment variables or secrets manager (never in code or config files)
+- [ ] All data in transit encrypted (HTTPS/TLS)
+- [ ] All data at rest encrypted (database encryption enabled)
+- [ ] Audit log is append-only (no delete capability)
+- [ ] RBAC implemented: PM, Planner, CAM, Admin roles with appropriate permissions
+- [ ] Input validation on all user-facing interfaces (prevent injection attacks)
+- [ ] LLM prompts reviewed for prompt injection vulnerabilities
+- [ ] Dependency vulnerability scan (run `pip audit` and address all high/critical findings)
+- [ ] Network policy: agent only makes outbound calls to explicitly whitelisted endpoints
+
+#### 5.3 — ITAR/CUI Compliance
+- [ ] All LLM inference uses on-premises or air-gapped model (no CUI data sent to cloud APIs)
+- [ ] Document data classification policy: what data is in the system, at what classification level
+- [ ] Confirm: no ITAR-controlled technical data is transmitted outside the client network boundary
+- [ ] Data retention policy implemented: how long are interview transcripts, reports, and schedule snapshots retained?
+- [ ] Data deletion capability: can delete all data for a specific program or user on request
+
+#### 5.4 — Observability
+- [ ] Structured logging: every agent action logged with timestamp, actor, action, resource, outcome
+- [ ] Log levels: DEBUG, INFO, WARNING, ERROR — all configurable
+- [ ] Log output: configurable (file, stdout, external logging service)
+- [ ] Key metrics tracked: cycle completion time, CAM response rate, SRA run time, Q&A query volume
+- [ ] Alerting: admin notified on cycle failure, validation hold, or system error
+
+#### 5.5 — Documentation
+- [ ] `README.md` — complete setup and quick start guide
+- [ ] `DEPLOYMENT.md` — step-by-step production deployment guide (tested by someone other than the builder)
+- [ ] `OPERATIONS.md` — how to monitor, troubleshoot, and maintain the running system
+- [ ] `SECURITY.md` — security architecture, data handling policy, compliance posture
+- [ ] `API.md` — all API endpoints documented with request/response examples
+- [ ] `CONFIGURATION.md` — all configurable parameters documented with defaults and valid values
+- [ ] `CHANGELOG.md` — version history
+
+#### 5.6 — Deployment Playbook Test
+- [ ] Have someone who did not build the system follow `DEPLOYMENT.md` on a clean machine
+- [ ] They must complete deployment successfully without asking the builder for help
+- [ ] Document any gaps or failures; fix and re-test
+- [ ] Deployment must complete in under 4 hours following the playbook
+
+#### 5.7 — Phase 5 Acceptance Test
+- [ ] Full end-to-end test on production deployment (not dev environment)
+- [ ] Security review sign-off
+- [ ] Deployment playbook verified by independent tester
+- [ ] All documentation complete and reviewed
+- [ ] **Program complete — ready for first customer deployment** 🎉
+
+---
+
+## APPENDIX A — TECHNOLOGY DECISIONS
+
+| Component | Decision | Rationale | Revisit If |
+|---|---|---|---|
+| IMS file format | .mpp via MPXJ bridge | Most common format at L3Harris | Client uses Primavera P6 exclusively |
+| LLM for air-gapped | Ollama + local model (Llama 3 or equivalent) | No CUI data leaves network | Model quality insufficient for synthesis tasks |
+| LLM for non-CUI | Anthropic Claude API | Best in class for reasoning + synthesis | Cost becomes prohibitive at scale |
+| Voice platform | Microsoft Teams Bot + Azure Cognitive Services | Already deployed at most defense contractors | Client doesn't use Teams |
+| SRA implementation | Python Monte Carlo (custom) | No external tool dependency | Existing SRA tool has accessible API |
+| Dashboard | React + FastAPI | Consistent with AIX platform stack | Simpler HTML sufficient for MVP |
+| Database | PostgreSQL + pgvector | Persistent, proven, supports RAG | SQLite sufficient for single-program MVP |
+| Container orchestration | Docker Compose (Phase 1-3), Kubernetes (Phase 5) | Right-sized for maturity level | Single client with existing K8s cluster |
+
+---
+
+## APPENDIX B — GLOSSARY
+
+| Term | Definition |
+|---|---|
+| IMS | Integrated Master Schedule — the authoritative program schedule in Microsoft Project |
+| CAM | Cost Account Manager — individual responsible for a subset of program tasks |
+| SRA | Schedule Risk Assessment — probabilistic analysis of schedule risk using Monte Carlo simulation |
+| Critical Path | The longest sequence of dependent tasks; any delay here delays the program |
+| Float | The amount of time a task can slip without affecting the critical path |
+| P50/P80/P95 | Probability levels from SRA: 50%/80%/95% chance of completing by that date |
+| ITAR | International Traffic in Arms Regulations — export control law covering defense technical data |
+| CUI | Controlled Unclassified Information — sensitive but unclassified government data |
+| CMMC | Cybersecurity Maturity Model Certification — DoD cybersecurity compliance framework |
+| Monte Carlo | Statistical simulation technique: run thousands of randomized scenarios to estimate outcomes |
+
+---
+
+## APPENDIX C — OPEN QUESTIONS
+
+These must be resolved before or during the phase they impact.
+
+| # | Question | Impact | Target Phase | Status |
+|---|---|---|---|---|
+| 1 | What SRA tool is currently used? Does it have an API or CLI interface? | Phase 1 | Phase 1 | ❓ Open |
+| 2 | Is Microsoft Teams the right voice platform, or do CAMs prefer phone/Zoom? | Phase 2 | Phase 2 | ❓ Open |
+| 3 | What is the typical number of tasks per CAM in a target program? | Phase 1 | Phase 1 | ❓ Open |
+| 4 | Will this run inside the client's network or hosted externally? | Phase 5 | Phase 1 | ❓ Open |
+| 5 | Who is the first target customer and what is their reporting cycle? | All | Phase 1 | ❓ Open |
+| 6 | Does the client have an existing local LLM deployment or do we need to provide one? | Phase 1 | Phase 1 | ❓ Open |
+| 7 | What are the data retention requirements for interview transcripts? | Phase 5 | Phase 3 | ❓ Open |
+| 8 | Is the third use case (the one you couldn't remember) related to proposals or something else? | Program | Phase 1 | ❓ Open |
+
+---
+
+## APPENDIX D — AGENT INSTRUCTIONS FOR IMPLEMENTATION
+
+If you are an AI agent picking up this program plan, follow these rules:
+
+1. **Always check the checklist first.** Find the first unchecked item in the current phase and start there. Do not skip ahead.
+2. **Never mark a phase gate complete without human approval.** Phase gates are marked with ✋. Stop and wait.
+3. **Always write tests before marking implementation tasks complete.** If the checklist says "unit test," write it.
+4. **Commit working code frequently.** After each completed checklist item, commit to the repository with a descriptive message.
+5. **Update this document as you work.** When you complete a task, check it off. When you discover new information, add it to the relevant appendix.
+6. **When you hit a blocker, document it.** Add it to Appendix C with the phase and status. Do not spin.
+7. **Never hardcode credentials, paths, or environment-specific values.** Everything configurable goes in `.env`.
+8. **When in doubt, do less and ask.** A partial implementation with clear questions is better than a complete implementation based on wrong assumptions.
+
+---
+
+*Document generated: 2026-04-25*  
+*Next review: Before Phase 1 kickoff*  
+*Document owner: John Forbes*
