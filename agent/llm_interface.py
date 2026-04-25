@@ -12,7 +12,7 @@ from typing import Any
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -201,15 +201,22 @@ def _build_synthesis_prompt(
 
 
 def _parse_synthesis_response(raw: str) -> dict[str, str]:
-    """Extract structured sections from the LLM response."""
-    sections = {
+    """
+    Extract structured sections from the LLM synthesis response.
+
+    Handles both plain headers (SCHEDULE_HEALTH: RED) and markdown-prefixed
+    headers (## SCHEDULE_HEALTH: RED) since Claude may use either form.
+    """
+    import re
+
+    sections: dict[str, str] = {
         "schedule_health": "",
         "narrative": "",
         "top_risks": "",
         "recommended_actions": "",
         "raw": raw,
     }
-    current = None
+    current: str | None = None
     buffer: list[str] = []
 
     key_map = {
@@ -219,23 +226,42 @@ def _parse_synthesis_response(raw: str) -> dict[str, str]:
         "RECOMMENDED_ACTIONS": "recommended_actions",
     }
 
+    # Strip markdown heading markers and horizontal rules for matching
+    _header_re = re.compile(r"^#+\s*")
+    _hr_re = re.compile(r"^-{3,}$")
+
     for line in raw.splitlines():
         stripped = line.strip()
+        # Normalise: strip leading '#' chars for header matching
+        normalised = _header_re.sub("", stripped).strip()
+
+        if _hr_re.match(stripped):
+            # Horizontal rule — skip but don't break current section
+            continue
+
         matched = False
         for header, key in key_map.items():
-            if stripped.startswith(header):
+            if normalised.upper().startswith(header):
                 if current and buffer:
                     sections[current] = "\n".join(buffer).strip()
                 current = key
-                rest = stripped[len(header):].lstrip(": ").strip()
+                # Grab any inline content after the header (e.g., "SCHEDULE_HEALTH: RED")
+                rest = normalised[len(header):].lstrip(":— ").strip()
                 buffer = [rest] if rest else []
                 matched = True
                 break
+
         if not matched and current:
             buffer.append(line)
 
     if current and buffer:
         sections[current] = "\n".join(buffer).strip()
+
+    # If SCHEDULE_HEALTH contains a full paragraph, extract just the first word/token
+    health_raw = sections.get("schedule_health", "")
+    first_word = health_raw.split()[0].rstrip(".,;:").upper() if health_raw.split() else ""
+    if first_word in ("RED", "YELLOW", "GREEN"):
+        sections["schedule_health"] = first_word
 
     return sections
 
