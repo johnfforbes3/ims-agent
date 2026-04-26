@@ -1,7 +1,7 @@
 # ADR-004 — Teams Integration: Azure Communication Services (Scaffolded)
 
 **Date:** 2026-04-25  
-**Status:** Scaffolded — pending Azure subscription  
+**Status:** Active — Azure subscription and ACS resource provisioned 2026-04-25  
 **Phase:** 2
 
 ## Context
@@ -26,20 +26,25 @@ Low-code trigger layer; cannot do real-time voice streaming. Ruled out.
 
 **Azure Communication Services (ACS)** is the target production transport for Phase 2+.
 
-However, as of Phase 2 build start, an Azure subscription is not yet provisioned.
+As of 2026-04-25:
+- Azure subscription active (free trial, $200 credit, tenant: intelligenceexpanse.onmicrosoft.com)
+- ACS resource `ims-agent-acs` deployed in resource group `ims-agent-rg`
+- `ACS_CONNECTION_STRING` and `TEAMS_TENANT_ID` populated in `.env`
+- Remaining: Teams-ACS interop enable, agent identity, `TeamsACSConnector` implementation
+
 All interview logic, TTS, STT, and extraction modules are built against an abstract
 `CallTransport` interface. The `TeamsACSConnector` is a documented stub.
 
 ## Migration path when Azure is available
 
-1. Create an Azure subscription and resource group
-2. Provision an ACS resource (`az communication create`)
-3. Enable Teams-ACS interoperability in the Teams admin center
-4. Obtain a Teams user access token for the agent identity
-5. Populate `.env` with `ACS_CONNECTION_STRING`, `ACS_PHONE_NUMBER`,
-   `TEAMS_AGENT_USER_ID`, `TEAMS_TENANT_ID`
-6. Activate `TeamsACSConnector` by setting `CALL_TRANSPORT=teams_acs` in `.env`
-7. The rest of the pipeline (interview agent, STT, TTS, extraction) is unchanged
+1. ~~Create an Azure subscription and resource group~~ ✅ Done 2026-04-25
+2. ~~Provision an ACS resource~~ ✅ `ims-agent-acs` deployed 2026-04-25
+3. Enable Teams-ACS interoperability in the Teams admin center ⬅ next
+4. Obtain an ACS user identity for the agent (via ACS Identity SDK)
+5. ~~Populate `.env` with `ACS_CONNECTION_STRING`, `TEAMS_TENANT_ID`~~ ✅ Done 2026-04-25
+6. Implement `TeamsACSConnector` (currently a stub in `agent/voice/teams_connector.py`)
+7. Activate by setting `CALL_TRANSPORT=teams_acs` in `.env`
+8. The rest of the pipeline (interview agent, STT, TTS, extraction) is unchanged
 
 ## Current transport
 

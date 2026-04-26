@@ -1,0 +1,17 @@
+{
+  "cycle_id": "20260426T104014Z",
+  "phase": "complete",
+  "started_at": "2026-04-26T10:40:14.271755+00:00",
+  "completed_at": "2026-04-26T10:47:45.762151+00:00",
+  "cams_total": 5,
+  "cams_responded": 5,
+  "tasks_captured": 50,
+  "report_path": "reports\\2026-04-26_ims_report.md",
+  "schedule_health": "RED",
+  "error": "",
+  "validation_holds": [
+    "Percent decreased 100% \u2192 4% with no explanation provided",
+    "Percent decreased 40% \u2192 3% with no explanation provided",
+    "Percent decreased 10% \u2192 6% with no explanation provided"
+  ]
+}

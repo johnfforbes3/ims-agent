@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMS Agent Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           background: #f5f5f5; color: #333; }
+    header { background: #1a237e; color: white; padding: 16px 24px;
+             display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 20px; font-weight: 600; }
+    header small { font-size: 12px; opacity: 0.75; }
+    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px;
+                 display: grid; gap: 16px; }
+
+    /* Health banner */
+    .health-banner { border-radius: 8px; padding: 24px 32px;
+                     display: flex; align-items: center; gap: 24px; }
+    .health-banner.RED    { background: #fce8e6; border-left: 6px solid #d93025; }
+    .health-banner.YELLOW { background: #fef9e3; border-left: 6px solid #f9ab00; }
+    .health-banner.GREEN  { background: #e6f4ea; border-left: 6px solid #1e8e3e; }
+    .health-banner.UNKNOWN { background: #f5f5f5; border-left: 6px solid #aaa; }
+    .health-dot { font-size: 48px; line-height: 1; }
+    .health-label { font-size: 32px; font-weight: 700; }
+    .health-meta { font-size: 13px; color: #555; margin-top: 4px; }
+
+    /* Cards */
+    .card { background: white; border-radius: 8px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card h2 { font-size: 14px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: 0.05em; color: #666; margin-bottom: 12px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    /* Stats row */
+    .stat-row { display: flex; gap: 16px; }
+    .stat { flex: 1; text-align: center; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #1a237e; }
+    .stat-label { font-size: 12px; color: #777; margin-top: 2px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; background: #f8f9fa;
+         border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #555; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    /* Risk badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
+             font-size: 11px; font-weight: 600; }
+    .badge-HIGH   { background: #fce8e6; color: #c5221f; }
+    .badge-MEDIUM { background: #fef9e3; color: #b06000; }
+    .badge-LOW    { background: #e6f4ea; color: #137333; }
+
+    /* CAM status dots */
+    .dot { display: inline-block; width: 10px; height: 10px;
+           border-radius: 50%; margin-right: 6px; }
+    .dot-ok  { background: #1e8e3e; }
+    .dot-miss { background: #d93025; }
+    .dot-pend { background: #aaa; }
+
+    /* History chart (simple text-based) */
+    .history-row { display: flex; align-items: center; gap: 8px;
+                   margin-bottom: 6px; font-size: 12px; }
+    .history-bar { height: 16px; border-radius: 3px; min-width: 4px; }
+    .bar-RED    { background: #d93025; }
+    .bar-YELLOW { background: #f9ab00; }
+    .bar-GREEN  { background: #1e8e3e; }
+    .bar-UNKNOWN { background: #aaa; }
+
+    /* Action button */
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;
+           font-size: 13px; font-weight: 500; }
+    .btn-primary { background: #1a73e8; color: white; }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* Risks list */
+    .risks-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6;
+                  color: #333; }
+
+    /* Narrative */
+    .narrative { font-size: 13px; line-height: 1.7; color: #444; }
+
+    /* Empty state */
+    .empty { color: #aaa; font-style: italic; font-size: 13px; padding: 12px 0; }
+
+    /* Auto-refresh indicator */
+    #refresh-badge { font-size: 11px; color: rgba(255,255,255,0.6); }
+
+    /* Q&A Chat Widget */
+    .chat-messages { height: 320px; overflow-y: auto; border: 1px solid #e0e0e0;
+                     border-radius: 6px; padding: 12px; margin-bottom: 10px;
+                     background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
+    .chat-msg { max-width: 88%; }
+    .chat-msg.user { align-self: flex-end; }
+    .chat-msg.assistant { align-self: flex-start; }
+    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; }
+    .chat-msg.user .chat-bubble { background: #1a73e8; color: white; border-bottom-right-radius: 4px; }
+    .chat-msg.assistant .chat-bubble { background: white; border: 1px solid #e0e0e0;
+                                        color: #333; border-bottom-left-radius: 4px;
+                                        white-space: pre-wrap; }
+    .chat-bubble.thinking { color: #aaa; font-style: italic; }
+    .chat-source { font-size: 10px; color: #aaa; margin-top: 3px; }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input-row input { flex: 1; padding: 9px 12px; border: 1px solid #ddd;
+                            border-radius: 4px; font-size: 13px; }
+    .chat-input-row input:focus { outline: none; border-color: #1a73e8; }
+    .chat-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .chat-chip { padding: 4px 10px; background: #e8eaf6; border-radius: 12px;
+                 font-size: 11px; color: #1a237e; cursor: pointer; border: none; }
+    .chat-chip:hover { background: #c5cae9; }
+
+    @media (max-width: 768px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>IMS Agent — Schedule Dashboard</h1>
+    <small>ATLAS Program</small>
+  </div>
+  <div style="text-align:right">
+    <span id="refresh-badge">Auto-refresh in <span id="countdown">60</span>s</span><br>
+    <small>{{ state.get('last_updated', 'No data yet') }}</small>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Health Banner -->
+  {% set health = state.get('schedule_health', 'UNKNOWN') %}
+  {% set dot_map = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'} %}
+  <div class="health-banner {{ health }}">
+    <div class="health-dot">{{ dot_map.get(health, '⚪') }}</div>
+    <div>
+      <div class="health-label">{{ health }}</div>
+      <div class="health-meta">
+        Cycle {{ state.get('cycle_id', '—') }} &nbsp;|&nbsp;
+        Last updated {{ state.get('last_updated', '—') }}
+      </div>
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
+        Trigger Cycle Now
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="card">
+    {% set cr = state.get('completion_report', {}) %}
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-value">{{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}</div>
+        <div class="stat-label">CAMs Responded</div>
+      </div>
+      <div class="stat">
+        {% set milestones = state.get('milestones', []) %}
+        {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
+        <div class="stat-value" style="color:#d93025">{{ high_risk | length }}</div>
+        <div class="stat-label">HIGH Risk Milestones</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">{{ state.get('tasks_behind', []) | length }}</div>
+        <div class="stat-label">Tasks Behind w/ Blocker</div>
+      </div>
+      <div class="stat">
+        {% set cp = state.get('critical_path_task_ids', []) %}
+        <div class="stat-value">{{ cp | length }}</div>
+        <div class="stat-label">Critical Path Tasks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Milestone Risk + CAM Status -->
+  <div class="grid-2">
+
+    <!-- Milestone Risk Table -->
+    <div class="card">
+      <h2>Milestone Risk Summary</h2>
+      {% set milestones = state.get('milestones', []) %}
+      {% if milestones %}
+      <table>
+        <thead>
+          <tr>
+            <th>Milestone</th>
+            <th>Baseline</th>
+            <th>P50</th>
+            <th>P95</th>
+            <th>On-Time</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in milestones | sort(attribute='prob_on_baseline') %}
+          <tr>
+            <td>{{ m.milestone_name }}</td>
+            <td>{{ m.baseline_date }}</td>
+            <td>{{ m.p50_date }}</td>
+            <td>{{ m.p95_date }}</td>
+            <td>{{ "%.0f%%" | format(m.prob_on_baseline * 100) }}</td>
+            <td><span class="badge badge-{{ m.risk_level }}">{{ m.risk_level }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">No milestone data — run a cycle first.</p>
+      {% endif %}
+    </div>
+
+    <!-- CAM Response Status -->
+    <div class="card">
+      <h2>CAM Response Status</h2>
+      {% set cam_status = state.get('cam_response_status', {}) %}
+      {% if cam_status %}
+      <table>
+        <thead>
+          <tr><th>CAM</th><th>Status</th><th>Attempts</th><th>Last Outcome</th></tr>
+        </thead>
+        <tbody>
+        {% for cam, info in cam_status.items() %}
+          <tr>
+            <td>{{ cam }}</td>
+            <td>
+              {% if info.responded %}
+                <span class="dot dot-ok"></span>Responded
+              {% else %}
+                <span class="dot dot-miss"></span>No Response
+              {% endif %}
+            </td>
+            <td>{{ info.attempts }}</td>
+            <td>{{ info.last_outcome or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">No CAM status data yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Top Risks + Tasks Behind -->
+  <div class="grid-2">
+
+    <!-- Top Risks -->
+    <div class="card">
+      <h2>Top Risks</h2>
+      {% set risks = state.get('top_risks', '') %}
+      {% if risks %}
+      <div class="risks-text">{{ risks }}</div>
+      {% else %}
+      <p class="empty">No risk synthesis yet — run a cycle first.</p>
+      {% endif %}
+    </div>
+
+    <!-- Tasks Behind Schedule -->
+    <div class="card">
+      <h2>Tasks Behind Schedule (with Blockers)</h2>
+      {% set behind = state.get('tasks_behind', []) %}
+      {% if behind %}
+      <table>
+        <thead>
+          <tr><th>Task</th><th>CAM</th><th>%</th><th>Blocker</th></tr>
+        </thead>
+        <tbody>
+        {% for t in behind %}
+          <tr>
+            <td>{{ t.task_id }}</td>
+            <td>{{ t.cam_name }}</td>
+            <td>{{ t.percent_complete }}%</td>
+            <td style="font-size:12px;color:#555">{{ t.blocker }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">No behind-schedule tasks with blockers.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Critical Path -->
+  <div class="card">
+    <h2>Critical Path Task IDs</h2>
+    {% set cp = state.get('critical_path_task_ids', []) %}
+    {% if cp %}
+    <div style="font-size:13px;color:#333;line-height:2">
+      {% for tid in cp %}
+        <span style="background:#e8eaf6;padding:2px 8px;border-radius:4px;margin:2px;display:inline-block">{{ tid }}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">No critical path data yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Recommended Actions -->
+  {% set actions = state.get('recommended_actions', '') %}
+  {% if actions %}
+  <div class="card">
+    <h2>Recommended Actions for PM</h2>
+    <div class="risks-text">{{ actions }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Cycle History -->
+  <div class="card">
+    <h2>Schedule Health History (Last {{ history | length }} Cycles)</h2>
+    {% if history %}
+    {% for entry in history | reverse %}
+    <div class="history-row">
+      <div style="width:160px;color:#555;font-size:11px">
+        {{ entry.get('timestamp', '')[:10] }}
+      </div>
+      {% set h = entry.get('schedule_health', 'UNKNOWN') %}
+      <div class="history-bar bar-{{ h }}" style="width:{{ 60 if h == 'RED' else (40 if h == 'YELLOW' else 20) }}px"></div>
+      <span class="badge badge-{{ h }}">{{ h }}</span>
+      <span style="color:#888;font-size:11px">
+        {{ entry.get('cams_responded', '?') }}/{{ entry.get('cams_total', '?') }} CAMs &nbsp;|&nbsp; {{ entry.get('cycle_id', '') }}
+      </span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty">No cycle history yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Q&A Chat Widget -->
+  <div class="card">
+    <h2>Ask the IMS Agent</h2>
+    <div class="chat-examples">
+      <button class="chat-chip" onclick="askQuestion('What is the current critical path?')">Critical path?</button>
+      <button class="chat-chip" onclick="askQuestion('What are the top risks right now?')">Top risks?</button>
+      <button class="chat-chip" onclick="askQuestion('What should I focus on this week?')">Focus this week?</button>
+      <button class="chat-chip" onclick="askQuestion('What is the probability of hitting PDR on time?')">PDR probability?</button>
+      <button class="chat-chip" onclick="askQuestion('What is Alice Nguyen behind on?')">Alice Nguyen status?</button>
+      <button class="chat-chip" onclick="askQuestion('Why is SE-03 behind?')">Why is SE-03 behind?</button>
+      <button class="chat-chip" onclick="askQuestion('What changed since last cycle?')">Changes this cycle?</button>
+      <button class="chat-chip" onclick="askQuestion('What is the schedule health?')">Schedule health?</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg assistant">
+        <div class="chat-bubble">Ask me anything about the schedule — critical path, milestone risk, CAM status, blockers, or recommended actions.</div>
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="e.g. What is the probability of hitting CDR on time?"
+             onkeydown="if(event.key==='Enter') sendChat()" maxlength="500">
+      <button class="btn btn-primary" onclick="sendChat()" id="chat-send-btn">Ask</button>
+      <button class="btn" onclick="clearChat()" style="background:#f1f3f4;color:#555;margin-left:4px" title="Clear chat">✕</button>
+    </div>
+  </div>
+
+  <!-- Current Cycle Progress (if active) -->
+  {% set current = state.get('current_cycle', {}) %}
+  {% if current and current.get('phase') not in ['complete', 'failed', ''] %}
+  <div class="card" style="border-left:4px solid #1a73e8">
+    <h2>Cycle In Progress</h2>
+    <p style="font-size:13px">
+      <strong>Phase:</strong> {{ current.get('phase', '—').upper() }} &nbsp;|&nbsp;
+      <strong>Cycle ID:</strong> {{ current.get('cycle_id', '—') }} &nbsp;|&nbsp;
+      <strong>CAMs:</strong> {{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}
+    </p>
+  </div>
+  {% endif %}
+
+</div><!-- /container -->
+
+<script>
+  // ── Auto-refresh countdown ────────────────────────────────────────────────
+  let seconds = 60;
+  const countdownEl = document.getElementById('countdown');
+  setInterval(() => {
+    seconds--;
+    if (countdownEl) countdownEl.textContent = seconds;
+    if (seconds <= 0) window.location.reload();
+  }, 1000);
+
+  // ── Manual cycle trigger ──────────────────────────────────────────────────
+  function triggerCycle() {
+    const btn = document.getElementById('trigger-btn');
+    btn.disabled = true;
+    btn.textContent = 'Triggering...';
+    fetch('/api/trigger', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        btn.textContent = data.status === 'triggered' ? 'Cycle Started!' : 'Error';
+        setTimeout(() => window.location.reload(), 2000);
+      })
+      .catch(() => {
+        btn.textContent = 'Error — check logs';
+        btn.disabled = false;
+      });
+  }
+
+  // ── Cycle status poll ─────────────────────────────────────────────────────
+  function pollStatus() {
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(d => { if (d.cycle_active) setTimeout(() => window.location.reload(), 5000); });
+  }
+  pollStatus();
+
+  // ── Chat persistence (sessionStorage) ────────────────────────────────────
+  // Messages are stored as [{role, html}] so a page reload restores the thread.
+  // sessionStorage clears when the tab is closed — appropriate TTL for a chat.
+
+  const CHAT_KEY = 'ims_chat_history';
+
+  function _loadHistory() {
+    try { return JSON.parse(sessionStorage.getItem(CHAT_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function _saveHistory() {
+    const msgs = document.getElementById('chat-messages');
+    const entries = [];
+    for (const el of msgs.children) {
+      // Skip the default welcome bubble (it has no data-role) and any pending "Thinking…" bubble
+      const role = el.dataset.role;
+      if (!role) continue;
+      const bubble = el.querySelector('.chat-bubble');
+      if (!bubble || bubble.classList.contains('thinking')) continue;
+      const source = el.querySelector('.chat-source');
+      entries.push({ role, html: bubble.innerHTML, source: source ? source.textContent : '' });
+    }
+    try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(entries)); }
+    catch { /* storage quota — silently skip */ }
+  }
+
+  function _restoreHistory() {
+    const history = _loadHistory();
+    if (!history.length) return;
+    const msgs = document.getElementById('chat-messages');
+    // Replace welcome bubble with the saved thread
+    msgs.innerHTML = '';
+    for (const { role, html, source } of history) {
+      const el = document.createElement('div');
+      el.className = `chat-msg ${role}`;
+      el.dataset.role = role;
+      el.innerHTML = `<div class="chat-bubble">${html}</div>`
+        + (source ? `<div class="chat-source">${escapeHtml(source)}</div>` : '');
+      msgs.appendChild(el);
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function clearChat() {
+    sessionStorage.removeItem(CHAT_KEY);
+    const msgs = document.getElementById('chat-messages');
+    msgs.innerHTML = `<div class="chat-msg assistant">
+      <div class="chat-bubble">Ask me anything about the schedule — critical path, milestone risk, CAM status, blockers, or recommended actions.</div>
+    </div>`;
+  }
+
+  // Restore on load
+  document.addEventListener('DOMContentLoaded', _restoreHistory);
+
+  // ── Q&A Chat ──────────────────────────────────────────────────────────────
+  function askQuestion(q) {
+    document.getElementById('chat-input').value = q;
+    sendChat();
+  }
+
+  function sendChat() {
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('chat-send-btn');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const messages = document.getElementById('chat-messages');
+
+    // User bubble
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-msg user';
+    userMsg.dataset.role = 'user';
+    userMsg.innerHTML = `<div class="chat-bubble">${escapeHtml(question)}</div>`;
+    messages.appendChild(userMsg);
+
+    // Thinking bubble (not saved to history)
+    const thinkingMsg = document.createElement('div');
+    thinkingMsg.className = 'chat-msg assistant';
+    thinkingMsg.innerHTML = `<div class="chat-bubble thinking">Thinking…</div>`;
+    messages.appendChild(thinkingMsg);
+    messages.scrollTop = messages.scrollHeight;
+
+    input.value = '';
+    input.disabled = true;
+    btn.disabled = true;
+
+    fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        thinkingMsg.dataset.role = 'assistant';
+        thinkingMsg.innerHTML = `
+          <div class="chat-bubble">${escapeHtml(data.answer || data.detail || 'No answer returned.')}</div>
+          ${data.source_cycle ? `<div class="chat-source">Source: cycle ${data.source_cycle}</div>` : ''}
+        `;
+        _saveHistory();
+      })
+      .catch(err => {
+        thinkingMsg.innerHTML = `<div class="chat-bubble" style="color:#d93025">Error: ${escapeHtml(String(err))}</div>`;
+      })
+      .finally(() => {
+        input.disabled = false;
+        btn.disabled = false;
+        input.focus();
+        messages.scrollTop = messages.scrollHeight;
+      });
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/\n/g, '<br>');
+  }
+</script>
+
+</body>
+</html>

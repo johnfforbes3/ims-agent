@@ -104,6 +104,86 @@ class LLMInterface:
         logger.info("action=llm_response type=qa tokens=%d", response.usage.output_tokens)
         return raw
 
+    def ask_with_tools(
+        self,
+        question: str,
+        context: str,
+        tools: list[dict],
+        max_rounds: int = 5,
+    ) -> str:
+        """
+        Answer a question using Anthropic tool_use (function calling).
+
+        The model may call IMS schedule tools to query live data (float,
+        dependencies, task details).  Executes the agentic loop up to
+        max_rounds times before returning the final text answer.
+
+        Args:
+            question: The PM's natural language question (with grounding instructions).
+            context: Serialized schedule context from the dashboard state.
+            tools: List of Anthropic tool_use JSON schemas.
+            max_rounds: Maximum number of tool-call rounds before giving up.
+
+        Returns:
+            The model's final text answer as a string.
+        """
+        from agent.qa.ims_tools import call_tool
+
+        messages: list[dict] = [
+            {
+                "role": "user",
+                "content": f"Schedule context:\n{context}\n\nQuestion: {question}",
+            }
+        ]
+
+        logger.info("action=llm_call type=qa_tools model=%s", self._model)
+
+        for round_num in range(max_rounds):
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                system=_SYSTEM_PROMPT,
+                tools=tools,
+                messages=messages,
+            )
+
+            if response.stop_reason == "end_turn":
+                text_parts = [b.text for b in response.content if hasattr(b, "text")]
+                logger.info(
+                    "action=llm_response type=qa_tools rounds=%d tokens=%d",
+                    round_num + 1,
+                    response.usage.output_tokens,
+                )
+                return "\n".join(text_parts)
+
+            if response.stop_reason != "tool_use":
+                text_parts = [b.text for b in response.content if hasattr(b, "text")]
+                logger.warning(
+                    "action=qa_tools_unexpected_stop stop_reason=%s", response.stop_reason
+                )
+                return "\n".join(text_parts) if text_parts else "Unable to answer the question."
+
+            # Execute all tool calls in this round
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    logger.info("action=tool_dispatch name=%s", block.name)
+                    result = call_tool(block.name, block.input)
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        }
+                    )
+
+            # Append assistant turn and tool results for the next round
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results})
+
+        logger.warning("action=qa_tools_max_rounds rounds=%d", max_rounds)
+        return "Unable to complete the analysis within the allowed number of steps."
+
 
 # ---------------------------------------------------------------------------
 # Private helpers

@@ -1,10 +1,16 @@
 """
-IMS Agent — Phase 1 entry point.
+IMS Agent — unified entry point.
 
-Run with: python main.py [--ims-file PATH]
+Modes (mutually exclusive):
+  python main.py                   Phase 1: interactive CAM input pipeline
+  python main.py --serve           Phase 3: dashboard server only (port 8080)
+  python main.py --schedule        Phase 3: scheduler + dashboard (full production mode)
+  python main.py --trigger         Phase 3: fire one cycle now, then exit
+  python main.py --demo            Phase 2: simulated voice interviews (run_phase2_demo)
 
-Executes the full Phase 1 pipeline:
-  parse → CAM input → schedule update → critical path → SRA → synthesis → report
+Phase 4 Q&A is always available when --serve or --schedule is active:
+  Dashboard chat widget: http://localhost:8080 (chat panel at bottom)
+  Slack slash command:   /ims <question>  (requires SLACK_APP_TOKEN + SLACK_BOT_TOKEN)
 """
 
 import argparse
@@ -15,11 +21,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Ensure all relative paths (data/, reports/, logs/) resolve correctly
+# regardless of the working directory the caller used to invoke this script.
+import os as _os
+_os.chdir(Path(__file__).parent)
 
-# ---------------------------------------------------------------------------
-# Logging setup — must happen before any agent imports
-# ---------------------------------------------------------------------------
+load_dotenv()
 
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 _LOGS_DIR = Path(os.getenv("LOGS_DIR", "logs"))
@@ -27,7 +34,7 @@ _LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=getattr(logging, _LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s action=%(message)s",
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
         logging.FileHandler(_LOGS_DIR / "ims_agent.log", encoding="utf-8"),
@@ -37,25 +44,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
-    """Parse arguments and run the Phase 1 pipeline."""
-    parser = argparse.ArgumentParser(description="IMS Agent — Phase 1")
-    parser.add_argument(
-        "--ims-file",
-        default=os.getenv("IMS_FILE_PATH", "data/sample_ims.xml"),
-        help="Path to the MSPDI XML schedule file",
-    )
-    args = parser.parse_args()
+# ---------------------------------------------------------------------------
+# Mode handlers
+# ---------------------------------------------------------------------------
 
-    ims_path = Path(args.ims_file)
-    if not ims_path.exists():
-        logger.error("ims_file_not_found path=%s", ims_path)
-        print(f"\nERROR: IMS file not found: {ims_path}")
-        print("Place a MSPDI XML file at that path, or set IMS_FILE_PATH in .env\n")
-        sys.exit(1)
-
-    logger.info("pipeline_start ims_file=%s", ims_path)
-
+def _run_phase1(ims_path: str) -> None:
     from agent.file_handler import IMSFileHandler
     from agent.cam_input import run_simulated_cam_input, validate_cam_inputs
     from agent.critical_path import calculate_critical_path
@@ -63,46 +56,113 @@ def main() -> None:
     from agent.llm_interface import LLMInterface
     from agent.report_generator import ReportGenerator
 
-    # 1. Parse
-    handler = IMSFileHandler(str(ims_path))
+    handler = IMSFileHandler(ims_path)
     tasks = handler.parse()
-    logger.info("parsed task_count=%d", len(tasks))
+    logger.info("action=parsed tasks=%d", len(tasks))
 
-    # 2. Simulated CAM input
     cam_inputs = run_simulated_cam_input(tasks)
-    errors = validate_cam_inputs(cam_inputs)
-    if errors:
-        for e in errors:
-            logger.warning("validation_error %s", e)
-            print(f"  WARNING: {e}")
+    for e in validate_cam_inputs(cam_inputs):
+        logger.warning("action=validation_warning msg=%s", e)
 
-    # 3. Schedule update
     if cam_inputs:
         handler.apply_updates(cam_inputs)
         tasks = handler.parse()
 
-    # 4. Critical path
     cp_result = calculate_critical_path(tasks)
-    logger.info(
-        "critical_path_complete cp_length=%d projected_finish=%s",
-        len(cp_result["critical_path"]),
-        cp_result.get("projected_finish"),
-    )
+    sra_result = SRARunner(tasks).run()
+    synthesis = LLMInterface().synthesize(tasks, cp_result, sra_result, cam_inputs)
+    report_path = ReportGenerator().generate(tasks, cp_result, sra_result, cam_inputs, synthesis)
 
-    # 5. SRA
-    sra = SRARunner(tasks)
-    sra_result = sra.run()
+    print(f"\nReport saved to: {report_path}\n")
+    logger.info("action=pipeline_complete report=%s", report_path)
 
-    # 6. LLM synthesis
-    llm = LLMInterface()
-    synthesis = llm.synthesize(tasks, cp_result, sra_result, cam_inputs)
 
-    # 7. Report
-    rg = ReportGenerator()
-    report_path = rg.generate(tasks, cp_result, sra_result, cam_inputs, synthesis)
+def _run_demo() -> None:
+    import run_phase2_demo
+    run_phase2_demo.main()
 
-    print(f"\n✓ Report saved to: {report_path}\n")
-    logger.info("pipeline_complete report=%s", report_path)
+
+def _run_trigger(ims_path: str) -> None:
+    from agent.cycle_runner import CycleRunner
+    print("Triggering one full cycle...")
+    runner = CycleRunner(ims_path=ims_path)
+    status = runner.run()
+    print(f"\nCycle complete — health: {status['schedule_health']}")
+    print(f"Report: {status['report_path']}")
+    if status.get("error"):
+        print(f"ERROR: {status['error']}")
+        sys.exit(1)
+
+
+def _run_serve() -> None:
+    from agent.dashboard.server import serve
+    from agent.slack_command import start as start_slack
+    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    print(f"Dashboard running at http://localhost:{port}")
+    start_slack()  # no-op if tokens not configured
+    serve()
+
+
+def _run_schedule(ims_path: str) -> None:
+    """Full production mode: scheduler + dashboard server on main thread."""
+    from agent.cycle_runner import CycleRunner
+    from agent.scheduler import CycleScheduler
+    from agent.dashboard.server import serve
+    from agent.slack_command import start as start_slack
+
+    runner = CycleRunner(ims_path=ims_path)
+    scheduler = CycleScheduler(cycle_fn=runner.run)
+    scheduler.start()
+    start_slack()  # no-op if tokens not configured
+
+    cron = os.getenv("SCHEDULE_CRON", "0 6 * * 1")
+    tz = os.getenv("SCHEDULE_TIMEZONE", "America/New_York")
+    next_run = scheduler.next_run_time
+    print(f"Scheduler started — cron='{cron}' tz={tz}")
+    print(f"Next cycle: {next_run.isoformat() if next_run else 'N/A'}")
+
+    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    print(f"Dashboard: http://localhost:{port}")
+    print("Press Ctrl+C to stop.\n")
+
+    try:
+        serve()  # blocks on main thread (uvicorn)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        scheduler.stop()
+        print("\nScheduler stopped.")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="IMS Agent")
+    parser.add_argument("--ims-file", default=os.getenv("IMS_FILE_PATH", "data/sample_ims.xml"))
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--serve", action="store_true", help="Start dashboard server only")
+    group.add_argument("--schedule", action="store_true", help="Start scheduler + dashboard (production)")
+    group.add_argument("--trigger", action="store_true", help="Run one cycle now and exit")
+    group.add_argument("--demo", action="store_true", help="Run Phase 2 simulated interview demo")
+    args = parser.parse_args()
+
+    ims_path = args.ims_file
+
+    if args.serve:
+        _run_serve()
+    elif args.schedule:
+        _run_schedule(ims_path)
+    elif args.trigger:
+        _run_trigger(ims_path)
+    elif args.demo:
+        _run_demo()
+    else:
+        if not Path(ims_path).exists():
+            print(f"\nERROR: IMS file not found: {ims_path}")
+            sys.exit(1)
+        _run_phase1(ims_path)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+[
+  {
+    "cycle_id": "20260426T021649Z",
+    "timestamp": "2026-04-26T02:24:58.486359+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 5,
+    "cams_total": 5
+  },
+  {
+    "cycle_id": "20260426T103234Z",
+    "timestamp": "2026-04-26T10:40:12.263996+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 5,
+    "cams_total": 5
+  },
+  {
+    "cycle_id": "20260426T104014Z",
+    "timestamp": "2026-04-26T10:47:45.757962+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 5,
+    "cams_total": 5
+  },
+  {
+    "cycle_id": "20260426T104747Z",
+    "timestamp": "2026-04-26T10:56:33.573231+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 5,
+    "cams_total": 5
+  }
+]

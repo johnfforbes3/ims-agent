@@ -36,8 +36,9 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 2
 
-### TD-004 — `CONFIRM` state handler loops indefinitely on negative responses
-**File:** `agent/voice/interview_agent.py:280` — `_handle_confirm`  
+### TD-004 — `CONFIRM` state handler loops indefinitely on negative responses — **RESOLVED**
+**Resolved:** Phase 3 sprint 1 — 2026-04-25  
+**File:** `agent/voice/interview_agent.py` — `_handle_confirm`  
 **Severity:** High  
 **Description:** When the confirmation summary is read back and the CAM says "No, that's wrong" or any response containing `_is_negative()` match, the handler re-asks "can you tell me which task needs correcting?" The CAM's correction response also typically contains "no" ("No, SE-04 is 100%, not 4%"), which re-triggers the same handler — resulting in an infinite correction loop until the 60-turn safety limit is hit.  
 **Observed in demo:** Alice Nguyen generated 20 increasingly exasperated "No." responses escalating from "the agent is broken" through drafting written notices to the Chief Engineer's office, then sending auto-replies.  
@@ -112,12 +113,69 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-012 — IMS-AGENT-PROGRAM-PLAN.md lives outside the repo
-**File:** `IMS-AGENT-PROGRAM-PLAN.md` (located in `..` relative to `ims-agent/`)  
+### TD-012 — IMS-AGENT-PROGRAM-PLAN.md lives outside the repo — **RESOLVED**
+**Resolved:** Phase 3 — 2026-04-26  
+**File:** `IMS-AGENT-PROGRAM-PLAN.md`  
 **Severity:** Low  
-**Description:** The authoritative program plan is one directory level above the Git repo root. The agent reads it at `../IMS-AGENT-PROGRAM-PLAN.md`. This means it's not version-controlled alongside the code, and a fresh clone of `ims-agent` would not include it.  
-**Why deferred:** File placement was set in the initial project brief; not changed to avoid disrupting the user's reference location.  
-**Suggested fix:** Copy into repo as `docs/program-plan.md` (or symlink). Keep the original in its reference location if needed, but ensure the committed version tracks changes via git.
+**Description:** The authoritative program plan is now at `ims-agent/IMS-AGENT-PROGRAM-PLAN.md` — inside the repo root. It is version-controlled alongside the code. The Phase 3 acceptance test updates and Phase 4 gate are committed from this location.
+
+---
+
+## Phase 3
+
+### TD-013 — Dashboard state file write is not atomic
+**File:** `agent/cycle_runner.py` — `_update_dashboard_state`, `_write_phase`  
+**Severity:** Medium  
+**Description:** `state_path.write_text(...)` and `history_path.write_text(...)` write JSON directly to the target file. If the process is killed (SIGKILL, power loss, OOM) mid-write, the file is left truncated or with invalid JSON. The dashboard will 500 on the next request until the file is manually repaired or a new cycle overwrites it.  
+**Why deferred:** Acceptable risk for single-machine dev deployment; not a data-loss risk since the authoritative record is the IMS XML and cycle status JSONs in `reports/cycles/`.  
+**Suggested fix:** Write to a temp file in the same directory, then `os.replace(tmp, target)`. `os.replace` is atomic on POSIX and atomic on Windows when src/dst are on the same volume. One-line change per write site.
+
+---
+
+### TD-014 — Notifier env vars loaded at module import time
+**File:** `agent/notifier.py` — module-level globals `_SLACK_WEBHOOK`, `_EMAIL_HOST`, etc.  
+**Severity:** Low  
+**Description:** All notifier config (webhook URL, SMTP credentials, dashboard URL) is read from `os.getenv` at module import time. If `.env` is edited while the scheduler is running (e.g., to rotate a credential), the change does not take effect until the process restarts. Same issue applies to any other module that reads env vars at import scope.  
+**Why deferred:** Uncommon in practice; credential rotation requires a restart in most service architectures anyway.  
+**Suggested fix:** Move `load_dotenv(override=True)` and the `os.getenv` calls into `send_slack()` and `send_email()` function bodies, or into a `_get_config()` helper called at send time. This adds ~1ms of overhead per send but ensures the latest `.env` is always used.
+
+---
+
+### TD-015 — Validation holds not surfaced on the live dashboard
+**File:** `agent/cycle_runner.py` — `_update_dashboard_state`, `agent/dashboard/templates/index.html`  
+**Severity:** Low  
+**Description:** When the validation layer logs holds (e.g., backwards movement, large jump), the count and detail are persisted to `reports/cycles/{cycle_id}_status.json` but are not included in `dashboard_state.json`. The dashboard has no indicator that the current cycle's data contains flagged anomalies; a planner must manually open the status JSON to see them.  
+**Why deferred:** Phase 3 scope: validation holds log but do not block. Dashboard MVP did not include a holds panel.  
+**Suggested fix:** Add `"validation_holds": status.get("validation_holds", [])` to the dashboard state dict in `_update_dashboard_state`. Add a collapsible "Validation Alerts" section to `index.html` that renders each hold as a warning card when the list is non-empty.
+
+---
+
+## Phase 4
+
+### TD-016 — Q&A context builder loads full state on every query; no caching
+**File:** `agent/qa/context_builder.py` — `load_state()`, `load_history()`  
+**Severity:** Low  
+**Description:** Every call to `build_context()` reads and JSON-parses `dashboard_state.json` and `cycle_history.json` from disk. At current scale (~50 KB combined) this is negligible. At production scale with many concurrent Slack/dashboard queries this adds unnecessary I/O per request.  
+**Why deferred:** No observable performance issue at MVP scale.  
+**Suggested fix:** Cache state in a module-level variable with a TTL (e.g., 30s). Invalidate cache when `_STATE_FILE` modification time changes. One decorator or `functools.lru_cache` variant with a time key.
+
+---
+
+### TD-017 — No authentication on /api/ask or dashboard
+**File:** `agent/dashboard/server.py`  
+**Severity:** Medium (security)  
+**Description:** `POST /api/ask`, `POST /api/trigger`, and the dashboard HTML are served with no authentication. Anyone who can reach port 8080 can read schedule data and trigger cycles. Acceptable in a single-machine dev environment; not acceptable in any networked deployment.  
+**Why deferred:** Phase 4 MVP is local-only. Authentication is listed as a Phase 4 checklist item not yet implemented (4.1).  
+**Suggested fix:** Add HTTP Basic Auth or API key middleware to FastAPI for all `/api/*` routes. For production, put the dashboard behind a reverse proxy (nginx, Caddy) with TLS and authentication. See Phase 5 security review checklist.
+
+---
+
+### TD-018 — Slack slash command sends "Thinking…" then overwrites it, creating a jarring UX
+**File:** `agent/slack_command.py` — `_handle_ims_command`  
+**Severity:** Low  
+**Description:** Because Slack requires acknowledgement within 3 seconds and LLM calls take 5-15 seconds, the handler acks with `respond(text="Thinking…")` then calls `respond(blocks=...)` with the real answer. This creates two separate messages in the channel rather than updating the first in-place.  
+**Why deferred:** Requires switching to `client.chat_update` with a message timestamp, which needs the channel ID from the command payload and an additional Slack API call.  
+**Suggested fix:** Use `command["channel_id"]` + `app.client.chat_postMessage` to get a message `ts`, then `app.client.chat_update` with the answer. Alternatively, use Slack's `response_url` with `replace_original: true`.
 
 ---
 

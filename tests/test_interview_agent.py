@@ -296,6 +296,55 @@ class TestEdgeCases:
         assert "agent" in speakers
         assert "cam" in speakers
 
+    def test_confirm_affirmative_closes(self):
+        task = _make_task("T1", "Task One", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("yes that's right")
+        assert agent.state == InterviewState.COMPLETE
+
+    def test_confirm_flat_denial_reasks_then_closes(self):
+        # TD-004: flat denials (no percent, no task ID) should re-ask at most 2
+        # times, then close — not loop forever
+        task = _make_task("T1", "Task One", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no")          # flat denial #1 → re-ask
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no")          # flat denial #2 → re-ask
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no")          # flat denial #3 → cap hit, close
+        assert agent.state == InterviewState.COMPLETE
+
+    def test_confirm_inline_correction_closes_immediately(self):
+        # TD-004: if CAM provides an inline correction (percent present), close
+        # immediately rather than looping on the "no"
+        task = _make_task("T1", "Task One", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("No, T1 is 75%, not 50%")
+        assert agent.state == InterviewState.COMPLETE
+
+    def test_confirm_no_problem_closes(self):
+        # "no problem" is affirmative → should close, not re-ask
+        task = _make_task("T1", "Task One", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no problem, looks good")
+        assert agent.state == InterviewState.COMPLETE
+
     def test_task_result_to_cam_input_dict(self):
         r = TaskResult(
             task_id="5",

@@ -136,6 +136,7 @@ class InterviewAgent:
         self._expected_pcts = expected_pcts or {}
         self._task_index = 0
         self._retry_count = 0
+        self._confirm_retry_count = 0
         self._state = InterviewState.GREETING
         self._results: list[TaskResult] = []
         self._transcript: list[ConversationTurn] = []
@@ -280,12 +281,37 @@ class InterviewAgent:
         return self._finalise_task_and_advance(self._current_pct)
 
     def _handle_confirm(self, norm: str, raw: str) -> AgentTurn:
-        if _is_negative(norm) or "correct" not in norm and "wrong" in norm:
+        # Affirmative, or no clear negative → confirmed, close
+        if _is_affirmative(norm) or not _is_negative(norm):
+            return self._close_interview()
+
+        # Negative — check if a correction was provided inline (a percent value
+        # or a task ID pattern like "SE-04"). If so, note it and close; we can't
+        # reliably re-enter the task flow at this point so we log and move on.
+        has_correction = (
+            _extract_percent(norm) is not None
+            or bool(re.search(r"\b[A-Za-z]{2}-\d{2}\b", raw))
+        )
+        if has_correction:
+            logger.info(
+                "action=confirm_correction_noted cam=%s correction=%r closing",
+                self._cam_name, raw[:120],
+            )
+            return self._close_interview()
+
+        # Flat denial with no correction details — ask once more, cap at 2 re-asks
+        if self._confirm_retry_count < 2:
+            self._confirm_retry_count += 1
             return self._agent_turn(
                 "My apologies — can you tell me which task needs correcting "
                 "and what the right value is?",
                 InterviewState.CONFIRM,
             )
+
+        logger.warning(
+            "action=confirm_retry_limit cam=%s closing without confirmed correction",
+            self._cam_name,
+        )
         return self._close_interview()
 
     def _handle_closing(self, norm: str, raw: str) -> AgentTurn:

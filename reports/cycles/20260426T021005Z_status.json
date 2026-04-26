@@ -1,0 +1,13 @@
+{
+  "cycle_id": "20260426T021005Z",
+  "phase": "failed",
+  "started_at": "2026-04-26T02:10:05.590097+00:00",
+  "completed_at": "2026-04-26T02:10:06.971365+00:00",
+  "cams_total": 0,
+  "cams_responded": 0,
+  "tasks_captured": 0,
+  "report_path": "",
+  "schedule_health": "",
+  "error": "IMS file not found: nonexistent_file_xyz.xml",
+  "validation_holds": []
+}
