@@ -1,0 +1,24 @@
+# IMS Agent — local development compose file
+# Usage: docker compose up
+# Data directories are bind-mounted from ./data, ./reports, ./logs
+# so changes on the host are immediately visible inside the container.
+
+services:
+  ims-agent:
+    build: .
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    command: python main.py --serve
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: "no"

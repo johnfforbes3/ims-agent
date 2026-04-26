@@ -1,0 +1,33 @@
+# Version control
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+dist/
+build/
+
+# Dev tooling
+.mypy_cache
+.pytest_cache
+.coverage
+htmlcov/
+
+# Secrets — never bake into image
+.env
+
+# Local data — mounted as volumes in production
+data/
+reports/
+logs/
+
+# Docs and planning files (not needed at runtime)
+*.md
+docs/
+tests/
+
+# Stray files
+=1.18.0

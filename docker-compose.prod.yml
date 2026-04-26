@@ -1,0 +1,51 @@
+# IMS Agent — production compose file
+# Usage: docker compose -f docker-compose.prod.yml up -d
+#
+# Differences from dev:
+#   - Named volumes (not bind mounts) for data persistence
+#   - restart: unless-stopped
+#   - JSON structured logging
+#   - No port exposed directly — put a reverse proxy (nginx/Caddy) in front
+#     and expose only 443 with TLS termination
+#
+# Required env vars (set in .env or your secrets manager):
+#   ANTHROPIC_API_KEY, DASHBOARD_API_KEY, IMS_FILE_PATH (inside container path)
+
+services:
+  ims-agent:
+    image: ims-agent:latest          # built separately: docker build -t ims-agent:latest .
+    env_file:
+      - .env
+    environment:
+      LOG_FORMAT: json               # structured logs for aggregators (Datadog, ELK, etc.)
+      LOG_LEVEL: INFO
+    volumes:
+      - ims_data:/app/data
+      - ims_reports:/app/reports
+      - ims_logs:/app/logs
+    expose:
+      - "8080"                       # internal only — reverse proxy handles external TLS
+    command: python main.py --schedule
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  ims_data:
+    driver: local
+  ims_reports:
+    driver: local
+  ims_logs:
+    driver: local

@@ -29,16 +29,38 @@ _os.chdir(Path(__file__).parent)
 load_dotenv()
 
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+_LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()  # "text" or "json"
 _LOGS_DIR = Path(os.getenv("LOGS_DIR", "logs"))
 _LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def _make_formatter() -> logging.Formatter:
+    if _LOG_FORMAT == "json":
+        import json as _json
+
+        class _JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return _json.dumps({
+                    "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                    **({"exc": self.formatException(record.exc_info)} if record.exc_info else {}),
+                })
+
+        return _JsonFormatter()
+    return logging.Formatter("%(asctime)s %(levelname)-8s %(name)s %(message)s")
+
+
+_formatter = _make_formatter()
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setFormatter(_formatter)
+_file_handler = logging.FileHandler(_LOGS_DIR / "ims_agent.log", encoding="utf-8")
+_file_handler.setFormatter(_formatter)
+
 logging.basicConfig(
     level=getattr(logging, _LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(_LOGS_DIR / "ims_agent.log", encoding="utf-8"),
-    ],
+    handlers=[_stream_handler, _file_handler],
 )
 
 logger = logging.getLogger(__name__)
