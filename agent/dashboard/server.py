@@ -4,17 +4,22 @@ Dashboard server — FastAPI + Jinja2 HTML dashboard for IMS Agent.
 Serves:
   GET /            → HTML dashboard (auto-refreshes every 60s)
   GET /health      → health check (unauthenticated; used by Docker/load balancers)
+  GET /metrics     → in-memory metrics snapshot (requires API key)
   GET /api/state   → current dashboard state JSON
   GET /api/history → cycle history JSON
   POST /api/trigger → admin: manually fire a cycle (async, returns immediately)
   GET /api/status  → is a cycle currently running?
-  POST /api/ask    → Phase 4 Q&A: answer a natural language question
+  POST /api/ask    → Phase 4 Q&A: answer a natural language question (rate-limited)
+  POST /api/admin/purge → admin: delete cycle data older than retention window
 
 Authentication:
-  Set DASHBOARD_API_KEY in .env to require X-API-Key header on all /api/* routes.
-  If DASHBOARD_API_KEY is empty (default), auth is disabled (local dev mode).
+  DASHBOARD_API_KEY  — required on all /api/* read routes.  Empty = auth disabled (dev).
+  DASHBOARD_ADMIN_KEY — required for write/admin routes (/api/trigger, /api/admin/purge).
+                        Falls back to DASHBOARD_API_KEY when not set.
+  Both keys are sent via X-API-Key / X-Admin-Key headers respectively.
 """
 
+import collections
 import json
 import logging
 import os
@@ -40,6 +45,8 @@ _HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
 _PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 _IMS_PATH = os.getenv("IMS_FILE_PATH", "data/sample_ims.xml")
 _API_KEY = os.getenv("DASHBOARD_API_KEY", "")
+_ADMIN_KEY = os.getenv("DASHBOARD_ADMIN_KEY", "")
+_QA_RATE_LIMIT = int(os.getenv("QA_RATE_LIMIT_PER_HOUR", "60"))
 
 _START_TIME = time.monotonic()
 
@@ -50,6 +57,7 @@ app = FastAPI(title="IMS Agent Dashboard", docs_url=None, redoc_url=None)
 # ---------------------------------------------------------------------------
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+_admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 
 
 async def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
@@ -58,6 +66,45 @@ async def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
         return  # auth disabled in local dev mode
     if api_key != _API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+async def _require_admin_key(
+    x_admin_key: str = Security(_admin_key_header),
+    x_api_key: str = Security(_api_key_header),
+) -> None:
+    """Dependency: enforce admin key for write/admin operations.
+
+    Effective admin key is DASHBOARD_ADMIN_KEY when set, falling back to
+    DASHBOARD_API_KEY.  If neither is configured (dev mode), allows all.
+    """
+    if not _API_KEY and not _ADMIN_KEY:
+        return  # dev mode — no keys configured
+    effective = _ADMIN_KEY if _ADMIN_KEY else _API_KEY
+    if x_admin_key == effective or x_api_key == effective:
+        return
+    raise HTTPException(status_code=401, detail="Admin key required")
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (in-memory, per client IP)
+# ---------------------------------------------------------------------------
+
+_rate_limiter: dict[str, list[float]] = collections.defaultdict(list)
+_rate_lock = threading.Lock()
+
+
+def _check_rate_limit(ip: str) -> None:
+    """Raise HTTP 429 if the IP exceeds QA_RATE_LIMIT_PER_HOUR requests in the rolling hour."""
+    if _QA_RATE_LIMIT <= 0:
+        return
+    now = time.monotonic()
+    with _rate_lock:
+        cutoff = now - 3600.0
+        _rate_limiter[ip] = [t for t in _rate_limiter[ip] if t > cutoff]
+        if len(_rate_limiter[ip]) >= _QA_RATE_LIMIT:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        _rate_limiter[ip].append(now)
+
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -95,6 +142,13 @@ async def health():
     })
 
 
+@app.get("/metrics", dependencies=[Depends(_require_api_key)])
+async def api_metrics():
+    """In-memory agent metrics snapshot (cycles, QA queries, duration)."""
+    from agent.metrics import snapshot
+    return JSONResponse(snapshot())
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     state = _load_json(_STATE_FILE) or {}
@@ -125,9 +179,9 @@ async def api_status():
     return JSONResponse({"cycle_active": CycleRunner.is_active()})
 
 
-@app.post("/api/trigger", dependencies=[Depends(_require_api_key)])
+@app.post("/api/trigger", dependencies=[Depends(_require_admin_key)])
 async def api_trigger():
-    """Admin override: fire a cycle immediately in a background thread."""
+    """Admin: fire a cycle immediately in a background thread."""
     from agent.cycle_runner import CycleRunner
     if CycleRunner.is_active():
         raise HTTPException(status_code=409, detail="A cycle is already running")
@@ -138,13 +192,25 @@ async def api_trigger():
     return JSONResponse({"status": "triggered", "message": "Cycle started in background"})
 
 
+@app.post("/api/admin/purge", dependencies=[Depends(_require_admin_key)])
+async def api_admin_purge():
+    """Admin: delete cycle status JSONs and IMS snapshots older than the retention window."""
+    from agent.cycle_runner import CycleRunner
+    deleted = CycleRunner.purge_old_data()
+    logger.info("action=manual_purge deleted=%s", deleted)
+    return JSONResponse({"status": "ok", "deleted": deleted})
+
+
 class _AskRequest(BaseModel):
     question: str
 
 
 @app.post("/api/ask", dependencies=[Depends(_require_api_key)])
-async def api_ask(body: _AskRequest):
+async def api_ask(request: Request, body: _AskRequest):
     """Phase 4 Q&A — answer a natural language question about the schedule."""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     question = (body.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="question is required")

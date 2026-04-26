@@ -12,6 +12,7 @@ Variables marked **Required** have no safe default and the agent will not start 
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | — | **Yes** | Anthropic API key. Obtain at console.anthropic.com. Replace with local model endpoint for ITAR compliance. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | No | Claude model ID. Change to test other models. |
+| `LLM_BASE_URL` | *(empty)* | No | Override the Anthropic API base URL. Set to an Ollama-compatible endpoint for on-prem/ITAR deployments (e.g., `http://localhost:11434`). Empty = Anthropic cloud. |
 | `IMS_FILE_PATH` | `data/sample_ims.xml` | **Yes** | Path to the IMS XML file (MSPDI format). Relative to the project root. |
 | `REPORTS_DIR` | `reports` | No | Directory for generated reports and cycle status JSONs. |
 | `LOGS_DIR` | `logs` | No | Directory for log files. Created automatically if missing. |
@@ -98,7 +99,10 @@ Variables marked **Required** have no safe default and the agent will not start 
 | `DASHBOARD_URL` | `http://localhost:8080` | No | Public URL used in Slack/email links. Update for production. |
 | `DASHBOARD_STATE_FILE` | `data/dashboard_state.json` | No | Path to the live dashboard state written after each cycle. |
 | `CYCLE_HISTORY_FILE` | `data/cycle_history.json` | No | Path to the rolling cycle history. |
-| `DASHBOARD_API_KEY` | *(empty)* | **Yes (production)** | API key for all `/api/*` routes. Empty = auth disabled. **Must be set in any networked deployment.** |
+| `DASHBOARD_API_KEY` | *(empty)* | **Yes (production)** | API key for all `/api/*` read routes. Empty = auth disabled. **Must be set in any networked deployment.** |
+| `DASHBOARD_ADMIN_KEY` | *(empty)* | No | Separate key for write/admin routes (`/api/trigger`, `/api/admin/purge`). Falls back to `DASHBOARD_API_KEY` when not set (single-key mode). |
+| `QA_RATE_LIMIT_PER_HOUR` | `60` | No | Max Q&A questions per IP per hour on `POST /api/ask`. Set to `0` to disable rate limiting. |
+| `DATA_RETENTION_DAYS` | `90` | No | Cycle status JSONs and IMS snapshots older than this many days are deleted on each cycle. |
 
 ---
 

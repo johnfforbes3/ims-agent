@@ -17,6 +17,7 @@ load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
 _MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+_BASE_URL = os.getenv("LLM_BASE_URL", "")
 
 _SYSTEM_PROMPT = """You are an expert program management analyst specializing in defense program \
 Integrated Master Schedule (IMS) analysis. You help program managers understand schedule health, \
@@ -39,9 +40,12 @@ class LLMInterface:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise EnvironmentError("ANTHROPIC_API_KEY is not set in the environment.")
-        self._client = anthropic.Anthropic(api_key=api_key)
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if _BASE_URL:
+            kwargs["base_url"] = _BASE_URL
+        self._client = anthropic.Anthropic(**kwargs)
         self._model = _MODEL
-        logger.info("action=llm_init model=%s", self._model)
+        logger.info("action=llm_init model=%s base_url=%s", self._model, _BASE_URL or "(default)")
 
     def synthesize(
         self,

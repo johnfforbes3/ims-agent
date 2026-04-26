@@ -34,6 +34,7 @@ _DATA_DIR = "data"
 _DASHBOARD_STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.json")
 _CYCLE_HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
 _COMPLETION_THRESHOLD = float(os.getenv("INTERVIEW_COMPLETION_THRESHOLD", "0.80"))
+_RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", "90"))
 
 
 class CycleRunner:
@@ -90,17 +91,26 @@ class CycleRunner:
             "validation_holds": [],
         }
 
+        start_time = datetime.now(timezone.utc)
         try:
             status = self._run_inner(cycle_id, status)
+            from agent.metrics import increment, set_value
+            duration = round((datetime.now(timezone.utc) - start_time).total_seconds())
+            increment("cycles_completed")
+            set_value("last_cycle_id", cycle_id)
+            set_value("last_cycle_duration_seconds", duration)
         except Exception as exc:
             logger.error(
                 "action=cycle_failed cycle_id=%s error=%s", cycle_id, exc, exc_info=True
             )
             status["phase"] = "failed"
             status["error"] = str(exc)
+            from agent.metrics import increment
+            increment("cycles_failed")
         finally:
             status["completed_at"] = datetime.now(timezone.utc).isoformat()
             self._persist_status(status)
+            self._purge_old_data(_RETENTION_DAYS)
             with CycleRunner._lock:
                 CycleRunner._active = False
 
@@ -375,3 +385,39 @@ class CycleRunner:
         path = status_dir / f"{status['cycle_id']}_status.json"
         path.write_text(json.dumps(status, indent=2, default=str), encoding="utf-8")
         logger.info("action=cycle_status_persisted path=%s", path)
+
+    @staticmethod
+    def purge_old_data(retention_days: int = _RETENTION_DAYS) -> dict[str, int]:
+        """Delete cycle status JSONs and IMS snapshots older than retention_days.
+
+        Returns counts of deleted files per category.
+        """
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        deleted = {"cycle_status": 0, "snapshots": 0}
+
+        status_dir = Path(_REPORTS_DIR) / "cycles"
+        if status_dir.exists():
+            for f in status_dir.glob("*_status.json"):
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink()
+                    deleted["cycle_status"] += 1
+
+        snap_dir = Path(_DATA_DIR) / "snapshots"
+        if snap_dir.exists():
+            for f in snap_dir.glob("*.xml"):
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink()
+                    deleted["snapshots"] += 1
+
+        if any(deleted.values()):
+            logger.info("action=data_purge retention_days=%d deleted=%s", retention_days, deleted)
+        return deleted
+
+    def _purge_old_data(self, retention_days: int) -> None:
+        try:
+            CycleRunner.purge_old_data(retention_days)
+        except Exception as exc:
+            logger.warning("action=purge_error error=%s", exc)

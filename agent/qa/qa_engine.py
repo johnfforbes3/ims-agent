@@ -80,6 +80,9 @@ class QAEngine:
         direct_answer = self._try_direct(question, state)
         if direct_answer:
             logger.info("action=qa_direct question=%r", question[:80])
+            from agent.metrics import increment
+            increment("qa_queries_total")
+            increment("qa_queries_direct")
             return QAResponse(
                 answer=direct_answer,
                 source_cycle=cycle_id,
@@ -103,6 +106,10 @@ class QAEngine:
         from agent.qa.ims_tools import TOOL_SCHEMAS
         logger.info("action=qa_llm question=%r intents=%s tools=%d", question[:80], intents, len(TOOL_SCHEMAS))
         answer = llm.ask_with_tools(grounded_question, context, TOOL_SCHEMAS)
+
+        from agent.metrics import increment
+        increment("qa_queries_total")
+        increment("qa_queries_llm")
 
         return QAResponse(
             answer=answer,

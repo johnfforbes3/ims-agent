@@ -27,11 +27,24 @@ The dashboard HTML at `/` is currently not protected by the API key (browsers do
 
 ### Role-Based Access Control
 
-RBAC is not yet implemented (planned for Phase 5). Current effective roles:
+The agent implements a two-key RBAC model:
+
+| Key | Header | Grants Access To |
+|---|---|---|
+| `DASHBOARD_API_KEY` | `X-API-Key` | Read routes: `GET /api/state`, `GET /api/history`, `GET /api/status`, `GET /metrics`, `POST /api/ask` |
+| `DASHBOARD_ADMIN_KEY` | `X-Admin-Key` | Admin routes: `POST /api/trigger`, `POST /api/admin/purge` |
+
+**Single-key fallback:** if `DASHBOARD_ADMIN_KEY` is not set, `DASHBOARD_API_KEY` covers all routes (backward compatible).
+
+**Generate both keys:**
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
 | Role | Access |
 |---|---|
-| Anyone with `DASHBOARD_API_KEY` | Full API access (read state, trigger cycles, ask questions) |
+| Anyone with read key | State, history, metrics, Q&A |
+| Anyone with admin key | Cycle trigger, data purge |
 | Anyone who can reach port 8080 | Dashboard HTML (read-only view) |
 
 ---
@@ -46,7 +59,8 @@ RBAC is not yet implemented (planned for Phase 5). Current effective roles:
 
 **Credentials the agent holds:**
 - `ANTHROPIC_API_KEY` — LLM inference (outbound)
-- `DASHBOARD_API_KEY` — API authentication
+- `DASHBOARD_API_KEY` — API read authentication
+- `DASHBOARD_ADMIN_KEY` — API admin authentication (optional; falls back to `DASHBOARD_API_KEY`)
 - `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` — Slack integration
 - `EMAIL_USER`, `EMAIL_PASSWORD` — SMTP
 - `ELEVENLABS_API_KEY` — TTS voice synthesis
@@ -84,12 +98,13 @@ All LLM inference uses the Anthropic cloud API. **IMS schedule data for ITAR-con
 - Development and testing with synthetic data
 - Unclassified, non-ITAR programs
 
-### Path to ITAR Compliance (Phase 5)
+### Path to ITAR Compliance
 
-1. **Replace the Anthropic API with an on-premises model.** All LLM calls are routed through `agent/llm_interface.py`. The swap requires:
-   - Deploy an Ollama instance (or similar) inside the client network
-   - Set `ANTHROPIC_BASE_URL` to the local endpoint, or replace the client initialization in `LLMInterface.__init__()`
-   - Test synthesis quality with the local model; adjust prompts if needed
+1. **Replace the Anthropic API with an on-premises model.** All LLM calls are routed through `agent/llm_interface.py`. The swap requires a single env var change:
+   ```
+   LLM_BASE_URL=http://your-ollama-host:11434
+   ```
+   The `LLM_BASE_URL` env var is passed as `base_url` to the Anthropic SDK client, which supports Ollama-compatible endpoints. No code changes required. Test synthesis quality with the local model and adjust prompts if needed.
 
 2. **Confirm no other outbound calls carry program data.** Current outbound calls:
    - Anthropic API (LLM inference) — replace with on-prem

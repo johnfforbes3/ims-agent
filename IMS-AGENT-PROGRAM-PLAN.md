@@ -2,7 +2,7 @@
 **Program:** Integrated Master Schedule (IMS) AI Agent  
 **Version:** 1.0  
 **Created:** 2026-04-25  
-**Status:** Phase 4 — Complete incl. 4.5 IMS Schedule Tools (Phase 5 Gate Open)  
+**Status:** Phase 5 — Production Hardening Complete (Deployment Playbook Test Pending)  
 **Owner:** John Forbes  
 
 ---
@@ -572,25 +572,25 @@ The agent is ready to deploy at a real client. It is containerized, secured, doc
 - [x] All data in transit encrypted (HTTPS/TLS) — documented in SECURITY.md; enforced at reverse proxy layer (nginx/Caddy)
 - [ ] All data at rest encrypted — deferred: no database yet; file-system encryption at host level recommended (Phase 5 follow-on)
 - [x] Audit log is append-only — application only appends to log files; restrict OS write access in production
-- [ ] RBAC implemented — deferred: current model is single API key; full RBAC tracked in TD-017
+- [x] RBAC implemented — two-key model: `DASHBOARD_API_KEY` for read routes, `DASHBOARD_ADMIN_KEY` for write/admin routes (`/api/trigger`, `/api/admin/purge`); backward-compatible single-key fallback when admin key is not set
 - [x] Input validation on all user-facing interfaces — `/api/ask` max 500 chars, non-empty; IMS XML parsed safely (no XXE)
 - [x] LLM prompts reviewed for prompt injection vulnerabilities — documented in SECURITY.md; system prompt grounding limits blast radius
 - [x] Dependency vulnerability scan — `pip-audit` run 2026-04-26; 0 runtime CVEs; pip CVE-2026-3219 (no fix available, no runtime impact); pip upgraded to 26.0.1
 - [x] Network policy: outbound allowlist documented in SECURITY.md (Anthropic API, ElevenLabs, Slack, SMTP)
 
 #### 5.3 — ITAR/CUI Compliance
-- [ ] All LLM inference uses on-premises or air-gapped model — **deferred**: using Anthropic API (non-ITAR dev data only); swap path documented in SECURITY.md; single-file change in `agent/llm_interface.py`
+- [ ] All LLM inference uses on-premises or air-gapped model — **deferred**: using Anthropic API (non-ITAR dev data only); swap path implemented via `LLM_BASE_URL` env var (single env var change routes all calls to local Ollama-compatible endpoint); documented in SECURITY.md and CONFIGURATION.md
 - [x] Document data classification policy — documented in SECURITY.md (data types, classification, storage, transmission)
 - [ ] Confirm: no ITAR-controlled technical data transmitted outside client network — **not yet confirmed**: requires client security officer review; depends on on-prem LLM swap
-- [ ] Data retention policy — **deferred**: no policy set; Phase 5 security review must define (Open Question #7)
-- [ ] Data deletion capability — **deferred**: no delete endpoint yet; Phase 5 follow-on
+- [x] Data retention policy — `DATA_RETENTION_DAYS` env var (default 90); `CycleRunner.purge_old_data()` deletes cycle status JSONs and IMS snapshots older than the window; runs automatically at end of every cycle (Open Question #7 closed)
+- [x] Data deletion capability — `POST /api/admin/purge` endpoint (admin key required) triggers immediate purge of all data outside the retention window
 
 #### 5.4 — Observability
 - [x] Structured logging: every agent action logged with `action=` prefix, timestamp, logger name
 - [x] Log levels: DEBUG, INFO, WARNING, ERROR — configurable via `LOG_LEVEL` env var
 - [x] Log output: configurable — stdout + file; `LOG_FORMAT=json` for log aggregators (Datadog, ELK, CloudWatch)
 - [x] Key patterns documented in OPERATIONS.md — cycle start/complete/failed, validation holds, tool calls, LLM calls
-- [ ] Metrics endpoint (Prometheus-format) — deferred Phase 5 follow-on; current observability via logs + `/health`
+- [x] Metrics endpoint — `GET /metrics` returns JSON snapshot of all in-memory counters (`cycles_completed`, `cycles_failed`, `qa_queries_total`, `qa_queries_direct`, `qa_queries_llm`, `last_cycle_id`, `last_cycle_duration_seconds`); requires API key auth; Prometheus-format export deferred to follow-on
 - [x] Alerting: Slack + email notifications on cycle complete/fail; admin can monitor via `/health` endpoint
 
 #### 5.5 — Documentation

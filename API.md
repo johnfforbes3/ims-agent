@@ -2,7 +2,11 @@
 
 Base URL: `http://localhost:8080` (or your deployment URL)
 
-All `/api/*` endpoints require `X-API-Key: YOUR_KEY` header when `DASHBOARD_API_KEY` is configured. The `/health` and `/` endpoints are unauthenticated.
+**Read routes** (`GET /api/state`, `GET /api/history`, `GET /api/status`, `GET /metrics`, `POST /api/ask`) require `X-API-Key: YOUR_READ_KEY`.
+
+**Admin routes** (`POST /api/trigger`, `POST /api/admin/purge`) require `X-Admin-Key: YOUR_ADMIN_KEY`. When `DASHBOARD_ADMIN_KEY` is not set, the read key is accepted on admin routes (single-key fallback).
+
+The `/health` and `/` endpoints are unauthenticated.
 
 ---
 
@@ -120,9 +124,40 @@ Returns whether a cycle is currently running.
 
 ---
 
+## GET /metrics
+
+Returns a JSON snapshot of all in-memory agent counters. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "cycles_completed": 12,
+  "cycles_failed": 0,
+  "last_cycle_id": "20260426T060000Z",
+  "last_cycle_duration_seconds": 487,
+  "qa_queries_total": 35,
+  "qa_queries_direct": 28,
+  "qa_queries_llm": 7
+}
+```
+
+| Field | Description |
+|---|---|
+| `cycles_completed` | Successful cycles since process start |
+| `cycles_failed` | Failed cycles since process start |
+| `last_cycle_id` | ISO timestamp of the most recent completed cycle |
+| `last_cycle_duration_seconds` | Wall-clock seconds for the last cycle |
+| `qa_queries_total` | Total Q&A questions answered since process start |
+| `qa_queries_direct` | Questions answered from state without an LLM call |
+| `qa_queries_llm` | Questions routed through the LLM |
+
+Counters reset on process restart (in-memory only).
+
+---
+
 ## POST /api/trigger
 
-Fires a new cycle immediately in a background thread. Returns immediately; use `GET /api/status` to poll for completion.
+Fires a new cycle immediately in a background thread. Requires **admin key**. Returns immediately; use `GET /api/status` to poll for completion.
 
 **Response 200:**
 ```json
@@ -133,6 +168,28 @@ Fires a new cycle immediately in a background thread. Returns immediately; use `
 ```
 
 **Response 409:** `{"detail": "A cycle is already running"}` — wait for it to complete.
+
+---
+
+## POST /api/admin/purge
+
+Deletes cycle status JSONs and IMS snapshots older than `DATA_RETENTION_DAYS`. Requires **admin key**.
+
+**Response 200:**
+```json
+{
+  "status": "ok",
+  "deleted": {
+    "cycle_status": 5,
+    "snapshots": 3
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `deleted.cycle_status` | Number of cycle status JSON files deleted |
+| `deleted.snapshots` | Number of IMS XML snapshots deleted |
 
 ---
 
@@ -169,6 +226,7 @@ Answer a natural language question about the schedule. The engine first tries to
 | `direct` | boolean | `true` if answered without an LLM call (~2s); `false` if LLM-routed (~10s) |
 
 **Response 400:** Question empty or over 500 characters.  
+**Response 429:** Rate limit exceeded (`QA_RATE_LIMIT_PER_HOUR` reached for this IP).  
 **Response 500:** LLM or schedule data error.
 
 ### Example questions
@@ -199,7 +257,8 @@ All error responses follow FastAPI's default format:
 | Status | Meaning |
 |---|---|
 | 400 | Bad request (missing or invalid input) |
-| 401 | Missing or invalid `X-API-Key` header |
+| 401 | Missing or invalid `X-API-Key` / `X-Admin-Key` header |
 | 404 | Resource not found (e.g., no cycle data) |
 | 409 | Conflict (cycle already running) |
+| 429 | Rate limit exceeded (Q&A endpoint) |
 | 500 | Internal server error |

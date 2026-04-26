@@ -4,6 +4,40 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 5 — Production Hardening (2026-04-26)
+
+**Capability:** The agent is containerized, secured with RBAC, observable, and ready for production deployment.
+
+### Added
+- `Dockerfile` + `docker-compose.yml` + `docker-compose.prod.yml` — non-root user (`imsagent` uid 1001), health check, named volumes, resource limits, `unless-stopped` restart
+- **RBAC** — two-key model: `DASHBOARD_API_KEY` (read), `DASHBOARD_ADMIN_KEY` (admin); backward-compatible single-key fallback; all `/api/*` routes protected
+- **Rate limiting** — `QA_RATE_LIMIT_PER_HOUR` per-IP rolling window on `POST /api/ask` (HTTP 429 on excess)
+- **`GET /metrics`** — JSON snapshot of 7 in-memory counters (cycles, Q&A queries, durations); requires API key auth
+- **`POST /api/admin/purge`** — triggers immediate data purge; requires admin key
+- **`LLM_BASE_URL`** — single env var routes all LLM calls to local Ollama-compatible endpoint for ITAR/on-prem deployments
+- **Data retention** — `DATA_RETENTION_DAYS` env var; `CycleRunner.purge_old_data()` auto-runs at end of every cycle; deletes cycle status JSONs + IMS snapshots older than window
+- **Structured JSON logging** — `LOG_FORMAT=json` outputs `{ts, level, logger, msg}` for log aggregators (Datadog, ELK, CloudWatch)
+- **`/health` improvements** — uptime, cycle active status, auth flag, state file presence
+- `agent/metrics.py` — thread-safe in-memory counters; `increment()`, `set_value()`, `snapshot()`
+- Q&A metrics wiring — `qa_queries_total`, `qa_queries_direct`, `qa_queries_llm` incremented on every query
+- `tests/test_phase5.py` — 37 new tests covering all Phase 5 functionality
+- `DEPLOYMENT.md`, `OPERATIONS.md`, `SECURITY.md`, `API.md`, `CONFIGURATION.md` — complete production documentation
+- `CHANGELOG.md` — this file
+
+### Security
+- Dependency audit: 0 runtime CVEs (`pip-audit` 2026-04-26); pip CVE-2026-3219 documented (no fix; no runtime impact)
+- SECURITY.md updated with completed RBAC section and `LLM_BASE_URL` on-prem swap path
+
+### Metrics
+- Total tests: **242** (all passing)
+- Phase 5 tests: **37** (metrics, RBAC, rate limiting, purge, LLM_BASE_URL, endpoints)
+- Runtime CVEs: **0**
+
+### Acceptance
+- Accepted by John Forbes, 2026-04-26. See [PHASE5-FEEDBACK.md](PHASE5-FEEDBACK.md).
+
+---
+
 ## Phase 4.5 — IMS Schedule Tools (2026-04-26)
 
 **Capability:** Direct Q&A against raw IMS schedule data via Anthropic tool_use (function calling).
