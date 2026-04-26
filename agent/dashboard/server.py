@@ -226,6 +226,40 @@ async def api_ask(request: Request, body: _AskRequest):
 
 
 # ---------------------------------------------------------------------------
+# ACS Call Automation webhook (Tier 3 — Teams interview demo)
+# ---------------------------------------------------------------------------
+
+@app.post("/acs/callback")
+async def acs_callback(request: Request):
+    """
+    Receives Azure Communication Services Call Automation CloudEvents.
+
+    ACS sends HTTP POST requests to this endpoint for each call lifecycle event
+    (CallConnected, PlayCompleted, PlayFailed, CallDisconnected, etc.).
+    Events are routed to the ACSEventBus so the interview loop thread can
+    synchronise with call state changes.
+
+    This route is unauthenticated — ACS does not support custom auth headers
+    on callbacks. Restrict access at the network/reverse-proxy layer in production.
+    """
+    try:
+        body = await request.json()
+        from agent.acs_event_handler import event_bus
+        # ACS sends an array of CloudEvent objects
+        events = body if isinstance(body, list) else [body]
+        for event in events:
+            event_type = event.get("type", "")
+            data = event.get("data", {})
+            if event_type:
+                event_bus.handle(event_type, data)
+        return JSONResponse({"status": "ok"})
+    except Exception as exc:
+        logger.error("action=acs_callback_error error=%s", exc, exc_info=True)
+        # Always return 200 to ACS — a non-2xx causes it to retry
+        return JSONResponse({"status": "error", "detail": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

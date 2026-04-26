@@ -1,17 +1,19 @@
 """
-Teams / ACS call transport — production connector (stub).
+Teams / ACS call transport.
 
-This module provides the CallTransport abstraction and two implementations:
-  - SimulatedTransport  — default; routes to CAMSimulator (no infra required)
-  - TeamsACSConnector   — production; requires Azure subscription + ACS resource
+Provides:
+  - SimulatedTransport   — default; routes to CAMSimulator (no infra required)
+  - TeamsACSConnector    — production; joins Teams meetings / calls CAMs via ACS
 
-See docs/teams-integration-decision.md for the full ACS setup guide.
+See TEAMS-SETUP.md for the step-by-step Azure provisioning guide.
 
-To activate TeamsACSConnector, set in .env:
-  CALL_TRANSPORT=teams_acs
-  ACS_CONNECTION_STRING=...
-  TEAMS_AGENT_USER_ID=...
-  TEAMS_TENANT_ID=...
+Quick start (demo mode):
+  1. Create ACS resource in Azure portal → copy connection string
+  2. Install ngrok → run: ngrok http 8080
+  3. Set ACS_CONNECTION_STRING in .env
+  4. python main.py --demo-interview \\
+         --meeting-url "https://teams.microsoft.com/l/meetup-join/..." \\
+         --callback-url "https://xxxx.ngrok.io"
 """
 
 import logging
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _TRANSPORT = os.getenv("CALL_TRANSPORT", "simulated").lower()
 _ACS_CONNECTION_STRING = os.getenv("ACS_CONNECTION_STRING", "")
+_ACS_COGNITIVE_SERVICES_ENDPOINT = os.getenv("ACS_COGNITIVE_SERVICES_ENDPOINT", "")
 _TEAMS_AGENT_USER_ID = os.getenv("TEAMS_AGENT_USER_ID", "")
 _TEAMS_TENANT_ID = os.getenv("TEAMS_TENANT_ID", "")
 
@@ -36,38 +39,15 @@ class CallTransport(ABC):
 
     @abstractmethod
     def initiate_call(self, cam_record: Any) -> str:
-        """
-        Initiate an outbound call to a CAM.
-
-        Args:
-            cam_record: CAMRecord from cam_directory.
-
-        Returns:
-            A call session ID string.
-        """
+        """Initiate an outbound call to a CAM. Returns a call session ID."""
 
     @abstractmethod
     def send_audio(self, call_id: str, audio_bytes: bytes) -> None:
-        """
-        Send TTS audio to the active call.
-
-        Args:
-            call_id: Session ID from initiate_call.
-            audio_bytes: MP3/WAV audio to play to the CAM.
-        """
+        """Send TTS audio bytes to the active call."""
 
     @abstractmethod
     def receive_audio(self, call_id: str, timeout_sec: float) -> bytes | None:
-        """
-        Receive a CAM audio response from the active call.
-
-        Args:
-            call_id: Session ID from initiate_call.
-            timeout_sec: Max seconds to wait.
-
-        Returns:
-            Audio bytes, or None if no response within timeout.
-        """
+        """Receive a CAM audio response. Returns bytes or None on timeout."""
 
     @abstractmethod
     def end_call(self, call_id: str) -> None:
@@ -82,13 +62,7 @@ class CallTransport(ABC):
 class SimulatedTransport(CallTransport):
     """
     Simulated transport — routes all calls through the CAM simulator.
-
-    No audio infrastructure required. Audio bytes are ignored; text responses
-    come from the CAMSimulator (Claude-powered).
-
-    The simulation loop in run_phase2_demo.py drives this transport directly
-    by calling the CAMSimulator separately — this class exists to satisfy the
-    interface and provide session tracking.
+    No audio infrastructure required.
     """
 
     def __init__(self) -> None:
@@ -99,13 +73,19 @@ class SimulatedTransport(CallTransport):
         import uuid
         call_id = str(uuid.uuid4())[:8]
         self._sessions[call_id] = {"cam": cam_record, "active": True}
-        logger.info("action=call_initiated transport=simulated cam=%s call_id=%s",
-                    getattr(cam_record, "name", "?"), call_id)
+        logger.info(
+            "action=call_initiated transport=simulated cam=%s call_id=%s",
+            getattr(cam_record, "name", "?"),
+            call_id,
+        )
         return call_id
 
     def send_audio(self, call_id: str, audio_bytes: bytes) -> None:
-        logger.debug("action=audio_sent transport=simulated call_id=%s bytes=%d",
-                     call_id, len(audio_bytes))
+        logger.debug(
+            "action=audio_sent transport=simulated call_id=%s bytes=%d",
+            call_id,
+            len(audio_bytes),
+        )
 
     def receive_audio(self, call_id: str, timeout_sec: float) -> bytes | None:
         # Simulated transport never returns real audio — the demo loop
@@ -124,48 +104,182 @@ class SimulatedTransport(CallTransport):
 
 class TeamsACSConnector(CallTransport):
     """
-    Azure Communication Services → Microsoft Teams outbound calling.
+    Azure Communication Services → Microsoft Teams connector.
 
-    STATUS: STUB — requires Azure subscription, ACS resource, and Teams-ACS
-    interoperability enabled. See docs/teams-integration-decision.md.
+    Supports two usage patterns:
 
-    Setup checklist:
-      1. az login && az account set --subscription <sub-id>
-      2. az communication create --name ims-agent-acs --resource-group <rg>
-             --location <region> --data-location UnitedStates
-      3. az communication show-connection-string --name ims-agent-acs \
-             --resource-group <rg>   → set ACS_CONNECTION_STRING in .env
-      4. Enable Teams-ACS interop in Teams admin center:
-             https://admin.teams.microsoft.com → Voice → Teams Phone
-      5. Obtain Teams user object ID for the agent identity → TEAMS_AGENT_USER_ID
-      6. Set CALL_TRANSPORT=teams_acs in .env
+    1. Demo mode — join_meeting(meeting_url, callback_url):
+       Joins an existing Teams meeting as a bot participant and plays both
+       sides of a simulated CAM interview as TTS audio. Anyone in the meeting
+       hears the conversation. No real CAM audio received (CAM is simulated
+       via Claude API).
+
+    2. Production mode — initiate_call(cam_record):
+       Places an outbound call to an individual CAM via their Teams user ID
+       or ACS-provisioned phone number. (Not yet implemented — see TD-011.)
+
+    Requirements:
+      - ACS_CONNECTION_STRING must be set in .env
+      - A public HTTPS callback URL for ACS events (ngrok / Azure Dev Tunnels)
+      - azure-communication-callautomation installed (in requirements.txt)
+
+    See TEAMS-SETUP.md for the full provisioning walkthrough.
     """
 
     def __init__(self) -> None:
         if not _ACS_CONNECTION_STRING:
             raise EnvironmentError(
                 "ACS_CONNECTION_STRING is not set. "
-                "See docs/teams-integration-decision.md for setup instructions."
+                "Follow TEAMS-SETUP.md to provision an Azure ACS resource "
+                "and add the connection string to your .env file."
             )
-        # Real implementation would import:
-        #   from azure.communication.callautomation import CallAutomationClient
-        #   from azure.communication.callautomation.models import CallInvite
-        raise NotImplementedError(
-            "TeamsACSConnector is a stub pending Azure subscription. "
-            "Set CALL_TRANSPORT=simulated to use simulation mode."
+        try:
+            from azure.communication.callautomation import CallAutomationClient  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                "azure-communication-callautomation is not installed. "
+                "Run: pip install -r requirements.txt"
+            ) from exc
+
+        from azure.communication.callautomation import CallAutomationClient
+        self._client = CallAutomationClient.from_connection_string(_ACS_CONNECTION_STRING)
+        self._sessions: dict[str, dict] = {}
+        logger.info(
+            "action=transport_init type=teams_acs endpoint=%s",
+            _ACS_CONNECTION_STRING.split(";")[0],
         )
 
+    # ------------------------------------------------------------------
+    # Demo mode: join an existing Teams meeting
+    # ------------------------------------------------------------------
+
+    def join_meeting(self, meeting_url: str, callback_url: str) -> str:
+        """
+        Join an existing Teams meeting via ACS Call Automation.
+
+        Args:
+            meeting_url: Full Teams meeting join URL
+                         (https://teams.microsoft.com/l/meetup-join/...)
+            callback_url: Public HTTPS base URL that ACS will POST events to.
+                          '/acs/callback' is appended automatically.
+                          Use ngrok or Azure Dev Tunnels for local dev.
+
+        Returns:
+            call_connection_id from the create_call response.
+
+        Note:
+            Always use event_bus.call_connection_id (from the CallConnected event)
+            for subsequent play_text / end_call calls — ACS may issue a different
+            confirmed ID in the event payload.
+        """
+        from azure.communication.callautomation import TeamsMeetingLocator
+
+        full_callback = callback_url.rstrip("/") + "/acs/callback"
+        call_locator = TeamsMeetingLocator(meeting_link=meeting_url)
+
+        extra: dict[str, Any] = {}
+        if _ACS_COGNITIVE_SERVICES_ENDPOINT:
+            extra["cognitive_services_endpoint"] = _ACS_COGNITIVE_SERVICES_ENDPOINT
+
+        # SDK 1.3+ uses create_call with call_locator for meeting joins.
+        # Older versions used create_group_call — try both.
+        try:
+            result = self._client.create_call(
+                target_participant=None,
+                callback_url=full_callback,
+                call_locator=call_locator,
+                **extra,
+            )
+        except TypeError:
+            result = self._client.create_group_call(
+                target_participants=[],
+                callback_url=full_callback,
+                call_locator=call_locator,
+            )
+
+        call_id = result.call_connection_id
+        self._sessions[call_id] = {"meeting_url": meeting_url, "active": True}
+        logger.info(
+            "action=meeting_join_initiated call_id=%s callback=%s",
+            call_id,
+            full_callback,
+        )
+        return call_id
+
+    def play_text(
+        self,
+        call_connection_id: str,
+        text: str,
+        voice: str = "en-US-JennyNeural",
+    ) -> None:
+        """
+        Synthesise text as speech and play it to all participants in the call.
+
+        This is non-blocking — ACS fires a PlayCompleted (or PlayFailed) event
+        to the callback URL when finished. Call event_bus.arm_play() before this
+        and event_bus.wait_for_play() after to synchronise with the interview loop.
+
+        Args:
+            call_connection_id: Confirmed connection ID from the CallConnected event.
+            text: Text to synthesise and play.
+            voice: Azure Neural TTS voice name.
+                   Agent:  "en-US-JennyNeural"  (AGENT_TTS_VOICE env var)
+                   CAM:    "en-US-AriaNeural"   (CAM_TTS_VOICE env var)
+                   Full list: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
+        """
+        from azure.communication.callautomation import TextSource
+
+        conn = self._client.get_call_connection(call_connection_id)
+        source = TextSource(text=text, voice_name=voice)
+        conn.play_media(play_source=source, play_to=[])
+        logger.info(
+            "action=play_text cid=%s voice=%s chars=%d",
+            call_connection_id,
+            voice,
+            len(text),
+        )
+
+    # ------------------------------------------------------------------
+    # Production mode: outbound call to an individual CAM
+    # ------------------------------------------------------------------
+
     def initiate_call(self, cam_record: Any) -> str:
-        raise NotImplementedError
+        """
+        Place an outbound call to a CAM via their Teams user ID.
+
+        Not yet implemented. To implement (TD-011):
+          dial cam_record.teams_id via MicrosoftTeamsUserIdentifier, handle
+          CallConnected, then drive the interview via play_text / receive_audio.
+        """
+        raise NotImplementedError(
+            "Outbound CAM calling is not yet implemented (TD-011). "
+            "Use join_meeting() for demo mode."
+        )
 
     def send_audio(self, call_id: str, audio_bytes: bytes) -> None:
-        raise NotImplementedError
+        """Use play_text() for TTS. Raw byte upload not supported in this release."""
+        raise NotImplementedError("Use play_text() for TTS audio playback.")
 
     def receive_audio(self, call_id: str, timeout_sec: float) -> bytes | None:
-        raise NotImplementedError
+        """
+        Real-time CAM audio capture requires ACS media streaming (TD-011).
+        In demo mode the CAM is simulated — no audio input is needed.
+        """
+        raise NotImplementedError(
+            "Real-time audio capture requires ACS media streaming (TD-011). "
+            "Demo mode uses the Claude-powered CAM simulator instead."
+        )
 
     def end_call(self, call_id: str) -> None:
-        raise NotImplementedError
+        """Hang up the call for all participants."""
+        try:
+            conn = self._client.get_call_connection(call_id)
+            conn.hang_up(is_for_everyone=True)
+            logger.info("action=call_ended call_id=%s", call_id)
+        except Exception as exc:
+            logger.warning("action=end_call_error call_id=%s error=%s", call_id, exc)
+        finally:
+            self._sessions.pop(call_id, None)
 
     @property
     def transport_name(self) -> str:

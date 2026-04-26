@@ -7,6 +7,10 @@ Modes (mutually exclusive):
   python main.py --schedule        Phase 3: scheduler + dashboard (full production mode)
   python main.py --trigger         Phase 3: fire one cycle now, then exit
   python main.py --demo            Phase 2: simulated voice interviews (run_phase2_demo)
+  python main.py --demo-interview  Tier 3: live Teams interview demo via Azure ACS
+    --meeting-url <url>              Teams meeting join URL (required)
+    --callback-url <url>             Public HTTPS URL for ACS webhooks (required)
+    --cam <name>                     CAM to interview (default: "Alice Nguyen")
 
 Phase 4 Q&A is always available when --serve or --schedule is active:
   Dashboard chat widget: http://localhost:8080 (chat panel at bottom)
@@ -156,20 +160,83 @@ def _run_schedule(ims_path: str) -> None:
         print("\nScheduler stopped.")
 
 
+def _run_demo_interview(
+    meeting_url: str,
+    cam_name: str,
+    ims_path: str,
+    callback_url: str,
+) -> None:
+    """
+    Tier 3 — live Teams interview demo.
+
+    Starts the FastAPI callback server in a background thread (to receive ACS
+    webhook events), then runs the interview on the main thread. The server
+    shuts down automatically when the interview completes.
+    """
+    import threading
+    import time
+    import uvicorn
+    from agent.dashboard.server import app
+    from agent.demo_interview import run_demo
+
+    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+
+    # Start the ACS callback server in a daemon thread
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+
+    # Wait up to 5 s for uvicorn to report ready
+    deadline = time.monotonic() + 5.0
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    print(f"  ACS callback server ready on port {port}")
+    print(f"  Webhook path: {callback_url.rstrip('/')}/acs/callback\n")
+
+    try:
+        run_demo(meeting_url, cam_name, ims_path, callback_url)
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=5)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="IMS Agent")
-    parser.add_argument("--ims-file", default=os.getenv("IMS_FILE_PATH", "data/sample_ims.xml"))
+    parser = argparse.ArgumentParser(
+        description="IMS Agent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--ims-file",
+        default=os.getenv("IMS_FILE_PATH", "data/sample_ims.xml"),
+    )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--serve", action="store_true", help="Start dashboard server only")
-    group.add_argument("--schedule", action="store_true", help="Start scheduler + dashboard (production)")
-    group.add_argument("--trigger", action="store_true", help="Run one cycle now and exit")
-    group.add_argument("--demo", action="store_true", help="Run Phase 2 simulated interview demo")
-    args = parser.parse_args()
+    group.add_argument("--serve", action="store_true",
+                       help="Start dashboard server only")
+    group.add_argument("--schedule", action="store_true",
+                       help="Start scheduler + dashboard (production)")
+    group.add_argument("--trigger", action="store_true",
+                       help="Run one cycle now and exit")
+    group.add_argument("--demo", action="store_true",
+                       help="Run Phase 2 simulated interview demo")
+    group.add_argument("--demo-interview", action="store_true",
+                       help="Tier 3: join a Teams meeting and run a live voice interview via ACS")
 
+    # --demo-interview arguments
+    parser.add_argument("--meeting-url", default="",
+                        help="Teams meeting join URL (required for --demo-interview)")
+    parser.add_argument("--callback-url", default="",
+                        help="Public HTTPS URL for ACS webhooks, e.g. https://xxxx.ngrok.io "
+                             "(required for --demo-interview)")
+    parser.add_argument("--cam", default="Alice Nguyen",
+                        help='CAM name to interview (default: "Alice Nguyen")')
+
+    args = parser.parse_args()
     ims_path = args.ims_file
 
     if args.serve:
@@ -180,6 +247,22 @@ def main() -> None:
         _run_trigger(ims_path)
     elif args.demo:
         _run_demo()
+    elif args.demo_interview:
+        if not args.meeting_url:
+            print("ERROR: --meeting-url is required for --demo-interview")
+            print("  Example: --meeting-url 'https://teams.microsoft.com/l/meetup-join/...'")
+            sys.exit(1)
+        if not args.callback_url:
+            print("ERROR: --callback-url is required for --demo-interview")
+            print("  Start ngrok:  ngrok http 8080")
+            print("  Then use:     --callback-url https://xxxx.ngrok.io")
+            sys.exit(1)
+        _run_demo_interview(
+            meeting_url=args.meeting_url,
+            cam_name=args.cam,
+            ims_path=ims_path,
+            callback_url=args.callback_url,
+        )
     else:
         if not Path(ims_path).exists():
             print(f"\nERROR: IMS file not found: {ims_path}")
