@@ -161,12 +161,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-017 — No authentication on /api/ask or dashboard
+### TD-017 — No authentication on /api/ask or dashboard — **RESOLVED**
+**Resolved:** Phase 5 — 2026-04-26  
 **File:** `agent/dashboard/server.py`  
-**Severity:** Medium (security)  
-**Description:** `POST /api/ask`, `POST /api/trigger`, and the dashboard HTML are served with no authentication. Anyone who can reach port 8080 can read schedule data and trigger cycles. Acceptable in a single-machine dev environment; not acceptable in any networked deployment.  
-**Why deferred:** Phase 4 MVP is local-only. Authentication is listed as a Phase 4 checklist item not yet implemented (4.1).  
-**Suggested fix:** Add HTTP Basic Auth or API key middleware to FastAPI for all `/api/*` routes. For production, put the dashboard behind a reverse proxy (nginx, Caddy) with TLS and authentication. See Phase 5 security review checklist.
+**Description:** All `/api/*` routes now require `X-API-Key` (read) or `X-Admin-Key` (admin). Two-key RBAC model implemented: `DASHBOARD_API_KEY` grants access to read routes; `DASHBOARD_ADMIN_KEY` gates `POST /api/trigger` and `POST /api/admin/purge`. Per-IP rate limiting added to `POST /api/ask` via `QA_RATE_LIMIT_PER_HOUR`. Dashboard HTML at `/` still unprotected by API key (browsers don't send custom headers on page loads) — production deployments should put it behind a reverse proxy with TLS and auth (TD tracked in SECURITY.md §Dashboard HTML).
 
 ---
 

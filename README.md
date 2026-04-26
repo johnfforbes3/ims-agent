@@ -2,7 +2,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 4 complete — Phase 5 (Production Hardening) in planning.**
+**Current status: Phase 5 complete — deployment-ready. Deployment playbook independent-tester verification pending.**
 
 ---
 
@@ -45,7 +45,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 205 tests
+pytest tests/ -v         # all 242 tests
 pytest tests/ -q         # quiet summary only
 ```
 
@@ -93,29 +93,40 @@ ims-agent/
 │   │   ├── context_builder.py  — Intent detection + context slicing
 │   │   ├── qa_engine.py        — Q&A engine (direct + LLM-routed)
 │   │   └── ims_tools.py        — Anthropic tool_use handlers for raw IMS queries
+│   ├── metrics.py              — Thread-safe in-memory counters (cycles, Q&A)
 │   └── voice/
-│       ├── interview_agent.py  — Conversation state machine
-│       ├── cam_simulator.py    — Claude-powered CAM simulator (dev/test)
-│       ├── stt_engine.py       — STT abstraction (Whisper / mock)
-│       ├── tts_engine.py       — TTS abstraction (ElevenLabs / Azure / mock)
-│       └── teams_connector.py  — Teams/ACS connector (stub; Phase 5)
-├── tests/                      — pytest test suite (205 tests)
+│       ├── interview_agent.py      — Conversation state machine (9 states)
+│       ├── cam_simulator.py        — Claude-powered CAM simulator (dev/test)
+│       ├── stt_engine.py           — STT abstraction (Whisper / mock)
+│       ├── tts_engine.py           — TTS abstraction (ElevenLabs / Azure / mock)
+│       ├── transcript_extractor.py — Post-interview LLM structured data extraction
+│       └── teams_connector.py      — Teams/ACS connector (stub; TD-011)
+├── tests/                      — pytest test suite (242 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 57-task ATLAS program IMS
 │   ├── dashboard_state.json    — Live dashboard state (updated each cycle)
 │   ├── cycle_history.json      — Per-cycle summary history
 │   └── snapshots/              — Timestamped IMS copies before each update
 ├── reports/
-│   └── cycles/                 — Per-cycle status JSON
+│   └── cycles/                 — Per-cycle status JSON (gitignored)
 ├── docs/
 │   ├── decisions.md            — Architecture Decision Records (ADR-001–003)
 │   └── teams-integration-decision.md — ADR-004–006 (ACS, TTS, STT)
 ├── .env.example                — All environment variables documented
 ├── requirements.txt
+├── Dockerfile                  — Non-root production container image
+├── docker-compose.yml          — Local dev compose
+├── docker-compose.prod.yml     — Production compose (named volumes, resource limits)
 ├── main.py                     — Entry point (--run, --serve, --schedule)
 ├── IMS-AGENT-PROGRAM-PLAN.md   — Authoritative program plan
 ├── TECHNICAL-DEBT.md           — Known issues and deferred work
-└── CHANGELOG.md                — Version history
+├── CHANGELOG.md                — Version history by phase
+├── DEPLOYMENT.md               — Step-by-step production deployment guide
+├── OPERATIONS.md               — Monitoring, troubleshooting, backup/restore
+├── SECURITY.md                 — Security architecture, RBAC, ITAR posture
+├── API.md                      — All endpoints with request/response examples
+├── CONFIGURATION.md            — All 40+ env vars with defaults and descriptions
+└── TEST-PROCEDURE.md           — 228-case test procedure with run history
 ```
 
 ---
@@ -128,9 +139,11 @@ ims-agent/
 | 2 | Voice Interview Layer | ✅ Complete (simulator) | 2026-04-25 |
 | 3 | Full Automation Loop | ✅ Complete | 2026-04-26 |
 | 4 | Q&A Interface + IMS Tools | ✅ Complete | 2026-04-26 |
-| 5 | Production Hardening | ⏳ Not Started | — |
+| 5 | Production Hardening | ✅ Complete | 2026-04-26 |
 
-**Phase 2 note:** Interview agent, data extraction, CAM communication management, and TTS/STT abstractions are fully implemented and tested. Real Teams/ACS voice calls are implemented as a stub pending Azure ACS credentials (tracked as TD-011); the acceptance test used the Claude-powered CAM simulator. Real voice integration will be completed in Phase 5.
+**Phase 2 note:** Interview agent, data extraction, CAM communication management, and TTS/STT abstractions are fully implemented and tested. Real Teams/ACS voice calls are implemented as a stub pending Azure ACS credentials (tracked as TD-011); the acceptance test used the Claude-powered CAM simulator.
+
+**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 242 tests passing. Deployment playbook independent-tester verification is the remaining open item.
 
 ---
 
@@ -171,7 +184,7 @@ See [docs/decisions.md](docs/decisions.md) for full rationale. Summary:
 | Dashboard | FastAPI + vanilla JS | Minimal footprint; no build step |
 | Q&A | Tool-use agentic loop | LLM decides when to query raw IMS vs synthesized state |
 
-**Phase 5 ITAR note:** For production deployment with ITAR/CUI data, the Anthropic API must be replaced with an on-premises model. All LLM calls are routed through `agent/llm_interface.py` — this is a single-file swap.
+**ITAR note:** For production deployment with ITAR/CUI data, set `LLM_BASE_URL` to any Ollama-compatible local endpoint. All LLM calls route through `agent/llm_interface.py` — no code changes required.
 
 ---
 
@@ -181,3 +194,13 @@ See [docs/decisions.md](docs/decisions.md) for full rationale. Summary:
 - [ADR-002: Python Monte Carlo SRA](docs/decisions.md#adr-002)
 - [ADR-003: Anthropic API for Phase 1–4](docs/decisions.md#adr-003)
 - [ADR-004–006: Azure ACS, ElevenLabs TTS, Whisper STT](docs/teams-integration-decision.md)
+
+## Production Documentation
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) — step-by-step deploy guide (Docker Compose)
+- [OPERATIONS.md](OPERATIONS.md) — monitoring, alerts, backup/restore, common issues
+- [SECURITY.md](SECURITY.md) — RBAC, secrets, ITAR posture, input validation, dependency audit
+- [API.md](API.md) — all endpoints with auth requirements and response schemas
+- [CONFIGURATION.md](CONFIGURATION.md) — every env var with default, required/optional, description
+- [CHANGELOG.md](CHANGELOG.md) — version history by phase
+- [TEST-PROCEDURE.md](TEST-PROCEDURE.md) — 228-case test procedure with run history

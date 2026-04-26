@@ -476,8 +476,8 @@ The PM (and other authorized users) can ask the agent natural language questions
 
 #### 4.1 — Q&A Interface Build
 - [x] Build chat interface — web chat widget on dashboard + Slack slash command `/ims`
-- [ ] Implement authentication: only authorized users can query the agent
-- [ ] Build rate limiting: max N queries per user per day (configurable)
+- [x] Implement authentication: API key required on all `/api/*` routes (`DASHBOARD_API_KEY`); two-key RBAC model implemented in Phase 5 (5.2)
+- [x] Build rate limiting: `QA_RATE_LIMIT_PER_HOUR` per-IP rolling window on `POST /api/ask`; HTTP 429 on excess — implemented in Phase 5 (5.2)
 
 #### 4.2 — Schedule Context Retrieval
 - [x] Load current schedule state (tasks, SRA, CAM inputs, synthesis) as retrieval source
@@ -609,10 +609,11 @@ The agent is ready to deploy at a real client. It is containerized, secured, doc
 - [ ] Deployment must complete in under 4 hours following the playbook
 
 #### 5.7 — Phase 5 Acceptance Test
-- [ ] Full end-to-end test on production deployment (not dev environment)
-- [ ] Security review sign-off
-- [ ] Deployment playbook verified by independent tester
-- [ ] All documentation complete and reviewed
+- [x] Full end-to-end test on development environment — 242 tests passing (2026-04-26)
+- [x] Security review sign-off — RBAC, rate limiting, data retention, dependency audit documented in SECURITY.md; accepted by John Forbes 2026-04-26
+- [x] All documentation complete and reviewed — DEPLOYMENT.md, OPERATIONS.md, SECURITY.md, API.md, CONFIGURATION.md, CHANGELOG.md, TEST-PROCEDURE.md
+- [ ] Deployment playbook verified by independent tester — **pending** (Section 5.6)
+- [ ] Full end-to-end test on production deployment (containerized, clean machine)
 - [ ] **Program complete — ready for first customer deployment** 🎉
 
 ---
@@ -661,7 +662,7 @@ These must be resolved before or during the phase they impact.
 | 4 | Will this run inside the client's network or hosted externally? | Phase 5 | Phase 1 | ❓ Open — Phase 5 will decide; containerization supports both; ITAR requires on-prem for CUI data |
 | 5 | Who is the first target customer and what is their reporting cycle? | All | Phase 1 | ❓ Open — ATLAS program used for dev/test; first real customer TBD for Phase 5 |
 | 6 | Does the client have an existing local LLM deployment or do we need to provide one? | Phase 1 | Phase 1 | ✅ Resolved — Using Anthropic API for Phases 1–4 (non-ITAR dev data); Phase 5 will require on-prem model for ITAR compliance (ADR-003) |
-| 7 | What are the data retention requirements for interview transcripts? | Phase 5 | Phase 3 | ❓ Open — No policy set; Phase 5 security review must define retention and deletion policy |
+| 7 | What are the data retention requirements for interview transcripts? | Phase 5 | Phase 3 | ✅ Resolved — `DATA_RETENTION_DAYS` env var (default 90); auto-purge at end of every cycle; `POST /api/admin/purge` for immediate purge; policy documented in SECURITY.md |
 | 8 | Is the third use case (the one you couldn't remember) related to proposals or something else? | Program | Phase 1 | ❓ Open — Still TBD; not blocking Phase 5 |
 
 ---

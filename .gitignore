@@ -30,6 +30,7 @@ logs/
 reports/*.md
 reports/*.txt
 reports/*.html
+reports/cycles/
 
 # Data — real .mpp files are never committed
 data/*.mpp
