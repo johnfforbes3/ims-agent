@@ -177,6 +177,29 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
+## Tier 4 — Teams Chat Bot
+
+### TD-013 — Chat bot is reactive only; cannot initiate conversations proactively
+**File:** `agent/voice/teams_chat_connector.py`, `agent/demo_chat.py`  
+**Severity:** High  
+**Description:** `ChatInterviewManager` only activates when a CAM sends the first message. The bot cannot open a conversation proactively. This means the trigger-cycle button cannot autonomously start chat interviews — it still uses `CAMSimulator`. Proactive messaging requires a stored `serviceUrl` + `conversationId` per CAM (only available after at least one prior conversation) and a `POST {serviceUrl}/v3/conversations` call with the bot/user member objects.  
+**Why deferred:** Bot Framework proactive messaging requires first-contact data that only exists after a CAM has previously messaged the bot. Bootstrapping for new users needs a separate channel (e.g., a welcome message sent via Graph or a manual first-contact flow).  
+**Suggested fix:**
+1. Store `serviceUrl` + `conversationId` + `user.id` in a JSON file per CAM after their first chat contact
+2. Add `ChatInterviewManager.proactive_start(cam_email, service_url, conversation_id)` that calls `POST {serviceUrl}/v3/conversations` and returns the new conversation ID
+3. Modify `CycleRunner` to accept `mode="teams_chat"`, pre-register all CAM sessions, call `proactive_start()` for each, then block on `session.done` events in parallel before proceeding to analysis
+
+---
+
+### TD-014 — ngrok URL must be manually updated in Azure Bot Service on each restart
+**File:** `.env`, Azure Bot Service configuration  
+**Severity:** Medium  
+**Description:** The free ngrok plan generates a new URL on every `ngrok http 9000` invocation. The Azure Bot Service messaging endpoint must be manually updated each time. This is acceptable for demos but breaks unattended production runs.  
+**Why deferred:** ngrok paid plan ($10/month) supports static subdomains (`--subdomain`). Alternatively, a production deployment would use a fixed domain with a real TLS cert and no need for ngrok.  
+**Suggested fix:** Either upgrade to ngrok paid plan and set `NGROK_SUBDOMAIN` in `.env`, or deploy to a VM/container with a fixed FQDN and eliminate ngrok entirely.
+
+---
+
 ## How to Use This Register
 
 - When writing new code that cuts a corner, add an entry here in the same PR.

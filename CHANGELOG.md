@@ -4,6 +4,47 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Tier 4 — Teams Chat Bot Interview (2026-04-27)
+
+**Capability:** The ATLAS Scheduler bot conducts fully automated CAM status interviews via Teams direct chat messages — no audio, no TTS, no Azure ACS required. The bot sends structured questions, processes natural-language replies through the LLM interview agent, captures percent-complete and blockers, and runs IMS impact analysis on completion. Latency is ~2 s/turn (vs ~10–14 s for the voice path).
+
+### Added
+- `agent/voice/teams_chat_connector.py` — `ChatInterviewManager` singleton (maps Teams user IDs to active sessions), `ChatInterviewSession` (wraps `InterviewAgent` for one interview), `_bf_reply()` (posts text reply via Bot Framework REST), `_bf_typing()` (sends typing indicator)
+- `agent/demo_chat.py` — `run_chat_demo()`: loads IMS, registers wildcard `ChatInterviewSession`, waits for the first Teams user to message the bot, streams interview to completion, prints extracted CAM data and IMS impact analysis
+- `agent/dashboard/server.py` — `POST /bot/messages` endpoint: receives Bot Framework Activity objects from Teams, routes to `ChatInterviewManager`, sends replies via `_bf_reply()`
+- `main.py` — `--demo-chat --cam "<name>"` mode: starts FastAPI server on background thread, registers CAM session, prints deep-link URL to open the chat
+
+### Changed
+- `agent/voice/teams_chat_connector.py` — MSAL token authority changed from `login.microsoftonline.com/botframework.com` to `login.microsoftonline.com/<tenant-id>` (fix: App Registration lives in org tenant, not BF directory)
+- `agent/demo_chat.py` — `_print_cp_diff()`: `calculate_critical_path()` returns a list of string task IDs, not dicts; fixed set construction (was calling `.get("task_id")` on strings)
+- All source files — Dashboard port default changed from `8080` to `9000` (`DASHBOARD_PORT` env var)
+
+### Teams App Publishing Flow (completed)
+1. **App Registration** — AAD app `9afa38ea-6efc-45b5-9f70-248aa32ff9a4` in `intelligenceexpanse.onmicrosoft.com`
+2. **Azure Bot Service** — messaging endpoint set to `https://<ngrok-url>/bot/messages`; Teams channel enabled
+3. **App Manifest** — `manifest.json` + `color.png` + `outline.png` zipped; fixed: removed invalid `packageName` field, aligned `id` with `botId`
+4. **Developer Portal** — package imported at `dev.teams.microsoft.com`, published to org catalog
+5. **Teams Admin Center** — custom app submission approved at `admin.teams.microsoft.com`
+6. **Teams installation** — bot installed via `https://teams.microsoft.com/l/app/<id>` deep link
+
+### Demo Command
+```
+python main.py --demo-chat --cam "Alice Nguyen"
+# Then open the printed deep link and send any message to start
+```
+
+### End-to-End Test Result
+- CAM: Alice Nguyen, 8 tasks
+- Bot correctly probed blockers, flagged ICD (60%) and RTM (40%) as schedule risks
+- IMS impact analysis: 10,000 Monte Carlo iterations; MS-02 PDR on-time probability = 36%
+
+### Known Limitations
+- Bot is **reactive only** — waits for the CAM to send the first message. Proactive initiation (bot opens the conversation) requires a stored `serviceUrl` + `conversationId` per CAM and a `CreateConversation` API call (tracked as TD-013)
+- Trigger Cycle button uses `CAMSimulator`, not Teams Chat — wiring requires registering all CAM sessions and replacing the simulator loop with `session.done` event waits (see TD-013)
+- ngrok URL changes each session on the free plan; must update Azure Bot Service messaging endpoint each run
+
+---
+
 ## Tier 3 — Live Teams Interview Demo (2026-04-26)
 
 **Capability:** A named bot participant ("ATLAS Scheduler") joins a live Microsoft Teams meeting and conducts a full CAM status interview. Both sides of the conversation (agent questions and simulated CAM responses) are played as ElevenLabs TTS audio into the call — anyone in the meeting hears both voices in real time.

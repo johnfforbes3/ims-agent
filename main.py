@@ -3,7 +3,7 @@ IMS Agent — unified entry point.
 
 Modes (mutually exclusive):
   python main.py                   Phase 1: interactive CAM input pipeline
-  python main.py --serve           Phase 3: dashboard server only (port 8080)
+  python main.py --serve           Phase 3: dashboard server only (port 9000)
   python main.py --schedule        Phase 3: scheduler + dashboard (full production mode)
   python main.py --trigger         Phase 3: fire one cycle now, then exit
   python main.py --demo            Phase 2: simulated voice interviews (run_phase2_demo)
@@ -13,7 +13,7 @@ Modes (mutually exclusive):
     --cam <name>                     CAM to interview (default: "Alice Nguyen")
 
 Phase 4 Q&A is always available when --serve or --schedule is active:
-  Dashboard chat widget: http://localhost:8080 (chat panel at bottom)
+  Dashboard chat widget: http://localhost:9000 (chat panel at bottom)
   Slack slash command:   /ims <question>  (requires SLACK_APP_TOKEN + SLACK_BOT_TOKEN)
 """
 
@@ -22,6 +22,13 @@ import logging
 import os
 import sys
 from pathlib import Path
+
+# Force UTF-8 + line-buffered output so Unicode chars don't crash on Windows
+# cp1252 terminals, and so print() output isn't lost when stdout is redirected.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 from dotenv import load_dotenv
 
@@ -123,7 +130,7 @@ def _run_trigger(ims_path: str) -> None:
 def _run_serve() -> None:
     from agent.dashboard.server import serve
     from agent.slack_command import start as start_slack
-    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    port = int(os.getenv("DASHBOARD_PORT", "9000"))
     print(f"Dashboard running at http://localhost:{port}")
     start_slack()  # no-op if tokens not configured
     serve()
@@ -147,7 +154,7 @@ def _run_schedule(ims_path: str) -> None:
     print(f"Scheduler started — cron='{cron}' tz={tz}")
     print(f"Next cycle: {next_run.isoformat() if next_run else 'N/A'}")
 
-    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    port = int(os.getenv("DASHBOARD_PORT", "9000"))
     print(f"Dashboard: http://localhost:{port}")
     print("Press Ctrl+C to stop.\n")
 
@@ -179,7 +186,7 @@ def _run_demo_interview(
     from agent.dashboard.server import app
     from agent.demo_interview import run_demo
 
-    port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    port = int(os.getenv("DASHBOARD_PORT", "9000"))
 
     # Start the ACS callback server in a daemon thread
     config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
@@ -197,6 +204,44 @@ def _run_demo_interview(
 
     try:
         run_demo(meeting_url, cam_name, ims_path, callback_url)
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=5)
+
+
+def _run_demo_chat(
+    cam_name: str,
+    ims_path: str,
+    cam_email: str = "",
+) -> None:
+    """
+    Tier 3 — Teams chat interview demo.
+
+    Starts the FastAPI server (hosts /bot/messages) in a background thread,
+    registers the interview session, then blocks until the interview completes.
+    """
+    import threading
+    import time
+    import uvicorn
+    from agent.dashboard.server import app
+    from agent.demo_chat import run_chat_demo
+
+    port = int(os.getenv("DASHBOARD_PORT", "9000"))
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+
+    deadline = time.monotonic() + 5.0
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    print(f"  Bot messaging server ready on port {port}")
+    print(f"  /bot/messages endpoint active\n")
+
+    try:
+        run_chat_demo(cam_name=cam_name, ims_path=ims_path, cam_email=cam_email)
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)
@@ -225,16 +270,21 @@ def main() -> None:
     group.add_argument("--demo", action="store_true",
                        help="Run Phase 2 simulated interview demo")
     group.add_argument("--demo-interview", action="store_true",
-                       help="Tier 3: join a Teams meeting and run a live voice interview via ACS")
+                       help="Tier 3: join a Teams meeting and run a live voice interview")
+    group.add_argument("--demo-chat", action="store_true",
+                       help="Tier 3: conduct a CAM status interview via Teams chat messages")
 
     # --demo-interview arguments
     parser.add_argument("--meeting-url", default="",
                         help="Teams meeting join URL (required for --demo-interview)")
     parser.add_argument("--callback-url", default="",
-                        help="Public HTTPS URL for ACS webhooks, e.g. https://xxxx.ngrok.io "
+                        help="Public HTTPS URL for Bot Framework webhooks, e.g. https://xxxx.ngrok.io "
                              "(required for --demo-interview)")
     parser.add_argument("--cam", default="Alice Nguyen",
                         help='CAM name to interview (default: "Alice Nguyen")')
+    parser.add_argument("--cam-email", default="",
+                        help="Teams UPN/email of the CAM (optional for --demo-chat; "
+                             "omit to assign interview to first user who messages the bot)")
 
     args = parser.parse_args()
     ims_path = args.ims_file
@@ -254,7 +304,7 @@ def main() -> None:
             sys.exit(1)
         if not args.callback_url:
             print("ERROR: --callback-url is required for --demo-interview")
-            print("  Start ngrok:  ngrok http 8080")
+            print("  Start ngrok:  ngrok http 9000")
             print("  Then use:     --callback-url https://xxxx.ngrok.io")
             sys.exit(1)
         _run_demo_interview(
@@ -262,6 +312,12 @@ def main() -> None:
             cam_name=args.cam,
             ims_path=ims_path,
             callback_url=args.callback_url,
+        )
+    elif args.demo_chat:
+        _run_demo_chat(
+            cam_name=args.cam,
+            ims_path=ims_path,
+            cam_email=args.cam_email,
         )
     else:
         if not Path(ims_path).exists():

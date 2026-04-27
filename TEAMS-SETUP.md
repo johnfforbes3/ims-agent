@@ -1,8 +1,108 @@
-# IMS Agent — Teams Live Demo Setup Guide
+# IMS Agent — Teams Integration Setup Guide
 
-This guide walks through provisioning the Azure infrastructure needed to run the
-Teams interview demo. When complete, the **ATLAS Scheduler** bot joins a live
-Teams meeting and plays both sides of the CAM interview as ElevenLabs TTS audio.
+Two Teams integration modes are available. Choose the one that matches your goal:
+
+| Mode | Transport | Latency | Infrastructure |
+|------|-----------|---------|---------------|
+| **Tier 4 — Chat Bot** | Direct chat messages (`/bot/messages`) | ~2 s/turn | App Registration + Azure Bot Service + ngrok |
+| **Tier 3 — Voice Demo** | Bot joins meeting, plays TTS audio | ~10–14 s/turn | Above + ElevenLabs + Graph `Calls.JoinGroupCall` permission |
+
+---
+
+## Mode A — Teams Chat Bot (Tier 4) ✅ Recommended for interviews
+
+The ATLAS Scheduler bot sends and receives Teams chat messages directly. No audio required. Estimated setup time: **20–30 minutes**.
+
+### Architecture
+
+```
+  main.py --demo-chat
+       │
+       ├─ FastAPI server (port 9000, exposed via ngrok)
+       │     └─ POST /bot/messages  ← Azure Bot Service delivers Teams messages here
+       │
+       ├─ ChatInterviewManager      — maps Teams user IDs → active sessions
+       │
+       └─ _bf_reply()               — posts replies via Bot Framework REST
+             └─ MSAL token from login.microsoftonline.com/<tenant-id>
+```
+
+### Step 1 — Azure AD App Registration
+
+1. **portal.azure.com → Microsoft Entra ID → App registrations → New registration**
+2. Name: `ATLAS Scheduler`, Accounts in this org only, no Redirect URI → **Register**
+3. Copy **Application (client) ID** → `TEAMS_BOT_APP_ID`
+4. Copy **Directory (tenant) ID** → `TEAMS_TENANT_ID`
+5. **Certificates & secrets → New client secret** → copy Value → `TEAMS_BOT_APP_SECRET`
+   - No API permissions needed (chat bot uses Bot Framework tokens, not Graph)
+
+### Step 2 — Azure Bot Service
+
+1. **portal.azure.com → Create a resource → Azure Bot**
+2. Fill in:
+   - **Bot handle**: `atlas-scheduler`
+   - **Microsoft App ID**: paste `TEAMS_BOT_APP_ID`
+   - **App type**: Single tenant
+3. After creation, go to **Configuration → Messaging endpoint**: leave blank for now
+4. Go to **Channels → Microsoft Teams** → enable
+
+### Step 3 — ngrok
+
+```bash
+ngrok http 9000
+# Copy the https URL, e.g. https://a56f-…ngrok-free.app
+```
+
+Back in Azure Bot Service → Configuration → Messaging endpoint:
+```
+https://<ngrok-url>/bot/messages
+```
+Click **Apply**.
+
+### Step 4 — Teams App Manifest
+
+Build the zip package (three files):
+- `manifest.json` — see `data/teams-app-manifest/manifest.json`; `id` and `botId` must match `TEAMS_BOT_APP_ID`
+- `color.png` — 192×192 px full-color icon
+- `outline.png` — 32×32 px transparent outline icon
+
+Validation rules:
+- No `packageName` field (invalid in schema v1.17)
+- `id` == `botId` == `TEAMS_BOT_APP_ID`
+
+### Step 5 — Publish to Teams
+
+1. **dev.teams.microsoft.com → Apps → Import** → upload the zip
+2. Click **Publish → Publish to your org**
+3. **admin.teams.microsoft.com → Teams apps → Manage apps** → find `ATLAS Scheduler` → **Allow**
+4. Install for your user: `https://teams.microsoft.com/l/app/<TEAMS_BOT_APP_ID>`
+
+### Step 6 — Run the Demo
+
+```bash
+# Terminal 1: start ngrok (keep running)
+ngrok http 9000
+
+# Terminal 2: start bot server with demo session
+python main.py --demo-chat --cam "Alice Nguyen"
+
+# Then open the printed deep link and send any message to start the interview
+```
+
+### Environment Variables
+
+```
+TEAMS_BOT_APP_ID=<app-registration-client-id>
+TEAMS_BOT_APP_SECRET=<client-secret-value>
+TEAMS_TENANT_ID=<directory-tenant-id>
+DASHBOARD_PORT=9000
+```
+
+---
+
+## Mode B — Live Teams Voice Demo (Tier 3)
+
+When complete, the **ATLAS Scheduler** bot joins a live Teams meeting and plays both sides of the CAM interview as ElevenLabs TTS audio.
 
 Estimated time: **45–60 minutes** (first time).
 

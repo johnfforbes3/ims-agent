@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 _STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.json")
 _HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
-_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
+_PORT = int(os.getenv("DASHBOARD_PORT", "9000"))
 _IMS_PATH = os.getenv("IMS_FILE_PATH", "data/sample_ims.xml")
 _API_KEY = os.getenv("DASHBOARD_API_KEY", "")
 _ADMIN_KEY = os.getenv("DASHBOARD_ADMIN_KEY", "")
@@ -365,6 +365,91 @@ async def graph_serve_audio(audio_id: str):
         raise HTTPException(status_code=404, detail="Audio not found")
     wav = _graph_connector.audio_cache.pop(audio_id)   # serve once and discard
     return FastAPIResponse(content=wav, media_type="audio/wav")
+
+
+# ---------------------------------------------------------------------------
+# Bot Framework chat endpoint — Teams text interviews
+# ---------------------------------------------------------------------------
+
+@app.post("/bot/messages")
+async def bot_messages(request: Request):
+    """
+    Bot Framework messaging endpoint.
+
+    Teams delivers incoming chat messages from CAMs here as JSON Activity
+    objects. We process each message through the ChatInterviewManager and
+    reply with the next interview question.
+
+    Auth: Bot Framework signs requests with a JWT. In dev we skip full
+    validation; in production add botbuilder-core for proper verification.
+
+    Configure in Azure Bot Service → Configuration → Messaging endpoint:
+        https://<ngrok-url>/bot/messages
+    """
+    try:
+        body = await request.json()
+        activity_type = body.get("type", "")
+
+        # Ignore non-message activities (conversationUpdate, typing, etc.)
+        if activity_type != "message":
+            return JSONResponse({"status": "ok"})
+
+        from_obj      = body.get("from", {})
+        user_id       = from_obj.get("id", "")
+        user_email    = from_obj.get("email", "") or from_obj.get("userPrincipalName", "")
+        message_text  = (body.get("text") or "").strip()
+        service_url   = body.get("serviceUrl", "")
+        conversation  = body.get("conversation", {})
+        conversation_id = conversation.get("id", "")
+        activity_id   = body.get("id", "")
+
+        if not message_text or not user_id:
+            return JSONResponse({"status": "ok"})
+
+        logger.info(
+            "action=bot_message_received user=%s text_len=%d",
+            user_id[:8] + "...", len(message_text),
+        )
+
+        from agent.voice.teams_chat_connector import (
+            ChatInterviewManager, _bf_reply, _bf_typing,
+        )
+
+        manager = ChatInterviewManager.get()
+        session = manager.get_or_start_session(user_id, user_email)
+
+        if session is None:
+            _bf_reply(
+                service_url, conversation_id, activity_id,
+                "Hi! I'm the ATLAS Scheduler. No interview is currently scheduled. "
+                "You'll receive a message when it's time for your status check.",
+            )
+            return JSONResponse({"status": "ok"})
+
+        # Store connection details for proactive use
+        session.service_url    = service_url
+        session.conversation_id = conversation_id
+
+        if not session.started:
+            # First contact — send the opening greeting
+            greeting = session.start()
+            _bf_reply(service_url, conversation_id, activity_id, greeting)
+            logger.info("action=interview_started cam=%s user=%s", session.cam_name, user_id[:8])
+        else:
+            # Subsequent messages — show typing indicator, process, reply
+            _bf_typing(service_url, conversation_id)
+            next_msg = session.process(message_text)
+            if next_msg:
+                _bf_reply(service_url, conversation_id, activity_id, next_msg)
+            if session.is_done:
+                manager.remove_session(user_id)
+                logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+
+        return JSONResponse({"status": "ok"})
+
+    except Exception as exc:
+        logger.error("action=bot_message_error error=%s", exc, exc_info=True)
+        return JSONResponse({"status": "error", "detail": str(exc)})
 
 
 # ---------------------------------------------------------------------------

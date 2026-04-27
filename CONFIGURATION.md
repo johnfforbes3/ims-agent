@@ -61,14 +61,25 @@ Variables marked **Required** have no safe default and the agent will not start 
 
 ---
 
-## Teams / ACS Integration
+## Teams Chat Bot (Tier 4)
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `TEAMS_BOT_APP_ID` | — | **Yes** for chat bot | Azure AD App Registration client ID. Must match the `id`/`botId` in the Teams app manifest and the Azure Bot Service registration. |
+| `TEAMS_BOT_APP_SECRET` | — | **Yes** for chat bot | Client secret for the App Registration. Used by MSAL to acquire Bot Framework connector tokens. |
+| `TEAMS_TENANT_ID` | — | **Yes** for chat bot | Azure AD tenant ID (`ac1eafc0-…`). MSAL acquires tokens from `login.microsoftonline.com/<tenant-id>`, not the generic `botframework.com` authority. |
+
+> **Note:** The `DASHBOARD_PORT` must match the ngrok tunnel pointed at in Azure Bot Service → Configuration → Messaging endpoint (`https://<ngrok-url>/bot/messages`). Update the Azure Bot Service endpoint whenever ngrok restarts (free plan changes the URL on restart).
+
+---
+
+## Teams / ACS Integration (Tier 3 — Voice)
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `ACS_CONNECTION_STRING` | — | If `CALL_TRANSPORT=teams_acs` | Azure Communication Services connection string. |
 | `ACS_PHONE_NUMBER` | — | If `CALL_TRANSPORT=teams_acs` | ACS phone number in E.164 format (e.g., `+12025550100`). |
 | `TEAMS_AGENT_USER_ID` | — | If `CALL_TRANSPORT=teams_acs` | Teams user object ID for the agent bot. |
-| `TEAMS_TENANT_ID` | — | If `CALL_TRANSPORT=teams_acs` | Azure AD tenant ID. |
 
 ---
 
@@ -95,8 +106,8 @@ Variables marked **Required** have no safe default and the agent will not start 
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `DASHBOARD_PORT` | `8080` | No | TCP port for the FastAPI server. |
-| `DASHBOARD_URL` | `http://localhost:8080` | No | Public URL used in Slack/email links. Update for production. |
+| `DASHBOARD_PORT` | `9000` | No | TCP port for the FastAPI server. |
+| `DASHBOARD_URL` | `http://localhost:9000` | No | Public URL used in Slack/email links. Update for production. |
 | `DASHBOARD_STATE_FILE` | `data/dashboard_state.json` | No | Path to the live dashboard state written after each cycle. |
 | `CYCLE_HISTORY_FILE` | `data/cycle_history.json` | No | Path to the rolling cycle history. |
 | `DASHBOARD_API_KEY` | *(empty)* | **Yes (production)** | API key for all `/api/*` read routes. Empty = auth disabled. **Must be set in any networked deployment.** |

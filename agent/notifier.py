@@ -27,7 +27,7 @@ _EMAIL_USER = os.getenv("EMAIL_SMTP_USER", "")
 _EMAIL_PASS = os.getenv("EMAIL_SMTP_PASS", "")
 _EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 _EMAIL_TO = os.getenv("EMAIL_TO", "")
-_DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8080")
+_DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:9000")
 
 
 def build_cycle_summary(

@@ -2,7 +2,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 5 complete — deployment-ready. Deployment playbook independent-tester verification pending.**
+**Current status: Tier 4 complete — Teams Chat Bot interview end-to-end verified. Phase 5 production hardening complete.**
 
 ---
 
@@ -35,7 +35,7 @@ cp .env.example .env
 # 5. Run a single analysis cycle
 python main.py --run
 
-# 6. Start the dashboard + Q&A server (http://localhost:8080)
+# 6. Start the dashboard + Q&A server (http://localhost:9000)
 python main.py --serve
 
 # 7. Start the dashboard + recurring scheduler (weekly by default)
@@ -100,7 +100,9 @@ ims-agent/
 │       ├── stt_engine.py           — STT abstraction (Whisper / mock)
 │       ├── tts_engine.py           — TTS abstraction (ElevenLabs / Azure / mock)
 │       ├── transcript_extractor.py — Post-interview LLM structured data extraction
-│       └── teams_connector.py      — Teams/ACS connector (stub; TD-011)
+│       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
+│       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
+├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
 ├── tests/                      — pytest test suite (242 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 57-task ATLAS program IMS
@@ -133,17 +135,21 @@ ims-agent/
 
 ## Phase Status
 
-| Phase | Name | Status | Completed |
+| Phase / Tier | Name | Status | Completed |
 |---|---|---|---|
 | 1 | Proof of Concept | ✅ Complete | 2026-04-25 |
 | 2 | Voice Interview Layer | ✅ Complete (simulator) | 2026-04-25 |
 | 3 | Full Automation Loop | ✅ Complete | 2026-04-26 |
 | 4 | Q&A Interface + IMS Tools | ✅ Complete | 2026-04-26 |
 | 5 | Production Hardening | ✅ Complete | 2026-04-26 |
+| Tier 3 | Live Teams Voice Demo | ✅ Complete | 2026-04-26 |
+| Tier 4 | Teams Chat Bot Interview | ✅ Complete | 2026-04-27 |
 
 **Phase 2 note:** Interview agent, data extraction, CAM communication management, and TTS/STT abstractions are fully implemented and tested. Real Teams/ACS voice calls are implemented as a stub pending Azure ACS credentials (tracked as TD-011); the acceptance test used the Claude-powered CAM simulator.
 
-**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 242 tests passing. Deployment playbook independent-tester verification is the remaining open item.
+**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 242 tests passing.
+
+**Tier 4 note:** ATLAS Scheduler bot published to M365 org catalog; end-to-end Teams Chat interview verified with Alice Nguyen (8 tasks, IMS impact analysis). Proactive bot initiation and trigger-cycle integration are next (TD-013).
 
 ---
 
@@ -152,9 +158,11 @@ ims-agent/
 | Command | Description |
 |---|---|
 | `python main.py --run` | Run one full cycle immediately |
-| `python main.py --serve` | Start dashboard + Q&A server on port 8080 |
+| `python main.py --serve` | Start dashboard + Q&A server on port 9000 |
 | `python main.py --schedule` | Start dashboard + recurring scheduler |
 | `python main.py --run --serve` | Run one cycle then keep server running |
+| `python main.py --demo-chat --cam "Alice Nguyen"` | Teams Chat Bot interview demo (single CAM) |
+| `python main.py --demo-interview --meeting-url <url> --callback-url <url>` | Teams voice demo (Tier 3, requires ACS) |
 
 ---
 

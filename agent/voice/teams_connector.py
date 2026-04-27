@@ -9,7 +9,7 @@ See TEAMS-SETUP.md for the step-by-step Azure provisioning guide.
 
 Quick start (demo mode):
   1. Create ACS resource in Azure portal → copy connection string
-  2. Install ngrok → run: ngrok http 8080
+  2. Install ngrok → run: ngrok http 9000
   3. Set ACS_CONNECTION_STRING in .env
   4. python main.py --demo-interview \\
          --meeting-url "https://teams.microsoft.com/l/meetup-join/..." \\
