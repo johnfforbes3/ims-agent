@@ -25,6 +25,9 @@ mypy>=1.10.0
 # TTS — ElevenLabs (current) and Azure (Phase 5 migration target)
 elevenlabs>=1.9.0
 
+# Audio playback for local demo (when ACS Teams join is unavailable)
+sounddevice>=0.4.6
+
 # STT — Whisper (local, no API key needed)
 # NOTE: also requires system ffmpeg: https://ffmpeg.org/download.html
 # openai-whisper>=20231117   # Uncomment when real audio STT is needed
@@ -63,3 +66,6 @@ slack-bolt>=1.18.0
 # Azure Communication Services Call Automation — Teams meeting join + TTS playback
 # Requires ACS_CONNECTION_STRING in .env. See TEAMS-SETUP.md.
 azure-communication-callautomation>=1.3.0
+
+# Microsoft Authentication Library — needed by TeamsGraphConnector
+msal>=1.30.0

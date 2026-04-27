@@ -85,7 +85,7 @@ def _cam_line(name: str, text: str) -> None:
     print(f"\n{_YELLOW}{_BOLD}[{name.upper()[:12]}]{_RST}  {_YELLOW}{text}{_RST}")
 
 
-def _divider(char: str = "─", width: int = 62) -> None:
+def _divider(char: str = "-", width: int = 62) -> None:
     print(f"{_DIM}{char * width}{_RST}")
 
 
@@ -112,18 +112,20 @@ def run_demo(
     from agent.file_handler import IMSFileHandler
     from agent.voice.cam_simulator import CAMSimulator, build_atlas_personas
     from agent.voice.interview_agent import InterviewAgent, InterviewState
-    from agent.voice.teams_connector import TeamsACSConnector
+    from agent.voice.teams_connector import (
+        LocalElevenLabsConnector, TeamsACSConnector, TeamsGraphConnector,
+    )
 
     # ── Header ──────────────────────────────────────────────────────────────
-    print(f"\n{_BOLD}{'═' * 62}{_RST}")
-    print(f"{_BOLD}  IMS Agent — Teams Interview Demo{_RST}")
-    print(f"{_BOLD}{'═' * 62}{_RST}")
+    print(f"\n{_BOLD}{'=' * 62}{_RST}")
+    print(f"{_BOLD}  IMS Agent - Teams Interview Demo{_RST}")
+    print(f"{_BOLD}{'=' * 62}{_RST}")
     print(f"  CAM            {cam_name}")
     print(f"  Meeting URL    {meeting_url[:52]}...")
     print(f"  Callback URL   {callback_url}")
     print(f"  Agent voice    {_AGENT_VOICE}")
     print(f"  CAM voice      {_CAM_VOICE}")
-    print(f"{_BOLD}{'═' * 62}{_RST}")
+    print(f"{_BOLD}{'=' * 62}{_RST}")
 
     # ── Load IMS ─────────────────────────────────────────────────────────────
     _hdr("Loading IMS schedule...")
@@ -141,40 +143,83 @@ def run_demo(
         sys.exit(1)
 
     persona = personas[cam_name]
-    cam_tasks = [
+    all_cam_tasks = [
         t for t in tasks
         if t.get("cam") == cam_name and not t.get("is_milestone")
     ]
-    _status(f"Loaded {len(tasks)} total tasks — {len(cam_tasks)} assigned to {cam_name}")
+    # Skip tasks already at 100% — no need to ask about completed work
+    cam_tasks = [t for t in all_cam_tasks if t.get("percent_complete", 0) < 100]
+    _status(
+        f"Loaded {len(tasks)} total tasks — {len(all_cam_tasks)} assigned to {cam_name} "
+        f"({len(cam_tasks)} to review, {len(all_cam_tasks) - len(cam_tasks)} already complete)"
+    )
 
-    # ── Connect to Teams ─────────────────────────────────────────────────────
-    _hdr("Connecting to Teams meeting via ACS...")
+    # ── Connect to Teams / local audio ───────────────────────────────────────
+    _hdr("Connecting...")
     event_bus.reset()
 
-    try:
-        connector = TeamsACSConnector()
-    except (EnvironmentError, ImportError) as exc:
-        _err(str(exc))
-        sys.exit(1)
+    connector = None
+    call_id = None
 
-    try:
-        call_id = connector.join_meeting(meeting_url, callback_url)
-    except Exception as exc:
-        _err(f"ACS create_call failed: {exc}")
-        _err("Check ACS_CONNECTION_STRING and that the meeting URL is valid.")
-        sys.exit(1)
+    # Priority 1: Teams Graph Bot (if TEAMS_BOT_APP_ID is set)
+    if os.getenv("TEAMS_BOT_APP_ID"):
+        try:
+            connector = TeamsGraphConnector()
+            call_id = connector.join_meeting(meeting_url, callback_url)
+            # Register with server so /graph/audio/<id> can serve audio clips
+            import agent.dashboard.server as _srv
+            _srv._graph_connector = connector
+            _status(
+                f"Teams Graph Bot joining as '{connector._BOT_DISPLAY_NAME}' — "
+                f"waiting for call to establish (up to 60 s)"
+            )
+        except Exception as exc:
+            _warn(f"TeamsGraphConnector failed: {exc}")
+            connector = None
 
-    _status("Call request sent — waiting for Teams to admit the agent (up to 60 s)")
-    _status("  In your Teams meeting: admit the caller from the lobby if prompted")
+    # Priority 2: ACS (legacy — TeamsMeetingLocator not in SDK 1.5, kept for future)
+    if connector is None and os.getenv("ACS_CONNECTION_STRING"):
+        try:
+            connector = TeamsACSConnector()
+            call_id = connector.join_meeting(meeting_url, callback_url)
+            _status("ACS connector joining Teams meeting")
+        except Exception as exc:
+            _warn(f"TeamsACSConnector failed: {exc}")
+            connector = None
 
-    if not event_bus.wait_for_connect(timeout=60):
-        _err(
-            "Timed out waiting for Teams to accept the call.\n"
-            "  • Set meeting lobby to 'Everyone can bypass' (Meeting Options)\n"
-            "  • Verify ACS_CONNECTION_STRING is correct\n"
-            "  • Verify the callback URL is publicly reachable (check ngrok)\n"
-            "  • Check logs for ACS error events"
-        )
+    # Priority 3: Local ElevenLabs audio (no Teams — audio plays through speakers)
+    if connector is None:
+        _status("No Teams bot credentials found — playing audio locally through speakers")
+        _status("  Set TEAMS_BOT_APP_ID, TEAMS_BOT_APP_SECRET, TEAMS_TENANT_ID to join Teams")
+        try:
+            connector = LocalElevenLabsConnector()
+            call_id = connector.join_meeting(meeting_url, callback_url)
+        except (EnvironmentError, ImportError) as exc:
+            _err(f"Local audio fallback failed: {exc}")
+            sys.exit(1)
+
+    is_graph = isinstance(connector, TeamsGraphConnector)
+    is_acs   = isinstance(connector, TeamsACSConnector)
+    is_local = isinstance(connector, LocalElevenLabsConnector)
+
+    connect_timeout = 2 if is_local else 60
+    if not event_bus.wait_for_connect(timeout=connect_timeout):
+        if is_graph:
+            _err(
+                "Timed out waiting for Teams to accept the Graph bot.\n"
+                "  • Verify TEAMS_BOT_APP_ID, TEAMS_BOT_APP_SECRET, TEAMS_TENANT_ID are correct\n"
+                "  • Confirm Calls.JoinGroupCall.All permission has admin consent\n"
+                "  • Verify callback URL is reachable (check ngrok at localhost:4040)\n"
+                "  • Check the meeting lobby settings — set 'Who can bypass lobby?' to Everyone"
+            )
+        elif is_acs:
+            _err(
+                "Timed out waiting for Teams to accept the ACS call.\n"
+                "  • Verify ACS_CONNECTION_STRING is correct\n"
+                "  • Verify callback URL is reachable"
+            )
+        else:
+            _err("Local audio connector failed to signal connection.")
         connector.end_call(call_id)
         sys.exit(1)
 
@@ -184,7 +229,11 @@ def run_demo(
     # ── speak() helper — play TTS + block until done ─────────────────────────
     def speak(text: str, voice: str) -> None:
         event_bus.arm_play()
-        connector.play_text(confirmed_cid, text, voice=voice)
+        if is_graph:
+            connector.play_text(confirmed_cid, text, voice=voice,
+                                callback_url=callback_url)
+        else:
+            connector.play_text(confirmed_cid, text, voice=voice)
         completed = event_bus.wait_for_play(timeout=120)
         if not completed:
             logger.warning("action=play_timeout text=%r", text[:40])
@@ -194,11 +243,11 @@ def run_demo(
 
     # ── Interview loop ────────────────────────────────────────────────────────
     print()
-    _divider("─")
+    _divider("-")
     _status("INTERVIEW START")
-    _divider("─")
+    _divider("-")
 
-    agent = InterviewAgent(cam_name, cam_tasks)
+    agent = InterviewAgent(cam_name, cam_tasks, all_tasks=tasks)
     simulator = CAMSimulator(persona)
     terminal = {InterviewState.COMPLETE, InterviewState.ABORTED}
     turn_count = 0
@@ -219,9 +268,9 @@ def run_demo(
 
         turn_count += 1
 
-    _divider("─")
+    _divider("-")
     _status(f"INTERVIEW COMPLETE  ({turn_count} turns, state={agent.state.value})")
-    _divider("─")
+    _divider("-")
 
     # ── Hang up ───────────────────────────────────────────────────────────────
     _hdr("Hanging up...")
@@ -297,9 +346,9 @@ def _show_results(agent: "InterviewAgent", tasks: list, ims_path: str) -> None:
             Path(tmp_path).unlink(missing_ok=True)
 
     print()
-    _divider("═")
+    _divider("=")
     _status("Demo complete. The IMS file was NOT modified.")
-    _divider("═")
+    _divider("=")
 
 
 def _print_cp_diff(cp_before: dict, cp_after: dict) -> None:

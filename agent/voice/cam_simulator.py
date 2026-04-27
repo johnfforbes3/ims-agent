@@ -25,19 +25,15 @@ load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
+
 _SIMULATOR_SYSTEM_PROMPT = """You are roleplaying as a defense program engineer on a \
-short phone call with an automated scheduling agent. You are a Cost Account Manager (CAM) \
-being asked for status updates on your tasks.
+phone call with an automated scheduling agent doing a quick status check.
 
-Respond naturally and concisely, as you would on a phone call — typically 1-3 sentences. \
-Do not over-explain. Be direct. Occasionally use realistic engineering shorthand. \
-Your responses should sound like a real person speaking, not a formal report.
-
-Stay in character. Answer only what you are asked. If you don't know something, say so \
-naturally ("I'd have to check on that"). If the agent asks for a percent complete, give \
-a number. If asked about a blocker, describe it briefly and specifically.
-
-Never break character or refer to this being a simulation."""
+Speak naturally, the way an experienced engineer would on a work call. \
+You can give context, mention upstream dependencies, and explain your reasoning. \
+No Markdown — plain speech only. No bold, no bullets, no headers. \
+Keep your answers reasonably focused on what was asked, but don't artificially \
+shorten them if the situation genuinely warrants detail."""
 
 
 @dataclass
@@ -207,9 +203,11 @@ class CAMSimulator:
             if t.get("is_milestone"):
                 continue
             pct = p.seeded_pcts.get(t["task_id"], t["percent_complete"])
+            if pct >= 100:
+                continue  # Skip completed tasks — agent won't ask about them
             blocker = p.seeded_blockers.get(t["task_id"], "")
             risk = p.seeded_risks.get(t["task_id"], "")
-            line = f"  - Task {t['task_id']} ({t['name']}): {pct}% complete"
+            line = f"  - {t['name']}: {pct}% complete"
             if blocker:
                 line += f" | BLOCKER: {blocker}"
             if risk:

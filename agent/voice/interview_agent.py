@@ -5,10 +5,11 @@ Drives the structured interview conversation:
   GREETING → TASK_INTRO → AWAITING_PCT → [AWAITING_BLOCKER →
   AWAITING_RISK_FLAG → AWAITING_RISK_DESC] → CONFIRM → CLOSING → COMPLETE
 
-Handles: numeric extraction, yes/no interpretation, "I don't know",
-self-corrections, off-script utterances (LLM fallback NLU), and timeouts.
+NLU is handled by an LLM classifier (_classify_cam_response) so the agent
+can understand natural, detailed human responses rather than just keywords.
 """
 
+import json
 import logging
 import os
 import re
@@ -123,6 +124,7 @@ class InterviewAgent:
         cam_name: str,
         tasks: list[dict[str, Any]],
         expected_pcts: dict[str, int] | None = None,
+        all_tasks: list[dict[str, Any]] | None = None,
     ) -> None:
         """
         Args:
@@ -130,9 +132,11 @@ class InterviewAgent:
             tasks: List of task dicts (from IMSFileHandler.parse()) for this CAM.
             expected_pcts: Optional dict of task_id → expected_pct. If not
                            provided, calculated from elapsed time.
+            all_tasks: Full task list including milestones (for milestone name lookup).
         """
         self._cam_name = cam_name
         self._tasks = [t for t in tasks if not t.get("is_milestone")]
+        self._milestones = [t for t in (all_tasks or tasks) if t.get("is_milestone")]
         self._expected_pcts = expected_pcts or {}
         self._task_index = 0
         self._retry_count = 0
@@ -145,6 +149,8 @@ class InterviewAgent:
         self._current_blocker: str = ""
         self._current_risk_flag: bool = False
         self._current_risk_desc: str = ""
+        # Track milestones already flagged — don't ask the same risk question twice
+        self._flagged_milestones: set[str] = set()
         logger.info("action=interview_init cam=%s tasks=%d", cam_name, len(self._tasks))
 
     # ------------------------------------------------------------------
@@ -166,11 +172,11 @@ class InterviewAgent:
     def start(self) -> AgentTurn:
         """Generate the opening greeting turn."""
         n = len(self._tasks)
+        first_name = self._cam_name.split()[0]
         text = (
-            f"Hi {self._cam_name}, this is the ATLAS program scheduling agent. "
-            f"I have {n} task{'s' if n != 1 else ''} to review with you — "
-            f"it should take about {max(2, n * 0.4):.0f} minutes. "
-            f"Ready to start?"
+            f"Hey {first_name}, it's the ATLAS program scheduler. "
+            f"Quick status check — I've got {n} items to run through. "
+            f"Got a few minutes?"
         )
         self._state = InterviewState.GREETING
         return self._agent_turn(text, InterviewState.GREETING)
@@ -221,12 +227,22 @@ class InterviewAgent:
         return self._ask_pct()
 
     def _handle_pct(self, norm: str, raw: str) -> AgentTurn:
-        if _is_unknown(norm):
+        task = self._current_task
+        expected = self._get_expected_pct()
+        classification = _classify_cam_response(
+            state="percent",
+            question=f"You're showing {task['percent_complete']}% on {_spoken_task_name(task['name'])} — where does it stand now?",
+            response=raw,
+            task_name=_spoken_task_name(task["name"]),
+            expected_pct=expected,
+        )
+
+        if classification.get("unknown"):
             return self._flag_no_response_and_advance(
                 "Got it — I'll flag that task for follow-up and move on."
             )
 
-        pct = _extract_percent(norm)
+        pct = classification.get("percent")
         if pct is None:
             self._retry_count += 1
             if self._retry_count >= _MAX_RETRIES:
@@ -234,43 +250,75 @@ class InterviewAgent:
                     "I'm having trouble capturing that — I'll flag the task for follow-up."
                 )
             return self._agent_turn(
-                f"Sorry, I didn't catch a number. Can you give me a percent complete "
-                f"between 0 and 100 for {self._current_task['name']}?",
+                f"Sorry, I didn't catch a number on that. "
+                f"What percent would you say {_spoken_task_name(task['name'])} is at?",
                 InterviewState.AWAITING_PCT,
             )
 
         self._retry_count = 0
         self._current_pct = pct
-        expected = self._get_expected_pct()
         logger.info("action=pct_captured cam=%s task=%s pct=%d expected=%d",
-                    self._cam_name, self._current_task["task_id"], pct, expected)
+                    self._cam_name, task["task_id"], pct, expected)
 
-        if pct < expected - 5:  # >5 points behind — ask for blocker
+        # If the CAM already described the blocker in their answer, capture it
+        if classification.get("blocker_mentioned") and classification.get("blocker_text"):
+            self._current_blocker = classification["blocker_text"]
+            logger.info("action=blocker_auto_captured cam=%s task=%s",
+                        self._cam_name, task["task_id"])
+
+        if pct < expected - 10:  # Meaningfully behind schedule
+            milestone_hint = self._nearest_milestone_name()
+            if self._current_blocker:
+                # Blocker already captured — go straight to risk question (or skip if seen)
+                if milestone_hint in self._flagged_milestones:
+                    self._current_risk_flag = True
+                    return self._finalise_task_and_advance(pct)
+                return self._agent_turn(
+                    f"Got it, {pct}%. Could that put {milestone_hint} at risk?",
+                    InterviewState.AWAITING_RISK_FLAG,
+                )
             return self._agent_turn(
-                f"Got it, {pct}%. That's a bit behind plan — "
-                f"can you describe what's blocking progress on {self._current_task['name']}?",
+                f"Got it, {pct}%. What's the main thing holding that up?",
                 InterviewState.AWAITING_BLOCKER,
             )
-        # On track or ahead — skip to next task
+        # On track — finalise without asking follow-up
         return self._finalise_task_and_advance(pct)
 
     def _handle_blocker(self, norm: str, raw: str) -> AgentTurn:
-        self._current_blocker = raw.strip()
-        task_name = self._current_task["name"]
-        # Find the nearest milestone name for context
+        classification = _classify_cam_response(
+            state="blocker",
+            question="What's the main thing holding that up?",
+            response=raw,
+            task_name=_spoken_task_name(self._current_task["name"]),
+            expected_pct=self._get_expected_pct(),
+        )
+        self._current_blocker = classification.get("blocker_text") or raw.strip()
         milestone_hint = self._nearest_milestone_name()
+        if milestone_hint in self._flagged_milestones:
+            self._current_risk_flag = True
+            return self._finalise_task_and_advance(self._current_pct)
         return self._agent_turn(
-            f"Understood. Is this something that could affect the "
-            f"{milestone_hint} milestone?",
+            f"Got it. Could that put {milestone_hint} at risk?",
             InterviewState.AWAITING_RISK_FLAG,
         )
 
     def _handle_risk_flag(self, norm: str, raw: str) -> AgentTurn:
-        if _is_affirmative(norm):
+        # Always mark this milestone as seen — never ask the same risk question twice
+        milestone = self._nearest_milestone_name()
+        self._flagged_milestones.add(milestone)
+
+        classification = _classify_cam_response(
+            state="risk_flag",
+            question=f"Could that put {milestone} at risk?",
+            response=raw,
+            task_name=_spoken_task_name(self._current_task["name"]),
+            expected_pct=self._get_expected_pct(),
+        )
+
+        if classification["sentiment"] == "affirmative":
             self._current_risk_flag = True
             return self._agent_turn(
-                "Can you briefly describe the nature of the risk and what "
-                "you'd need to resolve it?",
+                "What would it take to clear that?",
                 InterviewState.AWAITING_RISK_DESC,
             )
         self._current_risk_flag = False
@@ -281,25 +329,28 @@ class InterviewAgent:
         return self._finalise_task_and_advance(self._current_pct)
 
     def _handle_confirm(self, norm: str, raw: str) -> AgentTurn:
-        # Affirmative, or no clear negative → confirmed, close
-        if _is_affirmative(norm) or not _is_negative(norm):
+        classification = _classify_cam_response(
+            state="confirm",
+            question="Does all that sound right?",
+            response=raw,
+            task_name="",
+            expected_pct=0,
+        )
+        sentiment = classification["sentiment"]
+
+        if sentiment in ("affirmative", "unclear"):
             return self._close_interview()
 
-        # Negative — check if a correction was provided inline (a percent value
-        # or a task ID pattern like "SE-04"). If so, note it and close; we can't
-        # reliably re-enter the task flow at this point so we log and move on.
+        # Negative — check for an inline correction
         has_correction = (
-            _extract_percent(norm) is not None
+            classification.get("percent") is not None
             or bool(re.search(r"\b[A-Za-z]{2}-\d{2}\b", raw))
         )
         if has_correction:
-            logger.info(
-                "action=confirm_correction_noted cam=%s correction=%r closing",
-                self._cam_name, raw[:120],
-            )
+            logger.info("action=confirm_correction_noted cam=%s correction=%r closing",
+                        self._cam_name, raw[:120])
             return self._close_interview()
 
-        # Flat denial with no correction details — ask once more, cap at 2 re-asks
         if self._confirm_retry_count < 2:
             self._confirm_retry_count += 1
             return self._agent_turn(
@@ -308,10 +359,8 @@ class InterviewAgent:
                 InterviewState.CONFIRM,
             )
 
-        logger.warning(
-            "action=confirm_retry_limit cam=%s closing without confirmed correction",
-            self._cam_name,
-        )
+        logger.warning("action=confirm_retry_limit cam=%s closing without confirmed correction",
+                       self._cam_name)
         return self._close_interview()
 
     def _handle_closing(self, norm: str, raw: str) -> AgentTurn:
@@ -329,20 +378,25 @@ class InterviewAgent:
             return self._close_interview()
         task = self._current_task
         self._reset_task_state()
-        expected = self._get_expected_pct()
-        text = (
-            f"Task {self._task_index + 1} of {len(self._tasks)}: "
-            f"{task['name']}. "
-            f"It was last reported at {task['percent_complete']}% — "
-            f"plan says about {expected}%. "
-            f"What's your current percent complete?"
-        )
+        last_pct = task["percent_complete"]
+        idx = self._task_index
+        n = len(self._tasks)
+
+        spoken_name = _spoken_task_name(task["name"])
+        if idx == 0:
+            opener = f"Alright, let's start with {spoken_name}."
+        elif idx == n - 1:
+            opener = f"Last one — {spoken_name}."
+        else:
+            opener = f"Next up, {spoken_name}."
+
+        text = f"{opener} You're showing {last_pct}% on that — where does it stand now?"
         return self._agent_turn(text, InterviewState.AWAITING_PCT)
 
     def _ask_pct(self) -> AgentTurn:
         task = self._current_task
         return self._agent_turn(
-            f"What's your current percent complete for {task['name']}?",
+            f"Where does {_spoken_task_name(task['name'])} stand percentage-wise?",
             InterviewState.AWAITING_PCT,
         )
 
@@ -386,19 +440,41 @@ class InterviewAgent:
         return self._agent_turn(text + " " + advance_turn.text, advance_turn.state)
 
     def _request_confirmation(self) -> AgentTurn:
-        lines = [f"That's all {len(self._tasks)} tasks. To confirm:"]
-        for r in self._results:
-            pct_str = f"{r.percent_complete}%" if r.percent_complete is not None else "no response"
-            lines.append(f"  • {r.task_id}: {pct_str}"
-                         + (f" — blocker noted" if r.blocker else "")
-                         + (f" — risk flagged" if r.risk_flag else ""))
-        lines.append("Does that sound right?")
-        return self._agent_turn("\n".join(lines), InterviewState.CONFIRM)
+        n = len(self._results)
+        all_risks = [r for r in self._results if r.risk_flag]
+        # Only name tasks that are materially behind schedule (> 10 pts gap)
+        material_risks = [r for r in all_risks if self._is_material_risk(r)]
+        no_resp = [r for r in self._results if r.status == "no_response"]
+
+        task_name_map = {t["task_id"]: _spoken_task_name(t["name"]) for t in self._tasks}
+
+        parts: list[str] = [f"Alright, I think I've got all {n} of your tasks."]
+        if material_risks:
+            risk_names = _natural_list([task_name_map.get(r.task_id, r.task_id) for r in material_risks[:2]])
+            parts.append(f"I'm flagging {risk_names} as a schedule risk.")
+        elif all_risks:
+            count = len(all_risks)
+            parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''} for your review.")
+        if no_resp:
+            parts.append(f"I'll mark {len(no_resp)} item{'s' if len(no_resp) != 1 else ''} for follow-up.")
+
+        parts.append("Does all that sound right?")
+        return self._agent_turn(" ".join(parts), InterviewState.CONFIRM)
+
+    def _is_material_risk(self, result: TaskResult) -> bool:
+        """True only if the task is both risk-flagged AND materially behind schedule (>10 pts gap)."""
+        if not result.risk_flag or result.percent_complete is None:
+            return False
+        task = next((t for t in self._tasks if t["task_id"] == result.task_id), None)
+        if task is None:
+            return True
+        expected = self._expected_pcts.get(result.task_id, _calc_expected_pct(task))
+        return result.percent_complete < expected - 15
 
     def _close_interview(self) -> AgentTurn:
+        first_name = self._cam_name.split()[0]
         return self._agent_turn(
-            "Thanks, I've got everything I need. I'll process the updates now. "
-            "Have a great day!",
+            f"Perfect. Thanks {first_name}, I'll get those updates in. Have a good one!",
             InterviewState.COMPLETE,
         )
 
@@ -424,8 +500,20 @@ class InterviewAgent:
         return _calc_expected_pct(self._current_task)
 
     def _nearest_milestone_name(self) -> str:
-        """Return a short name for the next upcoming milestone (for context in prompts)."""
-        return "next program milestone"
+        """Return the next upcoming milestone name, or a generic fallback."""
+        from datetime import datetime
+        now = datetime.now()
+        upcoming = [
+            t for t in self._milestones
+            if t.get("finish") and t["finish"] >= now
+        ]
+        if upcoming:
+            nearest = min(upcoming, key=lambda t: t["finish"])
+            name = nearest.get("name", "")
+            # Shorten "PDR - Preliminary Design Review" → "PDR"
+            short = name.split(" - ")[0].split(" – ")[0].strip()
+            return short or "the next milestone"
+        return "the next milestone"
 
     def _agent_turn(self, text: str, new_state: InterviewState) -> AgentTurn:
         self._state = new_state
@@ -443,21 +531,39 @@ class InterviewAgent:
 # ---------------------------------------------------------------------------
 
 def _extract_percent(text: str) -> int | None:
-    """Extract a percent value from a natural-language utterance."""
-    # Direct integer: "75", "75%", "seventy five percent"
-    match = re.search(r"\b(\d{1,3})\s*%?", text)
-    if match:
-        val = int(match.group(1))
+    """Extract a percent value from a natural-language utterance.
+
+    Prioritises explicit '%' markers so task IDs like 'SE-03' don't get
+    mistakenly captured as '3%'.
+    """
+    # Priority 1: explicit percent sign "60%", "60 %", "60 percent"
+    for pat in (
+        r"\b(\d{1,3})\s*%",
+        r"\b(\d{1,3})\s+percent\b",
+    ):
+        m = re.search(pat, text)
+        if m:
+            val = int(m.group(1))
+            if 0 <= val <= 100:
+                return val
+
+    # Priority 2: contextual bare number after "at", "is", "around", "about", "roughly"
+    m = re.search(
+        r"\b(?:at|is|are|around|about|roughly|approximately|currently)\s+(\d{1,3})\b",
+        text,
+    )
+    if m:
+        val = int(m.group(1))
         if 0 <= val <= 100:
             return val
-    # Word numbers
+
+    # Priority 3: word numbers (zero / ten / ... / hundred)
     word_map = {
+        "three quarters": 75, "three-quarters": 75,
         "zero": 0, "ten": 10, "twenty": 20, "thirty": 30, "forty": 40,
         "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
         "hundred": 100, "half": 50, "quarter": 25,
-        "three quarters": 75, "three-quarters": 75,
     }
-    # Check longer phrases first so "three quarters" matches before "quarter"
     for phrase, val in sorted(word_map.items(), key=lambda x: -len(x[0])):
         if phrase in text:
             return val
@@ -481,6 +587,54 @@ def _is_unknown(text: str) -> bool:
     return any(_phrase_in(p, text) for p in _UNKNOWN_PHRASES)
 
 
+_BLOCKER_KEYWORDS = {
+    "waiting on", "waiting for", "blocked", "blocking", "held up", "holding",
+    "can't start", "cannot start", "haven't received", "pending", "dependency",
+    "depends on", "need the", "needs the", "need to receive",
+    "still need", "before i can", "until we get", "until i get",
+    # Broader patterns the CAM frequently uses
+    "tied to", "contingent on", "gated on", "gated by",
+    "once the", "once we get", "once i get", "once i have",
+    "can't finalize", "cannot finalize", "can't close", "cannot close",
+    "can't proceed", "cannot proceed", "can't progress", "cannot progress",
+    "holding off", "on hold", "not going to move",
+    "require", "requires", "required before", "need to receive",
+    "without the", "without those", "without confirmed",
+    "same root cause", "same dependency", "same blocker",
+}
+
+
+def _contains_blocker_mention(text: str) -> bool:
+    """Return True if the utterance already describes a blocker."""
+    low = text.lower()
+    return any(kw in low for kw in _BLOCKER_KEYWORDS)
+
+
+def _spoken_task_name(raw_name: str) -> str:
+    """Strip ID prefixes and parenthetical abbreviations for TTS readability.
+
+    'SE-03 Interface Control Documents (ICDs)' → 'Interface Control Documents'
+    'HW-01 Antenna Design' → 'Antenna Design'
+    """
+    import re as _re
+    # Strip leading ID prefix like "SE-03 " or "HW-01 "
+    name = _re.sub(r"^[A-Z]{2,4}-\d+\s+", "", raw_name)
+    # Strip trailing parenthetical abbreviations like " (ICDs)" or " (PDR)"
+    name = _re.sub(r"\s*\([A-Z][A-Za-z0-9& /,-]+\)\s*$", "", name)
+    return name.strip() or raw_name
+
+
+def _natural_list(items: list[str]) -> str:
+    """Join a list of items in natural spoken English: 'A', 'A and B', 'A, B, and C'."""
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
 def _calc_expected_pct(task: dict[str, Any]) -> int:
     """Estimate expected percent complete from elapsed time."""
     from datetime import datetime
@@ -494,3 +648,91 @@ def _calc_expected_pct(task: dict[str, Any]) -> int:
         return 100
     elapsed = (now - start).total_seconds()
     return max(0, min(100, int(elapsed / total * 100)))
+
+
+# ---------------------------------------------------------------------------
+# LLM-based classifier — replaces keyword matching for NLU
+# ---------------------------------------------------------------------------
+
+_CLASSIFY_PROMPT = """\
+You are the NLU layer for an automated program schedule interview agent.
+The agent just asked a question and received this response from a program engineer (CAM).
+Extract the key facts and return them as a JSON object — nothing else.
+
+State: {state}
+Task being discussed: {task_name}
+Expected progress: ~{expected_pct}%
+Agent asked: {question}
+CAM responded: {response}
+
+Return ONLY a JSON object with these fields:
+{{
+  "percent": <integer 0-100 — the completion percentage the CAM reported for THIS task, or null if not stated>,
+  "blocker_mentioned": <true if the CAM described anything blocking or delaying this task>,
+  "blocker_text": <one-sentence summary of the blocker, or "" if none>,
+  "sentiment": "affirmative" | "negative" | "unclear" — whether the CAM said yes/no to the question asked,
+  "unknown": <true if the CAM said they don't know or can't answer>,
+  "key_insight": <one sentence capturing the most important thing the CAM said>
+}}
+
+Important rules:
+- For "percent": only capture the percentage the CAM is reporting for the task being asked about.
+  Ignore any other task percentages mentioned in passing (e.g. "SE-06 is only at 10%").
+- For "sentiment": base this on whether the CAM affirmed or denied what was specifically asked.
+  If the CAM gave a nuanced answer that leans yes, use "affirmative".
+  If they pushed back or said no, use "negative". If truly ambiguous, "unclear".
+- For "blocker_mentioned": true if the CAM mentioned anything that is preventing, delaying,
+  blocking, or holding up progress — even if phrased indirectly."""
+
+
+def _classify_cam_response(
+    state: str,
+    question: str,
+    response: str,
+    task_name: str,
+    expected_pct: int,
+) -> dict[str, Any]:
+    """Use an LLM to classify a CAM's natural-language response.
+
+    Returns a dict with keys: percent, blocker_mentioned, blocker_text,
+    sentiment, unknown, key_insight.
+    Falls back to safe defaults if the LLM call fails.
+    """
+    try:
+        from agent.llm_interface import LLMInterface
+        llm = LLMInterface()
+        prompt = _CLASSIFY_PROMPT.format(
+            state=state,
+            task_name=task_name or "(not specified)",
+            expected_pct=expected_pct,
+            question=question,
+            response=response,
+        )
+        raw = llm.ask(prompt, context="").strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw)
+        logger.debug("action=classify state=%s percent=%s blocker=%s sentiment=%s",
+                     state, result.get("percent"), result.get("blocker_mentioned"),
+                     result.get("sentiment"))
+        return result
+    except Exception as exc:
+        logger.warning("action=classify_failed state=%s error=%s — falling back to regex", state, exc)
+        # Graceful fallback: use the old keyword-based helpers
+        pct = _extract_percent(response.lower())
+        blocker = _contains_blocker_mention(response)
+        sentiment = (
+            "affirmative" if _is_affirmative(response.lower())
+            else "negative" if _is_negative(response.lower())
+            else "unclear"
+        )
+        return {
+            "percent": pct,
+            "blocker_mentioned": blocker,
+            "blocker_text": response.strip() if blocker else "",
+            "sentiment": sentiment,
+            "unknown": _is_unknown(response.lower()),
+            "key_insight": "",
+        }

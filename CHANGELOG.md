@@ -4,6 +4,45 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Tier 3 — Live Teams Interview Demo (2026-04-26)
+
+**Capability:** A named bot participant ("ATLAS Scheduler") joins a live Microsoft Teams meeting and conducts a full CAM status interview. Both sides of the conversation (agent questions and simulated CAM responses) are played as ElevenLabs TTS audio into the call — anyone in the meeting hears both voices in real time.
+
+### Added
+- `agent/voice/teams_connector.py` — `TeamsGraphConnector` class: joins Teams meetings via Microsoft Graph Communications API (`POST /communications/calls`), synthesises TTS with ElevenLabs PCM output, wraps in WAV, serves audio via FastAPI, triggers `playPrompt`
+- `agent/dashboard/server.py` — `POST /graph/callback` endpoint: handles Graph call-state notifications (establishing → established → terminated), `playPromptOperation` completion events; `GET /graph/audio/{id}` serves single-use WAV clips to Graph
+- `agent/demo_interview.py` — Connector priority order: TeamsGraphConnector → TeamsACSConnector → LocalElevenLabsConnector (local speaker fallback)
+- `scripts/check_teams_auth.py` — Diagnostic script: verifies MSAL token acquisition, decodes JWT claims, checks `Calls.JoinGroupCall.All` consent, tests `/communications/calls` API access
+
+### Changed
+- `agent/voice/interview_agent.py` — Replaced all keyword-based NLU (`_extract_percent`, `_contains_blocker_mention`, `_is_affirmative`) with a single LLM classifier (`_classify_cam_response`) that understands natural language responses; added `_is_material_risk()` threshold (15-point gap) to suppress spurious risk flags
+- `agent/voice/cam_simulator.py` — Removed response truncation and strict 10-rule system prompt; replaced with natural conversational prompt that allows realistic engineer-style responses
+- `agent/voice/teams_connector.py` — `LocalElevenLabsConnector`: replaced `playsound` (silent on Windows) with `sounddevice` + numpy direct PCM playback via `output_format="pcm_16000"`
+- `agent/dashboard/server.py` — Fixed `graph_callback`: handle `resourceData` as list, extract call ID from `/calls/{id}/` path segment via regex (not last segment), match `playPromptOperation` via `"operation" in odata_type.lower()`
+- `agent/demo_interview.py` — Fixed Unicode `─` (U+2500) in `_divider()` calls that crashed on Windows cp1252 consoles
+- `requirements.txt` — Added `msal>=1.30.0`; replaced `playsound==1.2.2` with `sounddevice>=0.4.6`
+
+### Azure Infrastructure Required
+- **Azure AD App Registration** — `TEAMS_BOT_APP_ID`, `TEAMS_BOT_APP_SECRET`, `TEAMS_TENANT_ID`; API permission `Calls.JoinGroupCall.All` (Application, admin-consented)
+- **Azure Bot Service** — Registers the app with Teams calling infrastructure; Teams channel enabled with calling webhook pointing to `/graph/callback`
+- **ElevenLabs API** — TTS for both agent voice (Rachel) and CAM voice (Bella); `ELEVENLABS_API_KEY`
+- **ngrok** — Public HTTPS tunnel to local port 8080 for Graph callbacks
+
+### Demo Command
+```
+python main.py --demo-interview \
+  --meeting-url "https://teams.microsoft.com/meet/..." \
+  --cam "Alice Nguyen" \
+  --callback-url "https://xxxx.ngrok-free.app"
+```
+
+### Known Limitations
+- ~8–14 seconds per turn latency (ElevenLabs TTS × 2 + LLM classifier + Graph API round-trips)
+- ngrok URL changes each session on free plan — must update Azure Bot Service webhook URL each run
+- `TeamsMeetingLocator` removed from `azure-communication-callautomation` SDK 1.5+; ACS path is legacy fallback only
+
+---
+
 ## Phase 5 — Production Hardening (2026-04-26)
 
 **Capability:** The agent is containerized, secured with RBAC, observable, and ready for production deployment.

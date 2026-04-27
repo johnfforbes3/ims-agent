@@ -260,6 +260,114 @@ async def acs_callback(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Microsoft Graph Communications API — callback + audio serving
+# ---------------------------------------------------------------------------
+
+# Module-level reference updated by demo_interview when TeamsGraphConnector is used
+_graph_connector: "Any" = None
+
+
+@app.post("/graph/callback")
+async def graph_callback(request: Request):
+    """
+    Receives Microsoft Graph Communications API call-state notifications.
+
+    Handles:
+      - Subscription validation (echo validationToken back as plain text)
+      - Call state changes: established → CallConnected, terminated → CallDisconnected
+      - PlayPrompt completion → PlayCompleted / PlayFailed
+    """
+    from fastapi.responses import PlainTextResponse
+
+    # Subscription validation handshake
+    validation_token = request.query_params.get("validationToken")
+    if validation_token:
+        logger.info("action=graph_validation token=%s", validation_token[:20])
+        return PlainTextResponse(content=validation_token, status_code=200)
+
+    try:
+        body = await request.json()
+        from agent.acs_event_handler import event_bus
+        logger.debug("action=graph_callback body=%s", str(body)[:300])
+
+        notifications = body.get("value", []) if isinstance(body, dict) else []
+        if not notifications:
+            notifications = [body]
+
+        import re as _re
+        for note in notifications:
+            resource_data = note.get("resourceData", {})
+            # Graph sometimes sends resourceData as a list; normalise to dict
+            if isinstance(resource_data, list):
+                resource_data = resource_data[0] if resource_data else {}
+
+            resource = note.get("resource", "")
+            change_type = note.get("changeType", "")
+
+            # Extract call ID from resource path: /communications/calls/{id}/...
+            # Using regex so we get the call segment, not a trailing operation segment.
+            _m = _re.search(r"/calls/([^/]+)", resource)
+            if _m:
+                call_id = _m.group(1)
+            elif isinstance(resource_data, dict):
+                call_id = resource_data.get("id", "") or resource.rstrip("/").split("/")[-1]
+            else:
+                call_id = resource.rstrip("/").split("/")[-1]
+
+            call_state = resource_data.get("state", "") if isinstance(resource_data, dict) else ""
+            op_status  = resource_data.get("status", "") if isinstance(resource_data, dict) else ""
+            odata_type = resource_data.get("@odata.type", "") if isinstance(resource_data, dict) else ""
+
+            logger.info(
+                "action=graph_event call_id=%s state=%s op_status=%s odata=%s",
+                call_id, call_state, op_status, odata_type
+            )
+
+            odata_lower = odata_type.lower()
+
+            # Call state changes  (#microsoft.graph.call)
+            if "operation" not in odata_lower and "call" in odata_lower:
+                if call_state in ("established", "connected"):
+                    event_bus.handle("Microsoft.Communication.CallConnected",
+                                     {"callConnectionId": call_id})
+                elif call_state in ("terminated", "disconnected") or change_type == "deleted":
+                    event_bus.handle("Microsoft.Communication.CallDisconnected",
+                                     {"callConnectionId": call_id})
+
+            # PlayPrompt / comms operation completion
+            # Matches: #microsoft.graph.playPromptOperation, #microsoft.graph.commsOperation, etc.
+            elif "operation" in odata_lower or "playprompt" in resource.lower():
+                if op_status == "completed":
+                    event_bus.handle("Microsoft.Communication.PlayCompleted",
+                                     {"callConnectionId": call_id})
+                elif op_status in ("failed", "timedOut"):
+                    event_bus.handle("Microsoft.Communication.PlayFailed",
+                                     {"callConnectionId": call_id})
+
+        return JSONResponse({"status": "ok"})
+    except Exception as exc:
+        logger.error("action=graph_callback_error error=%s", exc, exc_info=True)
+        return JSONResponse({"status": "error", "detail": str(exc)})
+
+
+@app.get("/graph/audio/{audio_id}")
+async def graph_serve_audio(audio_id: str):
+    """
+    Serve a single-use WAV audio clip for Graph playPrompt.
+
+    TeamsGraphConnector stores the WAV bytes here keyed by UUID; Graph fetches
+    this URL during playPrompt and plays the audio into the Teams meeting.
+    """
+    from fastapi import HTTPException
+    from fastapi.responses import Response as FastAPIResponse
+    global _graph_connector
+    if _graph_connector is None or audio_id not in _graph_connector.audio_cache:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    wav = _graph_connector.audio_cache.pop(audio_id)   # serve once and discard
+    return FastAPIResponse(content=wav, media_type="audio/wav")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
