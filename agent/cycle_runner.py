@@ -135,7 +135,7 @@ class CycleRunner:
         return cls._active
 
     @classmethod
-    def apply_approved(cls, cycle_id: str) -> dict[str, Any]:
+    def apply_approved(cls, cycle_id: str, approver: str = "dashboard") -> dict[str, Any]:
         """
         Apply previously-held CAM inputs after PM approval and re-run analysis.
 
@@ -159,7 +159,7 @@ class CycleRunner:
         ims_path = record.get("ims_path", _IMS_PATH)
         cam_inputs = record["cam_inputs"]
 
-        mark_approved(cycle_id, approver="dashboard")
+        mark_approved(cycle_id, approver=approver)
 
         handler = IMSFileHandler(ims_path)
         handler.parse()  # prime the tree

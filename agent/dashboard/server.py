@@ -225,20 +225,21 @@ async def api_approve(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision
     Applies the pending cam_inputs to the authoritative IMS file and runs
     post-approval analysis (CPM + SRA + synthesis + report).
     """
-    from agent.approval_store import mark_approved, load_pending
+    from agent.approval_store import load_pending
     record = load_pending(cycle_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"No pending approval for cycle {cycle_id}")
     if record.get("status") != "pending":
         raise HTTPException(status_code=409, detail=f"Cycle {cycle_id} is already {record['status']}")
 
-    mark_approved(cycle_id, approver=body.approver or "dashboard")
-    logger.info("action=approval_api cycle=%s approver=%s", cycle_id, body.approver)
+    approver = body.approver or "dashboard"
+    logger.info("action=approval_api cycle=%s approver=%s", cycle_id, approver)
 
-    # Apply in a background thread so the HTTP response returns immediately
+    # Apply in a background thread so the HTTP response returns immediately.
+    # apply_approved() owns the mark_approved() call — don't call it here.
     def _apply():
         from agent.cycle_runner import CycleRunner
-        result = CycleRunner.apply_approved(cycle_id)
+        result = CycleRunner.apply_approved(cycle_id, approver=approver)
         logger.info("action=approval_applied_complete cycle=%s result=%s", cycle_id, result)
 
     thread = threading.Thread(target=_apply, daemon=True, name=f"approval_{cycle_id}")

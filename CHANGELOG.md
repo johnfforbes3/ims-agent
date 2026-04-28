@@ -4,6 +4,33 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 5 Sprint 2 — Schedule Authority, Approval Gates & Proactive Bot (2026-04-27)
+
+**Capability:** The IMS is now the authoritative, persistent schedule. Each cycle reads what the prior cycle wrote (atomic in-place write), health scoring is deterministic, risky writes are gated behind a PM approval workflow, the Teams bot can initiate conversations proactively once a CAM has made first contact, and ngrok URL updates are automated on startup.
+
+### Added
+- `agent/schedule_health.py` — `compute_health(sra_results, cp_result, tasks)`: deterministic RED/YELLOW/GREEN scoring from SRA `prob_on_baseline` thresholds and CPM float. Eliminates LLM flip-flopping across identical data. Resolves TD-001.
+- `agent/approval_store.py` — `save_pending()`, `load_pending()`, `list_all()`, `mark_approved()`, `mark_rejected()`: JSON-backed approval queue at `data/pending_approvals/<cycle_id>.json`
+- `agent/ngrok_updater.py` — `auto_update_from_ngrok()`: reads ngrok local API, PATCHes Azure Bot Service endpoint via ARM REST on `--demo-chat` startup. Partially resolves TD-020.
+- `agent/dashboard/server.py` — `GET /api/approvals`, `POST /api/approvals/{cycle_id}/approve`, `POST /api/approvals/{cycle_id}/reject` endpoints for PM approval workflow
+
+### Changed
+- `agent/file_handler.py` — `apply_updates()` now writes in-place atomically (`os.replace(tmp, target)`) instead of creating a `*_updated` sibling. Resets internal tree cache after write so next `parse()` re-reads fresh. Cycle N+1 now reads the IMS as Cycle N left it.
+- `agent/cycle_runner.py` — Deterministic health via `compute_health()`; approval gate: validation holds save to `approval_store` and skip IMS write; `apply_approved(cycle_id, approver)` classmethod re-runs CPM+SRA+synthesis+report after PM approves; all dashboard/history writes atomic via temp+replace; `mode="teams_chat"` path wired (TD-019 partial)
+- `agent/llm_interface.py` — `synthesize()` accepts `schedule_health`/`health_rationale` params; pre-computed health is injected into prompt as a given rather than asking the LLM to decide it
+- `agent/voice/teams_chat_connector.py` — `proactive_create_conversation()`, `load_cam_sessions()`, `save_cam_session()` added; serviceUrl+userId persisted from reactive contact for future proactive initiation (TD-019 partial)
+- `agent/dashboard/server.py` — `POST /bot/messages` now calls `save_cam_session()` on first CAM contact
+- `main.py` — `--demo-chat` calls `auto_update_from_ngrok()` on startup
+
+### Fixed
+- **Approval race condition** — `POST /api/approvals/{cycle_id}/approve` was calling `mark_approved()` before spawning the background thread that called `apply_approved()`. Since `apply_approved()` required `status=="pending"`, it always found `"approved"` and errored. Fix: removed pre-emptive `mark_approved()` from the endpoint; `apply_approved()` now owns that call atomically.
+
+### Known Issues (tracked)
+- Dashboard countdown displays 60s but page reloads every 5s during active cycles due to `pollStatus()` conflict — tracked as TD-021
+- Proactive Teams bot requires prior reactive contact to bootstrap `cam_sessions.json` — tracked as TD-019
+
+---
+
 ## Tier 4 — Teams Chat Bot Interview (2026-04-27)
 
 **Capability:** The ATLAS Scheduler bot conducts fully automated CAM status interviews via Teams direct chat messages — no audio, no TTS, no Azure ACS required. The bot sends structured questions, processes natural-language replies through the LLM interview agent, captures percent-complete and blockers, and runs IMS impact analysis on completion. Latency is ~2 s/turn (vs ~10–14 s for the voice path).
@@ -39,9 +66,9 @@ python main.py --demo-chat --cam "Alice Nguyen"
 - IMS impact analysis: 10,000 Monte Carlo iterations; MS-02 PDR on-time probability = 36%
 
 ### Known Limitations
-- Bot is **reactive only** — waits for the CAM to send the first message. Proactive initiation (bot opens the conversation) requires a stored `serviceUrl` + `conversationId` per CAM and a `CreateConversation` API call (tracked as TD-013)
-- Trigger Cycle button uses `CAMSimulator`, not Teams Chat — wiring requires registering all CAM sessions and replacing the simulator loop with `session.done` event waits (see TD-013)
-- ngrok URL changes each session on the free plan; must update Azure Bot Service messaging endpoint each run
+- Bot is **reactive only** — waits for the CAM to send the first message. Proactive initiation (bot opens the conversation) requires a stored `serviceUrl` + `conversationId` per CAM and a `CreateConversation` API call (tracked as TD-019)
+- Trigger Cycle button uses `CAMSimulator`, not Teams Chat — wiring requires registering all CAM sessions and replacing the simulator loop with `session.done` event waits (see TD-019)
+- ngrok URL changes each session on the free plan; must update Azure Bot Service messaging endpoint each run (tracked as TD-020)
 
 ---
 

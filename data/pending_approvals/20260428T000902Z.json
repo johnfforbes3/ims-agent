@@ -1,0 +1,474 @@
+{
+  "cycle_id": "20260428T000902Z",
+  "created_at": "2026-04-28T00:18:27.286862+00:00",
+  "status": "approved",
+  "ims_path": "data/sample_ims.xml",
+  "cam_inputs": [
+    {
+      "task_id": "1",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 100,
+      "blocker": "Downstream traceability work on SE-05 (RTM) is constrained by open interface requirements in SE-03 sections 4\u20136, which are blocked pending RF specifications from Hardware.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:09:16.411033"
+    },
+    {
+      "task_id": "2",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 85,
+      "blocker": "The remaining 15% of the SDD is intentionally held open pending resolution of ICD sections 4\u20136, which depend on RF subsystem specs that Hardware has not yet delivered.",
+      "risk_flag": true,
+      "risk_description": "Two things, and they're both on the Hardware side.\n\nFirst, I need a firm delivery date for the RF specs \u2014 not a \"we're working on it,\" but a committed date with a named owner. Right now I'm operating on \"end of next week\" as an expectation, not a commitment. There's a difference, and that distinction matters when I'm making decisions about whether to hold SE-03 open or start making conservative assumptions and risk rework.\n\nSecond, if Hardware can't commit to end of next week, I need to know that now \u2014 not on Friday. If the date slips, I'd rather have two weeks of warning than two days. That lead time lets me assess whether there are any ICD sections I can close independently using preliminary data, with a formal update cycle once finals arrive. It's not ideal from a configuration control standpoint, but it may be the right trade if it keeps PDR holdable.\n\nWhat I'm not able to do is manufacture progress on SE-03 sections 4 through 6, the SDD final 15%, or SE-08 without that input. Those aren't pace constraints \u2014 they're hard dependencies.\n\nSo the ask for PM action is straightforward: get Hardware in a room, get a committed date, and if that date is past end of next week, escalate it now so we can make a deliberate decision about PDR rather than having the schedule decision made for us by a late data delivery.\n\nHas there been any direct conversation with the Hardware lead about what's actually holding up those specs? Because I don't have visibility into what's causing the delay on their end, and that matters for assessing whether this is a one-week slip risk or something larger.",
+      "timestamp": "2026-04-27T20:09:50.806448"
+    },
+    {
+      "task_id": "3",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 60,
+      "blocker": "Sections 4-6 of the ICD cannot be completed until Hardware delivers the RF subsystem specifications, which are not yet available.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:10:03.817078"
+    },
+    {
+      "task_id": "4",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:10:11.473309"
+    },
+    {
+      "task_id": "5",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 40,
+      "blocker": "RTM progress will plateau at 60-65% until ICD sections 4-6 are closed, because RF subsystem interface definitions (SE-03) must be stable before Level 3 and below requirements can be traced.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:10:24.944644"
+    },
+    {
+      "task_id": "6",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 10,
+      "blocker": "The PDR package cannot advance materially because its primary upstream inputs (SE-03, SE-05, SE-07) are incomplete, with SE-07 barely started at 5% and the RF spec delivery from Hardware unresolved, blocking ICD closure and RTM progress.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:10:39.009786"
+    },
+    {
+      "task_id": "7",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 5,
+      "blocker": "System Safety Analysis cannot progress on RF-related hazards \u2014 the majority of the work \u2014 until ICD sections 4-6 are closed, which is blocked on Hardware RF spec delivery.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:10:53.247851"
+    },
+    {
+      "task_id": "8",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "Reliability Analysis (SE-08) cannot begin until SE-03 (ICD approval) is complete, which is blocked on ICD sections 4\u20136, which are blocked on the undelivered Hardware RF specs.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:11:07.594672"
+    },
+    {
+      "task_id": "9",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:11:22.291598"
+    },
+    {
+      "task_id": "10",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "SE-10 is blocked by incomplete upstream inputs \u2014 the RTM (SE-05) is only at 40% and the ICD (SE-03) is incomplete, both of which trace back to the undelivered Hardware RF spec.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:11:38.017957"
+    },
+    {
+      "task_id": "11",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 75,
+      "blocker": "Tool license contention on the lab cluster is preventing engineers from running required simulations, stalling progress on RF Front End Design.",
+      "risk_flag": true,
+      "risk_description": "Dedicated license slots on the cluster \u2014 even just two or three reserved for my team during off-peak hours would help. Or a short-term license expansion if the program can swing the cost. Either way, I need it resolved in the next week, maybe ten days max. After that, we're into slip territory on HW-05.",
+      "timestamp": "2026-04-27T20:12:10.237620"
+    },
+    {
+      "task_id": "12",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 55,
+      "blocker": "A key engineer has been on medical leave for two weeks with approximately three more weeks expected, leaving only partial coverage from a less experienced team member.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:12:19.355592"
+    },
+    {
+      "task_id": "13",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:12:24.289272"
+    },
+    {
+      "task_id": "14",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 45,
+      "blocker": "The updated antenna aperture requirements ICD from Alice's team has not been delivered, preventing finalization of critical design sections.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:12:33.316255"
+    },
+    {
+      "task_id": "15",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "HW-05 fabrication cannot start until HW-01 RF Front End Design and simulations are signed off, which is being held up by tool license contention on the lab cluster.",
+      "risk_flag": true,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:12:43.447748"
+    },
+    {
+      "task_id": "16",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "HW-06 fab cannot start until HW-02 design is complete, and HW-02 is delayed due to a key engineer on medical leave for approximately three weeks with only partial coverage.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:01.150600"
+    },
+    {
+      "task_id": "17",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "HW-07 cannot begin fabrication until HW-04 design is complete, which is itself blocked on antenna aperture ICD requirements from Alice's team.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:10.472463"
+    },
+    {
+      "task_id": "18",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "HW-08 cannot start until HW-05, HW-06, and HW-07 all complete, and those upstream tasks are each threatened by open issues: license contention on HW-01, a staffing gap on HW-02, and an unresolved external ICD dependency on HW-04.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:21.411648"
+    },
+    {
+      "task_id": "19",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "HW-09 (ESS) is blocked upstream by HW-08 (unit testing), which is itself stalled due to three unresolved open issues: cluster license, backfill engineer, and ICD date.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:30.110222"
+    },
+    {
+      "task_id": "20",
+      "cam_name": "Bob Martinez",
+      "percent_complete": 0,
+      "blocker": "Three open issues are driving risk to Hardware Acceptance Test completion: cluster license contention on HW-01, a staffing gap on HW-02, and an ICD hold on HW-04, with the ICD hold on the antenna path being the highest-risk item due to no schedule buffer.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:40.095565"
+    },
+    {
+      "task_id": "21",
+      "cam_name": "Carol Smith",
+      "percent_complete": 100,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:13:59.298634"
+    },
+    {
+      "task_id": "22",
+      "cam_name": "Carol Smith",
+      "percent_complete": 70,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:04.931750"
+    },
+    {
+      "task_id": "23",
+      "cam_name": "Carol Smith",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:11.177494"
+    },
+    {
+      "task_id": "24",
+      "cam_name": "Carol Smith",
+      "percent_complete": 20,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:17.415738"
+    },
+    {
+      "task_id": "25",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "UI Development cannot begin until SW-02 completes and SW-03 advances further, as these predecessor tasks provide the architecture and backend hooks required to stand up the UI.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:25.767322"
+    },
+    {
+      "task_id": "26",
+      "cam_name": "Carol Smith",
+      "percent_complete": 15,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:36.052311"
+    },
+    {
+      "task_id": "27",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:43.246721"
+    },
+    {
+      "task_id": "28",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "SW-08 has a dependency on hardware availability for the integrated test bed, which is a coordination risk with the HW lead.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:14:52.170011"
+    },
+    {
+      "task_id": "29",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "Hardware availability is a dependency risk for SQT, as it requires a stable, representative test environment shared with the HW team.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:15:03.014924"
+    },
+    {
+      "task_id": "30",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:15:13.269228"
+    },
+    {
+      "task_id": "31",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:15:37.279630"
+    },
+    {
+      "task_id": "32",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:15:49.730703"
+    },
+    {
+      "task_id": "33",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:16:02.067418"
+    },
+    {
+      "task_id": "34",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:16:13.726888"
+    },
+    {
+      "task_id": "35",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:16:24.899503"
+    },
+    {
+      "task_id": "36",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:16:36.408345"
+    },
+    {
+      "task_id": "37",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:16:49.065724"
+    },
+    {
+      "task_id": "38",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:01.495689"
+    },
+    {
+      "task_id": "39",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:13.067037"
+    },
+    {
+      "task_id": "40",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:24.988111"
+    },
+    {
+      "task_id": "41",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 100,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:31.079989"
+    },
+    {
+      "task_id": "42",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 100,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:35.224527"
+    },
+    {
+      "task_id": "43",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 28,
+      "blocker": "The second report is in draft and cannot be finalized until outstanding inputs are received from several CAMs.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:40.954468"
+    },
+    {
+      "task_id": "44",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 28,
+      "blocker": "A few CAMs have not yet closed out their actuals, which is holding up finalization of the current report.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:46.138610"
+    },
+    {
+      "task_id": "45",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:50.784062"
+    },
+    {
+      "task_id": "46",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 25,
+      "blocker": "Several subcontractors have been slow providing their schedule data, causing delays in completing the first formal performance review cycle.",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:17:58.367463"
+    },
+    {
+      "task_id": "47",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:18:03.529827"
+    },
+    {
+      "task_id": "48",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:18:09.371678"
+    },
+    {
+      "task_id": "49",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:18:14.328236"
+    },
+    {
+      "task_id": "50",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 30,
+      "blocker": "",
+      "risk_flag": false,
+      "risk_description": "",
+      "timestamp": "2026-04-27T20:18:19.361145"
+    }
+  ],
+  "validation_failures": [
+    {
+      "task_id": "4",
+      "cam_name": "Alice Nguyen",
+      "rule": "backwards_movement",
+      "detail": "Percent decreased 100% \u2192 0% with no explanation provided"
+    },
+    {
+      "task_id": "13",
+      "cam_name": "Bob Martinez",
+      "rule": "backwards_movement",
+      "detail": "Percent decreased 100% \u2192 0% with no explanation provided"
+    }
+  ],
+  "decided_at": "2026-04-28T00:29:58.276617+00:00",
+  "approver": "PM"
+}

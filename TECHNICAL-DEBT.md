@@ -179,24 +179,38 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Tier 4 — Teams Chat Bot
 
-### TD-013 — Chat bot is reactive only; cannot initiate conversations proactively
-**File:** `agent/voice/teams_chat_connector.py`, `agent/demo_chat.py`  
+### TD-019 — Chat bot is reactive only; cannot initiate conversations proactively — **PARTIALLY RESOLVED**
+**Partially resolved:** Phase 5 sprint 2 — 2026-04-27. Foundation code added; full wiring pending test with live bot.  
+**File:** `agent/voice/teams_chat_connector.py`, `agent/cycle_runner.py`  
 **Severity:** High  
 **Description:** `ChatInterviewManager` only activates when a CAM sends the first message. The bot cannot open a conversation proactively. This means the trigger-cycle button cannot autonomously start chat interviews — it still uses `CAMSimulator`. Proactive messaging requires a stored `serviceUrl` + `conversationId` per CAM (only available after at least one prior conversation) and a `POST {serviceUrl}/v3/conversations` call with the bot/user member objects.  
 **Why deferred:** Bot Framework proactive messaging requires first-contact data that only exists after a CAM has previously messaged the bot. Bootstrapping for new users needs a separate channel (e.g., a welcome message sent via Graph or a manual first-contact flow).  
-**Suggested fix:**
-1. Store `serviceUrl` + `conversationId` + `user.id` in a JSON file per CAM after their first chat contact
-2. Add `ChatInterviewManager.proactive_start(cam_email, service_url, conversation_id)` that calls `POST {serviceUrl}/v3/conversations` and returns the new conversation ID
-3. Modify `CycleRunner` to accept `mode="teams_chat"`, pre-register all CAM sessions, call `proactive_start()` for each, then block on `session.done` events in parallel before proceeding to analysis
+**Progress:** `proactive_create_conversation()` implemented; `save_cam_session()` / `load_cam_sessions()` persist serviceUrl+userId from reactive contacts; `CycleRunner(mode="teams_chat")` path wired. Full end-to-end test with live CAMs pending.  
+**Remaining work:** Bootstrap first-contact flow for new CAMs who have never messaged the bot.
 
 ---
 
-### TD-014 — ngrok URL must be manually updated in Azure Bot Service on each restart
-**File:** `.env`, Azure Bot Service configuration  
+### TD-020 — ngrok URL must be manually updated in Azure Bot Service on each restart — **PARTIALLY RESOLVED**
+**Partially resolved:** Phase 5 sprint 2 — 2026-04-27. Auto-update implemented; requires Azure management env vars.  
+**File:** `agent/ngrok_updater.py`, `.env`  
 **Severity:** Medium  
 **Description:** The free ngrok plan generates a new URL on every `ngrok http 9000` invocation. The Azure Bot Service messaging endpoint must be manually updated each time. This is acceptable for demos but breaks unattended production runs.  
-**Why deferred:** ngrok paid plan ($10/month) supports static subdomains (`--subdomain`). Alternatively, a production deployment would use a fixed domain with a real TLS cert and no need for ngrok.  
-**Suggested fix:** Either upgrade to ngrok paid plan and set `NGROK_SUBDOMAIN` in `.env`, or deploy to a VM/container with a fixed FQDN and eliminate ngrok entirely.
+**Progress:** `agent/ngrok_updater.py` reads the ngrok local API (`http://127.0.0.1:4040/api/tunnels`) and PATCHes the Azure Bot Service endpoint via ARM REST API on `--demo-chat` startup. Requires `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_BOT_NAME` in `.env`. Falls back to printing manual instructions if those vars are absent.  
+**Remaining work:** Either set Azure management env vars for fully automated update, or upgrade to ngrok paid plan (`NGROK_SUBDOMAIN`) / deploy with fixed FQDN to eliminate ngrok entirely.
+
+---
+
+## Phase 5 / Sprint 2
+
+### TD-021 — Dashboard auto-refresh conflicts with cycle-active fast-poll; countdown is misleading
+**File:** `agent/dashboard/templates/index.html` — `pollStatus()`, countdown `setInterval`  
+**Severity:** Medium  
+**Description:** The dashboard has two independent timers: a 60-second full-page reload countdown and a one-shot `pollStatus()` call that triggers `window.location.reload()` after 5 seconds if a cycle is active. When a cycle is running, the page reloads every 5 seconds but the countdown still initialises at 60 and counts down from there — giving the impression of a stuck or restarting timer rather than the actual 5-second refresh cadence. More critically, the "Cycle In Progress" card (showing phase / CAMs responded) only updates on full reload; there is no live push or incremental AJAX update, so progress is only visible in arrears.  
+**Why deferred:** The template uses server-side Jinja2 rendering; live updates require either SSE/WebSocket or an AJAX polling loop to fetch `/api/state` and patch the DOM without a full reload.  
+**Suggested fix:**  
+1. Replace `pollStatus()` + `window.location.reload()` with a `setInterval` (every 5s when active, every 60s when idle) that fetches `/api/state` via AJAX and updates only the "Cycle In Progress" card and the countdown badge in-place.  
+2. Reset `seconds` to match the current interval (5 or 60) whenever the interval changes, so the badge accurately reflects the next actual refresh.  
+3. Trigger a full page reload only when the cycle transitions from active → complete (i.e., `cycle_active` flips from `true` to `false`), so the final health/report data is loaded cleanly.
 
 ---
 
