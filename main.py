@@ -328,7 +328,12 @@ def main() -> None:
         )
     elif args.cam_responder:
         from agent.graph_cam_responder import run_cam_responder
-        run_cam_responder(cam_filter=args.cam, ims_path=ims_path)
+        import sys
+        explicit_cam = next((a.split("=")[1] for a in sys.argv if a.startswith("--cam=")), None)
+        if explicit_cam is None and "--cam" in sys.argv:
+            idx = sys.argv.index("--cam")
+            explicit_cam = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else None
+        run_cam_responder(cam_filter=explicit_cam or "", ims_path=ims_path)
     else:
         if not Path(ims_path).exists():
             print(f"\nERROR: IMS file not found: {ims_path}")

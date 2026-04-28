@@ -38,6 +38,7 @@ _DATA_DIR = "data"
 _DASHBOARD_STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.json")
 _CYCLE_HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
 _COMPLETION_THRESHOLD = float(os.getenv("INTERVIEW_COMPLETION_THRESHOLD", "0.80"))
+_IMS_EXPORTS_DIR = os.getenv("IMS_EXPORTS_DIR", "data/ims_exports")
 _RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", "90"))
 # Teams chat interview timeout in seconds (default 90 min per CAM)
 _TEAMS_INTERVIEW_TIMEOUT = int(os.getenv("TEAMS_INTERVIEW_TIMEOUT_SEC", "5400"))
@@ -135,6 +136,23 @@ class CycleRunner:
         return cls._active
 
     @classmethod
+    @staticmethod
+    def _export_ims_snapshot(cycle_id: str, ims_path: str) -> str:
+        """Copy the updated IMS XML to data/ims_exports/ for MS Project viewing.
+
+        Returns the path of the versioned copy.
+        """
+        exports_dir = Path(_IMS_EXPORTS_DIR)
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        src = Path(ims_path)
+        versioned = exports_dir / f"{cycle_id}_ims.xml"
+        latest = exports_dir / "latest_ims.xml"
+        shutil.copy2(src, versioned)
+        shutil.copy2(src, latest)
+        logger.info("action=ims_exported cycle=%s path=%s", cycle_id, versioned)
+        return str(versioned)
+
+    @classmethod
     def apply_approved(cls, cycle_id: str, approver: str = "dashboard") -> dict[str, Any]:
         """
         Apply previously-held CAM inputs after PM approval and re-run analysis.
@@ -165,6 +183,7 @@ class CycleRunner:
         handler.parse()  # prime the tree
         handler.apply_updates(cam_inputs)
         tasks_updated = handler.parse()
+        cls._export_ims_snapshot(cycle_id, ims_path)
 
         cp_result = calculate_critical_path(tasks_updated)
         sra_results = SRARunner(tasks_updated, seed=None).run()
@@ -312,6 +331,7 @@ class CycleRunner:
         else:
             handler.apply_updates(all_cam_inputs)
             tasks_for_analysis = handler.parse()
+            CycleRunner._export_ims_snapshot(cycle_id, self._ims_path)
             logger.info("action=ims_updated cycle=%s", cycle_id)
 
         # ── 7. ANALYZING ──────────────────────────────────────────────
@@ -411,26 +431,25 @@ class CycleRunner:
         from agent.voice.teams_chat_connector import (
             ChatInterviewManager,
             ChatInterviewSession,
-            load_cam_sessions,
-            proactive_create_conversation,
-            _bf_reply,
         )
         from agent.voice.cam_simulator import build_atlas_personas
         from agent.interview_orchestrator import InterviewOrchestrator
         import threading
 
-        cam_sessions = load_cam_sessions()
         manager = ChatInterviewManager.get()
         all_tasks_non_ms = [t for t in tasks if not t.get("is_milestone")]
 
         sessions_started: list[ChatInterviewSession] = []
         cams_no_session: list[str] = []
 
-        from agent.cam_identity import get_cam_email
+        from agent.cam_identity import get_cam_email, is_auto_respond
+        from agent.voice.teams_chat_connector import load_cam_sessions, _bf_send
+
+        cam_sessions = load_cam_sessions()
+
         for cam_record in directory.get_all_cams():
-            cam_name = cam_record.get("name", "")
+            cam_name = cam_record.name if hasattr(cam_record, "name") else cam_record.get("name", "")
             cam_email = get_cam_email(cam_name).lower()
-            stored = cam_sessions.get(cam_email) or cam_sessions.get(cam_name.lower())
 
             cam_tasks = [
                 t for t in all_tasks_non_ms
@@ -439,35 +458,34 @@ class CycleRunner:
             if not cam_tasks:
                 continue
 
-            if stored:
-                service_url = stored.get("service_url", "")
-                user_id = stored.get("user_id", "")
-                if service_url and user_id:
-                    try:
-                        new_conv_id = proactive_create_conversation(
-                            service_url, user_id
-                        )
-                        if new_conv_id:
-                            session = ChatInterviewSession(cam_name, cam_tasks, all_tasks=tasks)
-                            session.service_url = service_url
-                            session.conversation_id = new_conv_id
-                            session.user_id = user_id
-                            manager.register(user_id, session)
+            if cam_email and is_auto_respond(cam_name):
+                stored = cam_sessions.get(cam_email, {})
+                conv_id = stored.get("conversation_id", "")
+                service_url = stored.get("service_url", "https://smba.trafficmanager.net/amer/")
 
-                            # Send the opening greeting proactively
-                            greeting = session.start()
-                            _bf_reply(service_url, new_conv_id, new_conv_id, greeting)
-                            sessions_started.append(session)
-                            logger.info(
-                                "action=proactive_interview_started cam=%s conv=%s",
-                                cam_name, new_conv_id[:8],
-                            )
-                            continue
-                    except Exception as exc:
-                        logger.warning(
-                            "action=proactive_start_failed cam=%s error=%s — falling back to simulator",
-                            cam_name, exc,
-                        )
+                if not conv_id:
+                    logger.warning(
+                        "action=teams_chat_fallback cam=%s reason=no_conversation_id", cam_name
+                    )
+                    cams_no_session.append(cam_name)
+                    continue
+
+                # Create session pre-started so relay endpoint can drive it
+                session = ChatInterviewSession(cam_name, cam_tasks, all_tasks=tasks, email=cam_email)
+                session.service_url = service_url
+                session.conversation_id = conv_id
+                manager.register_by_email(cam_email, session)
+
+                # Send opening greeting directly via Bot Framework REST
+                greeting = session.start()
+                ok = _bf_send(service_url, conv_id, greeting)
+                if ok:
+                    logger.info("action=proactive_greeting_sent cam=%s conv=%s", cam_name, conv_id[:20])
+                else:
+                    logger.warning("action=proactive_greeting_failed cam=%s", cam_name)
+
+                sessions_started.append(session)
+                continue
 
             cams_no_session.append(cam_name)
             logger.info(
@@ -484,8 +502,10 @@ class CycleRunner:
                 inputs = session.get_cam_inputs()
                 all_cam_inputs.extend(inputs)
                 responded += 1
+                directory.record_attempt(session.cam_name, "completed")
                 logger.info("action=teams_session_complete cam=%s inputs=%d", session.cam_name, len(inputs))
             else:
+                directory.record_attempt(session.cam_name, "no_answer")
                 logger.warning(
                     "action=teams_interview_timeout cam=%s timeout_sec=%d",
                     session.cam_name, _TEAMS_INTERVIEW_TIMEOUT,
@@ -507,7 +527,7 @@ class CycleRunner:
                 if inp.get("cam_name") in cams_no_session
             ]
             all_cam_inputs.extend(fallback_inputs)
-            responded += sim_report.get("responded", 0)
+            responded += len(set(inp.get("cam_name") for inp in fallback_inputs))
 
         total_cams = len(directory.get_all_cams())
         threshold_met = (responded / total_cams) >= _COMPLETION_THRESHOLD if total_cams else False
@@ -534,8 +554,9 @@ class CycleRunner:
             f"before writing to the schedule:\n{hold_lines}\n\n"
             f"Approve or reject at: {dashboard_url}/api/approvals"
         )
-        send_slack(msg)
-        send_email(msg)
+        summary = {"health": "HELD", "top_risks": [msg], "cams_responded": 0, "cams_total": 0}
+        send_slack(summary)
+        send_email(summary)
 
     def _snapshot_ims(self, cycle_id: str) -> None:
         src = Path(self._ims_path)
@@ -618,6 +639,8 @@ class CycleRunner:
             "validation_holds": status.get("validation_holds", []),
             "validation_warnings": status.get("validation_warnings", []),
             "approval_required": status.get("approval_required", False),
+            "ims_exports_dir": str(Path(_IMS_EXPORTS_DIR).resolve()),
+            "latest_ims_path": str((Path(_IMS_EXPORTS_DIR) / "latest_ims.xml").resolve()),
         }
 
         import os as _os

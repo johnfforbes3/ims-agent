@@ -62,13 +62,9 @@
       <Duration>PT320H0M0S</Duration>
       <PercentComplete>85</PercentComplete>
       <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Section 7 (interface architecture) cannot be finalized until RF specs are received from HW and ICD sections 4–6 are closed, gating the remaining 15% of the SDD. | RISK: *To clear the RF specs dependency, I need one thing: HW to deliver the finalized RF specifications — frequency bands, power levels, interface signal characteristics, the full set. That's the input. Until it's in my hands, I can't write ICD sections 4 through 6 to a standard I'd sign off on.*
+    <Notes>BLOCKER: The RF interface section (remaining 15%) cannot be completed until HW delivers the final RF specs. | RISK: Two things need to happen in parallel. First, HW needs to deliver the RF specs by end of next week — that's the critical path item. Second, once I have them, I need two days to close the SDD and roughly three to four days to complete ICD sections 4 through 6. After that, SE-06 can accelerate, but we're still looking at significant catch-up work given it's only at 10%.
 
-*What I'd recommend at the program level: escalate to the HW lead today and get a hard committed date. Not a 'we're working on it' — an actual date with a name behind it. If that date is end of next week or sooner, we're probably okay. If it slips past that, the PM needs to make a call on whether to hold PDR or proceed with known open items, which I'd caution against — ICDs with open sections in a PDR package will flag immediately in any serious review.*
-
-*In parallel, there are two things I can do without the RF specs: I can continue driving the RTM — that's at 40% and has runway — and I can make progress on the portions of the PDR package that don't touch interface content. That buys us some time, but it doesn't eliminate the dependency.*
-
-*The critical path right now runs through HW. That's where the action needs to go.*</Notes></Task>
+If you can get HW to commit to a firm delivery date on the RF specs, I can give you a hard revised estimate for PDR readiness. Right now I'm planning around the end-of-next-week deadline, but I don't have that commitment in writing.</Notes></Task>
     <Task>
       <UID>3</UID>
       <Name>SE-03 Interface Control Documents (ICDs)</Name>
@@ -79,7 +75,7 @@
       <Duration>PT240H0M0S</Duration>
       <PercentComplete>60</PercentComplete>
       <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: RF interface sections 4–6 cannot be drafted until HW delivers the RF specs, which have not yet been received. | RISK: </Notes></Task>
+    <Notes>BLOCKER: Sections 4–6 of the ICDs are blocked on receipt of RF specifications from an external dependency. | RISK: </Notes></Task>
     <Task>
       <UID>4</UID>
       <Name>SE-04 CONOPS Development</Name>
@@ -90,7 +86,7 @@
       <Duration>PT160H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>1</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: The CAM is personally resource-constrained due to priority work on the SDD and RTM, and lacks part-time support needed to start CONOPS Development in parallel without pulling off critical path items. | RISK: </Notes></Task>
+    <Notes>BLOCKER: CONOPS work is being deliberately held pending resolution of the RF spec issue and stabilization of upstream documents (SDD and ICD), which must reach a closeable state before substantive CONOPS work can begin. | RISK: </Notes></Task>
     <Task>
       <UID>5</UID>
       <Name>SE-05 Requirements Traceability Matrix</Name>
@@ -101,7 +97,7 @@
       <Duration>PT240H0M0S</Duration>
       <PercentComplete>40</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: RF and interface requirements in ICD sections 4–6 are not yet finalized, preventing closure of the remaining 30–35% of RTM traces. | RISK: </Notes></Task>
+    <Notes>BLOCKER: The remaining 60% of the RTM is gated on resolution of the RF interface specification issue and closure of the affected ICD sections. | RISK: </Notes></Task>
     <Task>
       <UID>6</UID>
       <Name>SE-06 Preliminary Design Review (PDR) Package</Name>
@@ -113,7 +109,7 @@
       <PercentComplete>10</PercentComplete>
       <PredecessorLink><PredecessorUID>2</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>5</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Three major inputs to the PDR package (CONOPS at 0%, Safety Analysis at 5%, and ICD sections 4-6) are either not started or effectively unavailable, and RF spec delivery is uncertain.</Notes></Task>
+    <Notes>BLOCKER: The PDR package cannot progress until the SDD and ICDs close out, which are blocked by an unresolved RF spec issue, with completion contingent on HW delivering by end of next week.</Notes></Task>
     <Task>
       <UID>7</UID>
       <Name>SE-07 System Safety Analysis</Name>
@@ -124,7 +120,7 @@
       <Duration>PT480H0M0S</Duration>
       <PercentComplete>5</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: RF-dependent hazard analysis is blocked by unresolved RF specs and ICD closure, preventing completion of a meaningful portion of the safety analysis. | RISK: </Notes></Task>
+    <Notes>BLOCKER: Substantive work is gated on ICD closeout due to the RF spec issue, as stable interface definitions are required before the core analysis can proceed. | RISK: </Notes></Task>
     <Task>
       <UID>8</UID>
       <Name>SE-08 Reliability Analysis</Name>
@@ -135,7 +131,7 @@
       <Duration>MS-240H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Reliability Analysis (SE-08) is fully blocked on ICD approval, which is itself blocked on RF specs, making progress impossible until that upstream dependency is resolved. | RISK: </Notes></Task>
+    <Notes>BLOCKER: ICD approval is blocked by an unresolved RF spec issue, preventing the start of Reliability Analysis which requires approved interface definitions as input. | RISK: </Notes></Task>
     <Task>
       <UID>9</UID>
       <Name>SE-09 Critical Design Review (CDR) Package</Name>
@@ -146,7 +142,7 @@
       <Duration>PT240H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>6</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: CDR cannot begin until PDR is complete, and PDR itself is at risk of slipping due to late RF specs, which would propagate delays forward to CDR.</Notes></Task>
+    <Notes>BLOCKER: CDR is sequentially dependent on PDR completion, and the RF spec situation creates downstream schedule pressure that could delay CDR if PDR slips.</Notes></Task>
     <Task>
       <UID>10</UID>
       <Name>SE-10 Verification &amp; Validation Plan</Name>
@@ -157,7 +153,7 @@
       <Duration>PT240H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>6</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: The V&amp;V Plan cannot be meaningfully written until the RTM is complete and ICDs are closed, both of which are blocked by unresolved RF specs.</Notes></Task>
+    <Notes>BLOCKER: The V&amp;V Plan cannot start until RTM and ICD are complete, both of which are blocked by an unresolved RF spec delivery from the hardware team.</Notes></Task>
 
     
     <Task>
@@ -170,7 +166,7 @@
       <Duration>PT320H0M0S</Duration>
       <PercentComplete>75</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Tool license contention on the lab cluster is causing simulation runs to take longer than planned, threatening the early May deadline needed to avoid slipping the HW-05 fab start. | RISK: Priority access on the cluster is the faster fix — I need someone with authority to bump my simulation jobs to the front of the queue. That's a same-week solution if it gets approved. The other option is procuring additional licenses, but that's probably a two-to-three week lead time, which doesn't help me much right now. So the immediate ask is cluster priority access. If that can get worked through IT or whoever manages the lab resources, I can get the sims done and keep HW-05 on track.</Notes></Task>
+    <Notes>BLOCKER: Tool license contention on the lab cluster is backing up simulation runs, risking a slip in the HW-05 fab start if sims cannot close by early May.</Notes></Task>
     <Task>
       <UID>12</UID>
       <Name>HW-02 Signal Processing Board Design</Name>
@@ -181,7 +177,7 @@
       <Duration>PT320H0M0S</Duration>
       <PercentComplete>55</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: A key engineer has been on medical leave for approximately three weeks, resulting in only partial coverage and slower-than-planned progress. | RISK: </Notes></Task>
+    <Notes>BLOCKER: A key engineer is on medical leave for approximately three weeks, reducing team capacity to partial coverage. | RISK: </Notes></Task>
     <Task>
       <UID>13</UID>
       <Name>HW-03 Power Supply Design</Name>
@@ -192,7 +188,7 @@
       <Duration>PT200H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Task is deliberately sequenced after upstream design work and has not started, with potential for further start date compression if delays on HW-01 and HW-02 cascade. | RISK: </Notes></Task>
+    <Notes>BLOCKER: It's just sequencing — hasn't hit its start date yet. Nothing blocking it right now. | RISK: </Notes></Task>
     <Task>
       <UID>14</UID>
       <Name>HW-04 Antenna Array Design</Name>
@@ -203,7 +199,7 @@
       <Duration>PT400H0M0S</Duration>
       <PercentComplete>45</PercentComplete>
       <PredecessorLink><PredecessorUID>3</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Progress is blocked on receiving updated antenna aperture requirements from Alice's ICD update, without which the design cannot be finalized. | RISK: </Notes></Task>
+    <Notes>BLOCKER: Progress is stalled pending receipt of updated antenna aperture requirements from Alice's ICD before the design can be finalized. | RISK: </Notes></Task>
     <Task>
       <UID>15</UID>
       <Name>HW-05 RF Front End Prototype Fabrication</Name>
@@ -214,7 +210,7 @@
       <Duration>PT320H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>11</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: License contention on the lab cluster is preventing simulation runs needed to complete HW-01, which must finish before HW-05 fabrication can start. | RISK: </Notes></Task>
+    <Notes>BLOCKER: RF Front End Prototype Fabrication cannot start because HW-01 simulations have not closed out due to a license contention issue. | RISK: </Notes></Task>
     <Task>
       <UID>16</UID>
       <Name>HW-06 Signal Processing Board Fabrication</Name>
@@ -225,7 +221,7 @@
       <Duration>PT320H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>12</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: A key engineer on HW-02 (the predecessor task) is out on medical leave for ~3 weeks, slowing progress to 55% complete and risking a delayed start to HW-06 fabrication.</Notes></Task>
+    <Notes>BLOCKER: Fabrication cannot begin until the upstream HW-02 design work advances further, which is itself delayed by a medical leave situation.</Notes></Task>
     <Task>
       <UID>17</UID>
       <Name>HW-07 Antenna Array Fabrication</Name>
@@ -236,7 +232,7 @@
       <Duration>PT480H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>14</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: HW-04 design cannot close until Alice's team delivers the ICD update for antenna aperture requirements, which directly prevents HW-07 fabrication from starting.</Notes></Task>
+    <Notes>BLOCKER: Antenna Array Fabrication cannot begin until the design (ICD) is complete.</Notes></Task>
     <Task>
       <UID>18</UID>
       <Name>HW-08 Hardware Unit Testing</Name>
@@ -248,7 +244,7 @@
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>15</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>16</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: HW-08 is the convergence point for three upstream blockers — a simulation license issue (HW-01), a staffing gap (HW-02), and an ICD hold (HW-04) — any of which could compress or delay unit testing if they slip far enough.</Notes></Task>
+    <Notes>BLOCKER: Hardware Unit Testing cannot start until predecessor tasks HW-05, HW-06, and HW-07 are all complete.</Notes></Task>
     <Task>
       <UID>19</UID>
       <Name>HW-09 Environmental Stress Screening</Name>
@@ -259,7 +255,7 @@
       <Duration>PT200H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>18</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: ESS (HW-09) has not started and is entirely dependent on upstream tasks; it inherits risk from simulation license contention, an ICD hold on the antenna design (Alice), and a staffing gap on HW-02, with no schedule buffer to absorb delays.</Notes></Task>
+    <Notes>BLOCKER: Environmental Stress Screening is downstream of unit testing and inherits all the same upstream blockers preventing that task from progressing.</Notes></Task>
     <Task>
       <UID>20</UID>
       <Name>HW-10 Hardware Acceptance Test</Name>
@@ -271,7 +267,7 @@
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>19</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>17</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: A 3-week slip on HW-04 propagates through HW-07/08/09 to HW-10 with no float, and a simulation license issue on HW-01 risks compressing the testing sequence from the other side.</Notes></Task>
+    <Notes>BLOCKER: Three upstream blockers — a license contention issue, a medical leave coverage gap, and an ICD hold from Alice — are preventing progress and threaten to slip this task's date.</Notes></Task>
 
     
     <Task>
@@ -293,7 +289,7 @@
       <BaselineStart>2026-03-30T08:00:00</BaselineStart>
       <BaselineFinish>2026-05-08T17:00:00</BaselineFinish>
       <Duration>PT240H0M0S</Duration>
-      <PercentComplete>70</PercentComplete>
+      <PercentComplete>78</PercentComplete>
       <PredecessorLink><PredecessorUID>21</PredecessorUID></PredecessorLink>
     </Task>
     <Task>
@@ -304,7 +300,7 @@
       <BaselineStart>2026-04-06T08:00:00</BaselineStart>
       <BaselineFinish>2026-06-19T17:00:00</BaselineFinish>
       <Duration>PT480H0M0S</Duration>
-      <PercentComplete>30</PercentComplete>
+      <PercentComplete>38</PercentComplete>
       <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
     </Task>
     <Task>
@@ -315,7 +311,7 @@
       <BaselineStart>2026-04-06T08:00:00</BaselineStart>
       <BaselineFinish>2026-06-26T17:00:00</BaselineFinish>
       <Duration>PT480H0M0S</Duration>
-      <PercentComplete>20</PercentComplete>
+      <PercentComplete>25</PercentComplete>
       <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
     </Task>
     <Task>
@@ -337,9 +333,9 @@
       <BaselineStart>2026-04-20T08:00:00</BaselineStart>
       <BaselineFinish>2026-05-29T17:00:00</BaselineFinish>
       <Duration>PT240H0M0S</Duration>
-      <PercentComplete>15</PercentComplete>
+      <PercentComplete>17</PercentComplete>
       <PredecessorLink><PredecessorUID>22</PredecessorUID></PredecessorLink>
-    </Task>
+    <Notes>BLOCKER: Waiting on final data interface specs from the systems team before the database schema structure can be finalized.</Notes></Task>
     <Task>
       <UID>27</UID>
       <Name>SW-07 Software Unit Testing</Name>
@@ -399,7 +395,7 @@
       <Duration>PT240H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>10</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Work has not formally started due to unconfirmed predecessor inputs from systems engineering and software design documentation, and the CAM needs to verify whether the planned start date has been reached before characterizing this as a variance.</Notes></Task>
+    <Notes>BLOCKER: Integration Test Plan cannot be started until the system requirements baseline is finalized, as writing against an open baseline would require rework.</Notes></Task>
     <Task>
       <UID>32</UID>
       <Name>IT-02 Lab Setup and Calibration</Name>
@@ -410,7 +406,7 @@
       <Duration>PT200H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>31</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Task is blocked pending confirmation of government-furnished equipment delivery, facility access to the integration lab, and initiation of calibration vendor scheduling with long lead times.</Notes></Task>
+    <Notes>BLOCKER: Two required signal analyzers are currently allocated to another program, and setup cannot proceed until they are released and the calibration equipment request is fulfilled.</Notes></Task>
     <Task>
       <UID>33</UID>
       <Name>IT-03 Hardware-Software Integration</Name>
@@ -423,7 +419,7 @@
       <PredecessorLink><PredecessorUID>20</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>29</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>32</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: IT-03 cannot start until both a completed hardware build and a baselined software load are delivered to the integration environment, and is also dependent on IT-02 (lab setup and calibration) being complete first.</Notes></Task>
+    <Notes>BLOCKER: Hardware-Software Integration is blocked by two dependencies: incomplete lab setup (equipment issue) and the software team not yet delivering a stable release candidate build to integrate against.</Notes></Task>
     <Task>
       <UID>34</UID>
       <Name>IT-04 System Functional Testing</Name>
@@ -434,7 +430,7 @@
       <Duration>PT120H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>33</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: IT-04 cannot start until three entry criteria are met: a signed-off IT-03 integration test report, completed and reviewed test procedures derived from IT-01, and verified test environment configuration from IT-02 calibration — none of which are currently closed.</Notes></Task>
+    <Notes>BLOCKER: System Functional Testing is blocked by unresolved lab and software build issues upstream in the Hardware-Software Integration chain.</Notes></Task>
     <Task>
       <UID>35</UID>
       <Name>IT-05 System Performance Testing</Name>
@@ -445,7 +441,7 @@
       <Duration>PT160H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>33</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Performance acceptance criteria have not been finalized and placed under configuration control, meaning tests can be run but pass/fail determinations cannot be made.</Notes></Task>
+    <Notes>BLOCKER: System Performance Testing cannot begin until H/W-S/W Integration is complete, creating a dependency-chain block shared with Functional Testing.</Notes></Task>
     <Task>
       <UID>36</UID>
       <Name>IT-06 Environmental Testing</Name>
@@ -457,7 +453,7 @@
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>34</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>35</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Environmental testing is blocked by unconfirmed facility reservations and an unfrozen test article configuration, both of which are outside the CAM's direct control.</Notes></Task>
+    <Notes>BLOCKER: A confirmed chamber reservation at the environmental test facility has not yet been received, blocking the start of Environmental Testing.</Notes></Task>
     <Task>
       <UID>37</UID>
       <Name>IT-07 Regression Testing</Name>
@@ -468,7 +464,7 @@
       <Duration>PT40H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>36</PredecessorUID></PredecessorLink>
-    </Task>
+    <Notes>BLOCKER: Regression Testing remains blocked by the same upstream dependency chain previously discussed.</Notes></Task>
     <Task>
       <UID>38</UID>
       <Name>IT-08 Test Readiness Review</Name>
@@ -480,7 +476,7 @@
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>9</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>32</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: TRR entry criteria have not been defined in writing or concurred upon by the customer, and upstream test tasks IT-04 through IT-07 must be fully complete with signed reports before IT-08 can close.</Notes></Task>
+    <Notes>BLOCKER: TRR is blocked by all upstream test sequence tasks being incomplete and undocumented, inheriting all previously described blockers.</Notes></Task>
     <Task>
       <UID>39</UID>
       <Name>IT-09 Acceptance Test Procedure Development</Name>
@@ -491,7 +487,7 @@
       <Duration>PT200H0M0S</Duration>
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>31</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: Customer approval authority over the ATP introduces an uncontrolled review-and-comment cycle whose duration may not be reflected in the baselined schedule, and unconfirmed CDRL requirements may impose contractual delivery obligations not yet accounted for.</Notes></Task>
+    <Notes>BLOCKER: ATP Development is blocked pending closure of the requirements baseline, as writing stable procedures against a moving target is not feasible.</Notes></Task>
     <Task>
       <UID>40</UID>
       <Name>IT-10 System Acceptance Test</Name>
@@ -503,7 +499,7 @@
       <PercentComplete>0</PercentComplete>
       <PredecessorLink><PredecessorUID>37</PredecessorUID></PredecessorLink>
       <PredecessorLink><PredecessorUID>39</PredecessorUID></PredecessorLink>
-    <Notes>BLOCKER: IT-10 has no internal schedule flexibility and is at risk if upstream tasks (IT-01 through IT-09) leave unresolved anomalies, an unapproved ATP, incomplete regression testing, lapsed calibration, or unconfirmed customer witness logistics.</Notes></Task>
+    <Notes>BLOCKER: System Acceptance Test remains at 0% due to upstream dependencies on requirements baseline, lab equipment, software build, and environmental chamber slot — all unresolved blockers from earlier in the chain.</Notes></Task>
 
     
     <Task>

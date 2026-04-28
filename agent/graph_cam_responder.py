@@ -129,6 +129,21 @@ class GraphCAMResponder:
             response = self._simulator.respond(raw)
             self._post_message(token, self._chat_id, response)
             logger.info("action=cam_responded cam=%s response=%r", self.cam_name, response[:100])
+            # Relay to the local interview engine so it can generate the next question
+            self._relay_to_server(response)
+
+    def _relay_to_server(self, text: str) -> None:
+        """Notify the local dashboard server of this CAM's response."""
+        server_url = os.getenv("INTERVIEW_RELAY_URL", "http://localhost:9000")
+        try:
+            r = httpx.post(
+                f"{server_url}/internal/cam_message",
+                json={"email": self.email, "text": text},
+                timeout=10,
+            )
+            logger.info("action=relay_posted cam=%s status=%d", self.cam_name, r.status_code)
+        except Exception as exc:
+            logger.debug("action=relay_failed cam=%s error=%s", self.cam_name, exc)
 
     # ------------------------------------------------------------------
     # Graph API helpers
@@ -136,22 +151,37 @@ class GraphCAMResponder:
 
     def _find_bot_chat(self, token: str) -> str | None:
         """Find the 1:1 chat between this user and the ATLAS Scheduler bot."""
-        bot_user_id = f"28:{_BOT_APP_ID}"
+        bot_app_id_lower = _BOT_APP_ID.lower()
         headers = {"Authorization": f"Bearer {token}"}
-        url = (
-            f"{_GRAPH_BASE}/me/chats"
-            "?$filter=chatType eq 'oneOnOne'"
-            "&$expand=members($select=userId,displayName)"
-        )
+        url: str | None = f"{_GRAPH_BASE}/me/chats?$top=50"
         try:
-            r = httpx.get(url, headers=headers, timeout=20)
-            r.raise_for_status()
-            for chat in r.json().get("value", []):
-                member_ids = {m.get("userId", "") for m in chat.get("members", [])}
-                if bot_user_id in member_ids:
+            while url:
+                r = httpx.get(url, headers=headers, timeout=20)
+                r.raise_for_status()
+                data = r.json()
+                for chat in data.get("value", []):
+                    if chat.get("chatType") != "oneOnOne":
+                        continue
                     cid = chat["id"]
-                    logger.info("action=bot_chat_found cam=%s chatId=%s", self.cam_name, cid[:20])
-                    return cid
+                    # Fast path: 1:1 chat IDs encode both user IDs — if the bot's
+                    # app ID appears in the chat ID it's the bot chat.
+                    if bot_app_id_lower in cid.lower():
+                        logger.info("action=bot_chat_found cam=%s chatId=%s", self.cam_name, cid[:20])
+                        return cid
+                    # Fallback: check members list for bot userId variants
+                    mr = httpx.get(
+                        f"{_GRAPH_BASE}/me/chats/{cid}/members",
+                        headers=headers, timeout=20,
+                    )
+                    if mr.status_code != 200:
+                        continue
+                    members = mr.json().get("value", [])
+                    for m in members:
+                        uid = m.get("userId", "").lower()
+                        if bot_app_id_lower in uid:
+                            logger.info("action=bot_chat_found cam=%s chatId=%s", self.cam_name, cid[:20])
+                            return cid
+                url = data.get("@odata.nextLink")
         except Exception as exc:
             logger.warning("action=find_chat_failed cam=%s error=%s", self.cam_name, exc)
         return None

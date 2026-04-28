@@ -113,6 +113,35 @@ def _bf_typing(service_url: str, conversation_id: str) -> None:
         logger.debug("action=typing_indicator_failed error=%s", exc)
 
 
+def _bf_send(service_url: str, conversation_id: str, text: str) -> bool:
+    """Proactively post a new message into an existing Teams conversation via Bot Framework REST.
+
+    Unlike _bf_reply(), this creates a new activity rather than replying to a specific one,
+    so it works for cycle-initiated interviews where no incoming activity_id exists.
+    Returns True on success.
+    """
+    try:
+        token = _get_bf_token()
+        url = f"{service_url.rstrip('/')}/v3/conversations/{conversation_id}/activities"
+        resp = requests.post(
+            url,
+            json={"type": "message", "text": text},
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if not resp.ok:
+            logger.warning(
+                "action=bf_send_failed status=%d body=%s",
+                resp.status_code, resp.text[:200],
+            )
+            return False
+        logger.info("action=bf_send_ok conv=%s", conversation_id[:20])
+        return True
+    except Exception as exc:
+        logger.warning("action=bf_send_exception error=%s", exc)
+        return False
+
+
 def proactive_create_conversation(service_url: str, user_id: str) -> str | None:
     """
     Create a new proactive conversation with a Teams user via the Bot Framework
@@ -213,9 +242,11 @@ class ChatInterviewSession:
         cam_name: str,
         tasks: list[dict],
         all_tasks: list[dict],
+        email: str = "",
     ) -> None:
         from agent.voice.interview_agent import InterviewAgent
         self.cam_name = cam_name
+        self.email: str = email.lower()
         self.agent = InterviewAgent(cam_name, tasks, all_tasks=all_tasks)
         self.started = False
         self.done = threading.Event()
@@ -277,6 +308,7 @@ class ChatInterviewManager:
     def __init__(self) -> None:
         self._active: dict[str, ChatInterviewSession] = {}
         self._pending: dict[str, ChatInterviewSession] = {}
+        self._by_email: dict[str, ChatInterviewSession] = {}
         self._lock = threading.Lock()
 
     @classmethod
@@ -293,18 +325,25 @@ class ChatInterviewManager:
 
     def register_by_email(self, email: str, session: ChatInterviewSession) -> None:
         with self._lock:
-            self._pending[email.lower()] = session
+            email_lower = email.lower()
+            self._pending[email_lower] = session
+            self._by_email[email_lower] = session
 
     def register_wildcard(self, session: ChatInterviewSession) -> None:
         """Assign session to the first user who messages the bot."""
         with self._lock:
             self._pending["*"] = session
 
+    def get_session_by_email(self, email: str) -> "ChatInterviewSession | None":
+        """Look up an active session by email (for relay endpoint)."""
+        with self._lock:
+            return self._by_email.get(email.lower())
+
     def get_or_start_session(
         self,
         user_id: str,
         user_email: str = "",
-    ) -> ChatInterviewSession | None:
+    ) -> "ChatInterviewSession | None":
         with self._lock:
             if user_id in self._active:
                 return self._active[user_id]
@@ -316,11 +355,23 @@ class ChatInterviewManager:
             if session:
                 self._active[user_id] = session
                 session.user_id = user_id
+                if session.email:
+                    self._by_email[session.email] = session
             return session
 
     def remove_session(self, user_id: str) -> None:
         with self._lock:
-            self._active.pop(user_id, None)
+            session = self._active.pop(user_id, None)
+            if session and session.email:
+                self._by_email.pop(session.email, None)
+
+    def remove_session_by_email(self, email: str) -> None:
+        with self._lock:
+            email_lower = email.lower()
+            session = self._by_email.pop(email_lower, None)
+            if session:
+                self._active = {k: v for k, v in self._active.items() if v is not session}
+            self._pending.pop(email_lower, None)
 
     def active_count(self) -> int:
         with self._lock:

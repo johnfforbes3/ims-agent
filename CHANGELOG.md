@@ -4,6 +4,39 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 5 Sprint 3 — Teams Chat Relay Loop, IMS Export, & Bug Fixes (2026-04-28)
+
+**Capability:** The IMS Agent now conducts fully automated Teams Chat status interviews end-to-end without any manual intervention. The Trigger Cycle button sends opening questions to all CAMs via Bot Framework REST, the Graph CAM responder relays each reply to the dashboard server, and the server advances the interview and sends the next question — all in real time. On completion, the updated IMS is exported to a versioned folder (`data/ims_exports/`) that can be opened directly in Microsoft Project.
+
+### Added
+- `agent/cycle_runner.py` — `_export_ims_snapshot(cycle_id, ims_path)`: copies the updated IMS XML to `data/ims_exports/{cycle_id}_ims.xml` (versioned) and `data/ims_exports/latest_ims.xml` (always-current) after every successful cycle write; also runs on `apply_approved()`. Folder path surfaced as `ims_exports_dir` and `latest_ims_path` in dashboard state JSON.
+- `agent/dashboard/server.py` — `POST /internal/cam_message`: relay endpoint that receives Graph CAM responder replies, looks up the active `ChatInterviewSession` by email, advances the interview via `session.process()`, and sends the next question to Teams via `_bf_send()`. Closes the session on completion.
+- `agent/voice/teams_chat_connector.py` — `_bf_send(service_url, conversation_id, text)`: proactive Bot Framework REST send (no reply-to-id). `get_session_by_email()` / `remove_session_by_email()` / `register_by_email()` added to `ChatInterviewManager` for relay lookup by email.
+- `data/cam_sessions.json` — seeded with real Teams chat IDs (conversation_id) for all 4 CAM accounts, extracted from responder logs.
+- Dashboard header — IMS exports folder path displayed next to Trigger Cycle button.
+
+### Changed
+- `agent/cycle_runner.py` — Teams chat mode now sends opening greeting via `_bf_send()` (replaces kick-file mechanism); `directory.record_attempt()` called after each session completes/times out so CAM Response Status on the dashboard reflects actual outcome.
+- `agent/graph_cam_responder.py` — Removed kick-file check from `_tick()`; added `_relay_to_server()` call after each Graph API reply to drive the interview forward.
+- `agent/cycle_runner.py` — Fixed "9 out of 5 CAMs responded" display bug: fallback CAM count now uses `len(set(inp.get("cam_name") for inp in fallback_inputs))` instead of `sim_report.get("responded", 0)`.
+
+### Fixed
+- **CAM Response Status showing "No Response"**: `directory.record_attempt()` was never called in `teams_chat` mode. All 4 CAMs now show `responded=True, outcome=completed` after a successful cycle (verified cycle 20260428T095857Z).
+- **`_notify_approval_required` crash**: Passed a plain string to `send_slack()` which expects a dict. Wrapped notification text in a minimal summary dict (resolves TD-022).
+
+### Verified End-to-End (cycle 20260428T095857Z)
+- Alice Nguyen: `teams_session_complete inputs=9`, `relay_interview_complete`
+- Bob Martinez: `teams_session_complete inputs=10`, `relay_interview_complete`
+- Carol Smith: `teams_session_complete inputs=9`, `relay_interview_complete`
+- David Lee: `teams_session_complete inputs=8`, `relay_interview_complete`
+- Eva Johnson: fallback simulator (not yet bootstrapped for Teams chat)
+
+### Technical Debt Resolved
+- TD-019 (proactive bot initiation) — fully resolved; relay loop verified end-to-end
+- TD-022 (send_slack type error in approval notification) — resolved
+
+---
+
 ## Phase 5 Sprint 2 — Schedule Authority, Approval Gates & Proactive Bot (2026-04-27)
 
 **Capability:** The IMS is now the authoritative, persistent schedule. Each cycle reads what the prior cycle wrote (atomic in-place write), health scoring is deterministic, risky writes are gated behind a PM approval workflow, the Teams bot can initiate conversations proactively once a CAM has made first contact, and ngrok URL updates are automated on startup.

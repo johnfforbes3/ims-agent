@@ -175,14 +175,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Tier 4 — Teams Chat Bot
 
-### TD-019 — Chat bot is reactive only; cannot initiate conversations proactively — **PARTIALLY RESOLVED**
-**Partially resolved:** Phase 5 sprint 2 — 2026-04-27. Foundation code added; full wiring pending test with live bot.  
-**File:** `agent/voice/teams_chat_connector.py`, `agent/cycle_runner.py`  
-**Severity:** High  
-**Description:** `ChatInterviewManager` only activates when a CAM sends the first message. The bot cannot open a conversation proactively. This means the trigger-cycle button cannot autonomously start chat interviews — it still uses `CAMSimulator`. Proactive messaging requires a stored `serviceUrl` + `conversationId` per CAM (only available after at least one prior conversation) and a `POST {serviceUrl}/v3/conversations` call with the bot/user member objects.  
-**Why deferred:** Bot Framework proactive messaging requires first-contact data that only exists after a CAM has previously messaged the bot. Bootstrapping for new users needs a separate channel (e.g., a welcome message sent via Graph or a manual first-contact flow).  
-**Progress:** `proactive_create_conversation()` implemented; `save_cam_session()` / `load_cam_sessions()` persist serviceUrl+userId from reactive contacts; `CycleRunner(mode="teams_chat")` path wired. Full end-to-end test with live CAMs pending.  
-**Remaining work:** Bootstrap first-contact flow for new CAMs who have never messaged the bot.
+### TD-019 — Chat bot is reactive only; cannot initiate conversations proactively — **RESOLVED**
+**Resolved:** Phase 5 sprint 3 — 2026-04-28. Full end-to-end relay loop verified with all 4 live CAM accounts.  
+**File:** `agent/voice/teams_chat_connector.py`, `agent/cycle_runner.py`, `agent/dashboard/server.py`, `agent/graph_cam_responder.py`  
+**Description:** Cycle runner now sends the opening interview question directly via Bot Framework REST (`_bf_send()`), bypassing the broken Graph-API→BF-webhook path. The Graph CAM responder polls Teams, posts replies via Graph API, then relays each response to `POST /internal/cam_message` on the local dashboard server. The server advances the interview session via `ChatInterviewSession.process()` and sends the next question back to Teams via `_bf_send()`. Full relay loop: BF REST → Teams → Graph poll → relay → BF REST. Verified end-to-end with Alice Nguyen, Bob Martinez, Carol Smith, David Lee — all 4 `teams_session_complete` with 8–10 task inputs each; `relay_interview_complete` logged for all 4 emails.
 
 ---
 
@@ -198,8 +194,9 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 5 / Sprint 2
 
-### TD-021 — Dashboard auto-refresh conflicts with cycle-active fast-poll; countdown is misleading — **RESOLVED**
-**Resolved:** Phase 5 sprint 2 — 2026-04-27  
+### TD-021 — Dashboard countdown resets to 5 during active cycle instead of counting down — **REOPENED**
+**Previously marked resolved:** Phase 5 sprint 2 — 2026-04-27  
+**Reopened:** 2026-04-27 — fix was incomplete; countdown still bounces 5→0→5→0 during active cycles; "Cycle In Progress" card not updating live.  
 
 
 **File:** `agent/dashboard/templates/index.html` — `pollStatus()`, countdown `setInterval`  
@@ -210,6 +207,24 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 1. Replace `pollStatus()` + `window.location.reload()` with a `setInterval` (every 5s when active, every 60s when idle) that fetches `/api/state` via AJAX and updates only the "Cycle In Progress" card and the countdown badge in-place.  
 2. Reset `seconds` to match the current interval (5 or 60) whenever the interval changes, so the badge accurately reflects the next actual refresh.  
 3. Trigger a full page reload only when the cycle transitions from active → complete (i.e., `cycle_active` flips from `true` to `false`), so the final health/report data is loaded cleanly.
+
+---
+
+## Phase 5 / Sprint 3
+
+### TD-022 — `_notify_approval_required` passed plain string to `send_slack` — **RESOLVED**
+**Resolved:** Phase 5 sprint 3 — 2026-04-28.  
+**File:** `agent/cycle_runner.py` — `_notify_approval_required`  
+**Description:** The method built a plain Slack-formatted string `msg` and called `send_slack(msg)`, but `send_slack` expects a dict with keys `health`, `top_risks`, `cams_responded`, `cams_total`. Caused `AttributeError: 'str' object has no attribute 'get'` when validation holds triggered the approval-required notification path. Fixed by wrapping the message in a minimal summary dict.
+
+---
+
+### TD-023 — Bootstrap first-contact required before Teams chat mode works for new CAMs
+**File:** `data/cam_sessions.json`, `agent/voice/teams_chat_connector.py`  
+**Severity:** Medium  
+**Description:** `cam_sessions.json` must be seeded with real Teams chat IDs before `CycleRunner(mode="teams_chat")` can open conversations. These IDs are obtained from prior reactive contact (CAM messages the bot first) or extracted manually from responder logs. New CAMs added to the identity map cannot participate in Teams chat cycles until they have messaged the bot at least once.  
+**Why deferred:** Acceptable for the current 4-CAM demo setup; all 4 sessions bootstrapped from responder logs.  
+**Suggested fix:** Add a `--bootstrap-sessions` CLI flag that sends each CAM a "please message me back" notification via Graph API email, then polls for their first bot message and saves the resulting `conversation_id` to `cam_sessions.json` automatically.
 
 ---
 

@@ -1,0 +1,22 @@
+{
+  "alice@intelligenceexpanse.onmicrosoft.com": {
+    "user_id": "29:efd3853d-46d2-4c4e-9fff-c99603e84854",
+    "service_url": "https://smba.trafficmanager.net/amer/",
+    "conversation_id": "19:efd3853d-46d2-4c4e-9fff-c99603e84854_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
+  },
+  "bob@intelligenceexpanse.onmicrosoft.com": {
+    "user_id": "29:4320496c-6da1-4da6-8a67-f5f037dbdac5",
+    "service_url": "https://smba.trafficmanager.net/amer/",
+    "conversation_id": "19:4320496c-6da1-4da6-8a67-f5f037dbdac5_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
+  },
+  "carol@intelligenceexpanse.onmicrosoft.com": {
+    "user_id": "29:df2e921a-c5a0-4c62-9d3f-8fc25afc02b3",
+    "service_url": "https://smba.trafficmanager.net/amer/",
+    "conversation_id": "19:df2e921a-c5a0-4c62-9d3f-8fc25afc02b3_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
+  },
+  "david@intelligenceexpanse.onmicrosoft.com": {
+    "user_id": "29:8c4be827-2010-4347-9d96-0aa2f1c6ee9f",
+    "service_url": "https://smba.trafficmanager.net/amer/",
+    "conversation_id": "19:8c4be827-2010-4347-9d96-0aa2f1c6ee9f_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
+  }
+}

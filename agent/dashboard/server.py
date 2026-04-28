@@ -185,7 +185,7 @@ async def api_trigger():
     from agent.cycle_runner import CycleRunner
     if CycleRunner.is_active():
         raise HTTPException(status_code=409, detail="A cycle is already running")
-    runner = CycleRunner(ims_path=_IMS_PATH)
+    runner = CycleRunner(ims_path=_IMS_PATH, mode=os.getenv("CALL_TRANSPORT", "simulated"))
     thread = threading.Thread(target=runner.run, daemon=True, name="manual_cycle")
     thread.start()
     logger.info("action=manual_trigger_api")
@@ -461,6 +461,7 @@ async def bot_messages(request: Request):
 
         from_obj      = body.get("from", {})
         user_id       = from_obj.get("id", "")
+        aad_object_id = from_obj.get("aadObjectId", "")
         user_email    = from_obj.get("email", "") or from_obj.get("userPrincipalName", "")
         message_text  = (body.get("text") or "").strip()
         service_url   = body.get("serviceUrl", "")
@@ -470,6 +471,26 @@ async def bot_messages(request: Request):
 
         if not message_text or not user_id:
             return JSONResponse({"status": "ok"})
+
+        # If email not in activity, resolve via aadObjectId against identity map
+        if not user_email and aad_object_id:
+            try:
+                from agent.cam_identity import load_identity_map
+                from agent.voice.teams_chat_connector import load_cam_sessions as _lcs
+                _sessions = _lcs()
+                for _email, _sdata in _sessions.items():
+                    # cam_sessions user_id is "29:{aad_object_id}"
+                    if _sdata.get("user_id", "").endswith(aad_object_id):
+                        user_email = _email
+                        break
+                if not user_email:
+                    for _name, _info in load_identity_map().items():
+                        _email = _info.get("email", "")
+                        if _email and aad_object_id.lower() in user_id.lower():
+                            user_email = _email
+                            break
+            except Exception:
+                pass
 
         logger.info(
             "action=bot_message_received user=%s text_len=%d",
@@ -484,6 +505,13 @@ async def bot_messages(request: Request):
         session = manager.get_or_start_session(user_id, user_email)
 
         if session is None:
+            # Persist contact info for future proactive cycles even outside an interview
+            if user_email and service_url:
+                try:
+                    save_cam_session(user_email, user_id, service_url, conversation_id)
+                    logger.info("action=cam_session_saved_idle email=%s", user_email)
+                except Exception as _e:
+                    logger.debug("action=session_persist_failed error=%s", _e)
             _bf_reply(
                 service_url, conversation_id, activity_id,
                 "Hi! I'm the ATLAS Scheduler. No interview is currently scheduled. "
@@ -522,6 +550,61 @@ async def bot_messages(request: Request):
 
     except Exception as exc:
         logger.error("action=bot_message_error error=%s", exc, exc_info=True)
+        return JSONResponse({"status": "error", "detail": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Internal relay endpoint — GraphCAMResponder → ChatInterviewSession
+# ---------------------------------------------------------------------------
+
+@app.post("/internal/cam_message")
+async def internal_cam_message(request: Request):
+    """
+    Relay a CAM response from GraphCAMResponder to the active interview session.
+
+    GraphCAMResponder calls this after posting the user's reply to Teams so
+    the interview engine can generate and deliver the next question via
+    Bot Framework REST without needing a real BF webhook.
+
+    Body: {"email": "alice@...", "text": "response text"}
+    """
+    try:
+        body = await request.json()
+        email = (body.get("email") or "").lower()
+        text = (body.get("text") or "").strip()
+
+        if not email or not text:
+            return JSONResponse({"status": "ignored"})
+
+        from agent.voice.teams_chat_connector import (
+            ChatInterviewManager, _bf_send, _bf_typing,
+        )
+        manager = ChatInterviewManager.get()
+        session = manager.get_session_by_email(email)
+
+        if session is None:
+            logger.debug("action=relay_no_session email=%s", email)
+            return JSONResponse({"status": "no_session"})
+
+        logger.info("action=relay_received email=%s text_len=%d", email, len(text))
+
+        if session.service_url and session.conversation_id:
+            _bf_typing(session.service_url, session.conversation_id)
+
+        next_msg = session.process(text)
+
+        if next_msg and session.service_url and session.conversation_id:
+            _bf_send(session.service_url, session.conversation_id, next_msg)
+            logger.info("action=relay_question_sent email=%s", email)
+
+        if session.is_done:
+            manager.remove_session_by_email(email)
+            logger.info("action=relay_interview_complete email=%s", email)
+
+        return JSONResponse({"status": "ok"})
+
+    except Exception as exc:
+        logger.error("action=relay_error error=%s", exc, exc_info=True)
         return JSONResponse({"status": "error", "detail": str(exc)})
 
 
