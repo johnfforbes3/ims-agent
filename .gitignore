@@ -32,12 +32,17 @@ reports/*.txt
 reports/*.html
 reports/cycles/
 
-# Data — real .mpp files are never committed
+# Data — real .mpp files are never committed (binary, large)
 data/*.mpp
 data/*.mpp.bak
 
 # CAM delegated auth token caches — contain serialized MSAL tokens
 data/cam_tokens/
+
+# Runtime-generated data artifacts (rebuilt each cycle — not source-controlled)
+data/snapshots/
+data/ims_exports/
+data/pending_approvals/
 
 # OS
 .DS_Store

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "9afa38ea-6efc-45b5-9f70-248aa32ff9a4",
+  "packageName": "com.intelligenceexpanse.atlas.scheduler",
+  "developer": {
+    "name": "Intelligence Expanse",
+    "websiteUrl": "https://intelligenceexpanse.onmicrosoft.com",
+    "privacyUrl": "https://intelligenceexpanse.onmicrosoft.com/privacy",
+    "termsOfUseUrl": "https://intelligenceexpanse.onmicrosoft.com/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "ATLAS Scheduler",
+    "full": "ATLAS Program Schedule Intelligence Agent"
+  },
+  "description": {
+    "short": "Automated schedule status interviewer for ATLAS program CAMs.",
+    "full": "The ATLAS Scheduler bot interviews Control Account Managers (CAMs) via Teams chat to collect weekly status updates, detects blockers and risks, and updates the Integrated Master Schedule."
+  },
+  "accentColor": "#0066CC",
+  "bots": [
+    {
+      "botId": "9afa38ea-6efc-45b5-9f70-248aa32ff9a4",
+      "scopes": [
+        "personal"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": [
+            "personal"
+          ],
+          "commands": [
+            {
+              "title": "status",
+              "description": "Check current cycle status"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": []
+}
