@@ -238,7 +238,12 @@ def _run_demo_chat(
         time.sleep(0.05)
 
     print(f"  Bot messaging server ready on port {port}")
-    print(f"  /bot/messages endpoint active\n")
+    print(f"  /bot/messages endpoint active")
+
+    # Auto-detect ngrok URL and update Azure Bot Service messaging endpoint
+    from agent.ngrok_updater import auto_update_from_ngrok
+    auto_update_from_ngrok(port=port)
+    print()
 
     try:
         run_chat_demo(cam_name=cam_name, ims_path=ims_path, cam_email=cam_email)

@@ -547,9 +547,10 @@ def _extract_percent(text: str) -> int | None:
             if 0 <= val <= 100:
                 return val
 
-    # Priority 2: contextual bare number after "at", "is", "around", "about", "roughly"
+    # Priority 2: contextual bare number after common phrases
     m = re.search(
-        r"\b(?:at|is|are|around|about|roughly|approximately|currently)\s+(\d{1,3})\b",
+        r"\b(?:at|is|are|around|about|roughly|approximately|currently|say|saying|"
+        r"maybe|probably|estimate|think|guess)\s+(\d{1,3})\b",
         text,
     )
     if m:
@@ -566,6 +567,14 @@ def _extract_percent(text: str) -> int | None:
     }
     for phrase, val in sorted(word_map.items(), key=lambda x: -len(x[0])):
         if phrase in text:
+            return val
+
+    # Priority 4: bare integer not preceded by a task-ID pattern (letter(s)-digit)
+    # e.g. "75" or "I'd say 60" after the context check above didn't match
+    candidates = re.findall(r"(?<![A-Za-z]-)\b(\d{1,3})\b", text)
+    for c in candidates:
+        val = int(c)
+        if 0 <= val <= 100:
             return val
     return None
 

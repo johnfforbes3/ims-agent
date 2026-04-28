@@ -18,13 +18,20 @@ Bot Framework REST (no SDK required):
   - Incoming messages arrive as JSON Activity objects at /bot/messages
   - Replies are POST'd to {serviceUrl}/v3/conversations/{id}/activities
   - Auth uses a Bot Framework-scoped MSAL token
-    (authority: login.microsoftonline.com/botframework.com)
+
+Session persistence (data/cam_sessions.json):
+  After each reactive interview contact, the CAM's serviceUrl + userId are
+  saved keyed by their email.  On the next cycle trigger the CycleRunner
+  can call proactive_create_conversation() to open a new conversation without
+  waiting for the CAM to initiate.
 """
 
+import json
 import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -35,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 _BF_TOKEN_AUTHORITY = "https://login.microsoftonline.com/ac1eafc0-ad8c-4b29-b615-554ad6626f9e"
 _BF_SCOPE = "https://api.botframework.com/.default"
-_GRAPH = "https://graph.microsoft.com/v1.0"
+_CAM_SESSIONS_FILE = Path(os.getenv("DATA_DIR", "data")) / "cam_sessions.json"
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +113,94 @@ def _bf_typing(service_url: str, conversation_id: str) -> None:
         logger.debug("action=typing_indicator_failed error=%s", exc)
 
 
+def proactive_create_conversation(service_url: str, user_id: str) -> str | None:
+    """
+    Create a new proactive conversation with a Teams user via the Bot Framework
+    CreateConversation API.
+
+    Returns the new conversation ID, or None on failure.
+    """
+    app_id = os.getenv("TEAMS_BOT_APP_ID", "")
+    tenant_id = os.getenv("TEAMS_TENANT_ID", "")
+    if not app_id:
+        logger.warning("action=proactive_create_failed reason=TEAMS_BOT_APP_ID_not_set")
+        return None
+    try:
+        token = _get_bf_token()
+        url = f"{service_url.rstrip('/')}/v3/conversations"
+        payload = {
+            "bot": {"id": app_id, "name": os.getenv("TEAMS_BOT_DISPLAY_NAME", "ATLAS Scheduler")},
+            "members": [{"id": user_id}],
+            "isGroup": False,
+            "tenantId": tenant_id,
+            "channelData": {"tenant": {"id": tenant_id}},
+        }
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if resp.ok:
+            conv_id = resp.json().get("id", "")
+            logger.info("action=proactive_conversation_created conv=%s", conv_id[:12] if conv_id else "?")
+            return conv_id
+        logger.warning(
+            "action=proactive_create_failed status=%d body=%s",
+            resp.status_code, resp.text[:300],
+        )
+    except Exception as exc:
+        logger.warning("action=proactive_create_exception error=%s", exc)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Session persistence (cam_sessions.json)
+# ---------------------------------------------------------------------------
+
+_session_file_lock = threading.Lock()
+
+
+def load_cam_sessions() -> dict[str, dict]:
+    """Return the persisted CAM session map keyed by email/name (lowercase)."""
+    with _session_file_lock:
+        if not _CAM_SESSIONS_FILE.exists():
+            return {}
+        try:
+            return json.loads(_CAM_SESSIONS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+
+def save_cam_session(
+    cam_email: str,
+    user_id: str,
+    service_url: str,
+    conversation_id: str,
+) -> None:
+    """Persist a CAM's Teams contact details for future proactive initiation."""
+    with _session_file_lock:
+        _CAM_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        sessions: dict = {}
+        if _CAM_SESSIONS_FILE.exists():
+            try:
+                sessions = json.loads(_CAM_SESSIONS_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        import os as _os
+        from datetime import datetime, timezone
+        sessions[cam_email.lower()] = {
+            "user_id": user_id,
+            "service_url": service_url,
+            "conversation_id": conversation_id,
+            "last_seen": datetime.now(timezone.utc).isoformat(),
+        }
+        tmp = _CAM_SESSIONS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(sessions, indent=2), encoding="utf-8")
+        _os.replace(tmp, _CAM_SESSIONS_FILE)
+        logger.info("action=cam_session_saved email=%s", cam_email)
+
+
 # ---------------------------------------------------------------------------
 # Interview session
 # ---------------------------------------------------------------------------
@@ -127,6 +222,7 @@ class ChatInterviewSession:
         # Set on first contact — used for proactive follow-ups
         self.service_url: str = ""
         self.conversation_id: str = ""
+        self.user_id: str = ""
 
     def start(self) -> str:
         """Return the opening greeting text."""
@@ -141,6 +237,18 @@ class ChatInterviewSession:
         if self.agent.state in (InterviewState.COMPLETE, InterviewState.ABORTED):
             self.done.set()
         return turn.text if turn.text else None
+
+    def get_cam_inputs(self) -> list[dict]:
+        """
+        Extract cam_input dicts from completed interview results.
+        Returns an empty list if the interview is not yet done.
+        """
+        results = getattr(self.agent, "results", [])
+        return [
+            r.to_cam_input_dict()
+            for r in results
+            if r.status == "captured"
+        ]
 
     @property
     def is_done(self) -> bool:
@@ -207,6 +315,7 @@ class ChatInterviewManager:
             )
             if session:
                 self._active[user_id] = session
+                session.user_id = user_id
             return session
 
     def remove_session(self, user_id: str) -> None:

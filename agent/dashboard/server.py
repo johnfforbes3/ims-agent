@@ -201,6 +201,70 @@ async def api_admin_purge():
     return JSONResponse({"status": "ok", "deleted": deleted})
 
 
+# ---------------------------------------------------------------------------
+# Approval gate endpoints (human-in-the-loop for risky schedule changes)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/approvals", dependencies=[Depends(_require_api_key)])
+async def api_list_approvals():
+    """List all pending IMS write approvals awaiting PM review."""
+    from agent.approval_store import list_all
+    return JSONResponse(list_all())
+
+
+class _ApprovalDecision(BaseModel):
+    reason: str = ""
+    approver: str = ""
+
+
+@app.post("/api/approvals/{cycle_id}/approve", dependencies=[Depends(_require_admin_key)])
+async def api_approve(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision()):
+    """
+    Approve a held IMS write.
+
+    Applies the pending cam_inputs to the authoritative IMS file and runs
+    post-approval analysis (CPM + SRA + synthesis + report).
+    """
+    from agent.approval_store import mark_approved, load_pending
+    record = load_pending(cycle_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"No pending approval for cycle {cycle_id}")
+    if record.get("status") != "pending":
+        raise HTTPException(status_code=409, detail=f"Cycle {cycle_id} is already {record['status']}")
+
+    mark_approved(cycle_id, approver=body.approver or "dashboard")
+    logger.info("action=approval_api cycle=%s approver=%s", cycle_id, body.approver)
+
+    # Apply in a background thread so the HTTP response returns immediately
+    def _apply():
+        from agent.cycle_runner import CycleRunner
+        result = CycleRunner.apply_approved(cycle_id)
+        logger.info("action=approval_applied_complete cycle=%s result=%s", cycle_id, result)
+
+    thread = threading.Thread(target=_apply, daemon=True, name=f"approval_{cycle_id}")
+    thread.start()
+
+    return JSONResponse({
+        "status": "accepted",
+        "message": f"Approval recorded for cycle {cycle_id}. Applying updates in background.",
+    })
+
+
+@app.post("/api/approvals/{cycle_id}/reject", dependencies=[Depends(_require_admin_key)])
+async def api_reject(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision()):
+    """Reject a held IMS write — discards the pending cam_inputs."""
+    from agent.approval_store import mark_rejected, load_pending
+    record = load_pending(cycle_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"No pending approval for cycle {cycle_id}")
+    if record.get("status") != "pending":
+        raise HTTPException(status_code=409, detail=f"Cycle {cycle_id} is already {record['status']}")
+
+    mark_rejected(cycle_id, reason=body.reason, approver=body.approver or "dashboard")
+    logger.info("action=rejection_api cycle=%s reason=%s", cycle_id, body.reason)
+    return JSONResponse({"status": "rejected", "cycle_id": cycle_id})
+
+
 class _AskRequest(BaseModel):
     question: str
 
@@ -412,7 +476,7 @@ async def bot_messages(request: Request):
         )
 
         from agent.voice.teams_chat_connector import (
-            ChatInterviewManager, _bf_reply, _bf_typing,
+            ChatInterviewManager, _bf_reply, _bf_typing, save_cam_session,
         )
 
         manager = ChatInterviewManager.get()
@@ -426,9 +490,17 @@ async def bot_messages(request: Request):
             )
             return JSONResponse({"status": "ok"})
 
-        # Store connection details for proactive use
-        session.service_url    = service_url
+        # Store connection details for this session and persist for future proactive use
+        session.service_url     = service_url
         session.conversation_id = conversation_id
+        session.user_id         = user_id
+
+        # Persist the CAM's Teams contact details so future cycles can initiate proactively
+        if user_email:
+            try:
+                save_cam_session(user_email, user_id, service_url, conversation_id)
+            except Exception as _e:
+                logger.debug("action=session_persist_failed error=%s", _e)
 
         if not session.started:
             # First contact — send the opening greeting

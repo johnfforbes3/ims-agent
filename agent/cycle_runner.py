@@ -2,15 +2,19 @@
 CycleRunner — orchestrates one full IMS Agent status cycle.
 
 Cycle flow:
-  INITIATED  → snapshot IMS, parse tasks, build CAM directory
-  INTERVIEWING → InterviewOrchestrator runs all CAM interviews
-  VALIDATING  → ScheduleValidator checks inputs; logs holds but does not block
-  UPDATING    → apply inputs to IMS file
-  ANALYZING   → CPM → SRA (Monte Carlo) → LLM synthesis
+  INITIATED    → snapshot IMS, parse tasks, build CAM directory
+  INTERVIEWING → InterviewOrchestrator (simulated) or ChatInterviewManager (teams_chat)
+  VALIDATING   → ScheduleValidator checks inputs
+                   • Warnings  → proceed, flag in status
+                   • Failures  → hold IMS write, save to approval_store, notify PM
+  UPDATING     → apply inputs to IMS (only when no failures or explicitly approved)
+  ANALYZING    → CPM → SRA (Monte Carlo) → deterministic health → LLM synthesis
   DISTRIBUTING → report, dashboard state, Slack + email
-  COMPLETE    → persist cycle status, release lock
+  COMPLETE     → persist cycle status, release lock
 
-A threading.Lock prevents duplicate cycles within the same process.
+approval_required == True means the IMS write was held for PM approval.
+The PM approves via POST /api/approvals/{cycle_id}/approve on the dashboard,
+which calls CycleRunner.apply_approved(cycle_id) to write and re-analyse.
 """
 
 import json
@@ -35,6 +39,8 @@ _DASHBOARD_STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.
 _CYCLE_HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
 _COMPLETION_THRESHOLD = float(os.getenv("INTERVIEW_COMPLETION_THRESHOLD", "0.80"))
 _RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", "90"))
+# Teams chat interview timeout in seconds (default 90 min per CAM)
+_TEAMS_INTERVIEW_TIMEOUT = int(os.getenv("TEAMS_INTERVIEW_TIMEOUT_SEC", "5400"))
 
 
 class CycleRunner:
@@ -42,8 +48,11 @@ class CycleRunner:
     Runs one full IMS Agent status cycle.
 
     Args:
-        ims_path: Path to the IMS XML file. Defaults to IMS_FILE_PATH env var.
-        simulated: True → use CAMSimulator; False → use TeamsACSConnector (Phase 3+).
+        ims_path:  Path to the IMS XML file. Defaults to IMS_FILE_PATH env var.
+        simulated: Deprecated alias for mode="simulated". Ignored when mode is set.
+        notify:    Whether to send Slack/email notifications.
+        mode:      "simulated" — CAMSimulator (default)
+                   "teams_chat" — proactive Teams Chat Bot interviews
     """
 
     _lock = threading.Lock()
@@ -54,10 +63,14 @@ class CycleRunner:
         ims_path: str | None = None,
         simulated: bool = True,
         notify: bool = True,
+        mode: str = "simulated",
     ) -> None:
         self._ims_path = ims_path or _IMS_PATH
-        self._simulated = simulated
         self._notify = notify
+        # Accept legacy `simulated` kwarg
+        if not simulated and mode == "simulated":
+            mode = "teams_acs"
+        self._mode = mode
 
     # ------------------------------------------------------------------
     # Public API
@@ -89,6 +102,7 @@ class CycleRunner:
             "schedule_health": "",
             "error": "",
             "validation_holds": [],
+            "approval_required": False,
         }
 
         start_time = datetime.now(timezone.utc)
@@ -120,6 +134,65 @@ class CycleRunner:
     def is_active(cls) -> bool:
         return cls._active
 
+    @classmethod
+    def apply_approved(cls, cycle_id: str) -> dict[str, Any]:
+        """
+        Apply previously-held CAM inputs after PM approval and re-run analysis.
+
+        Called by POST /api/approvals/{cycle_id}/approve on the dashboard.
+        Returns a new status dict for the approval-triggered cycle.
+        """
+        from agent.approval_store import load_pending, mark_approved
+        from agent.file_handler import IMSFileHandler
+        from agent.critical_path import calculate_critical_path
+        from agent.sra_runner import SRARunner
+        from agent.llm_interface import LLMInterface
+        from agent.report_generator import ReportGenerator
+        from agent.schedule_health import compute_health
+        from agent.notifier import build_cycle_summary, send_slack, send_email
+        from agent.voice_briefing import generate_briefing
+
+        record = load_pending(cycle_id)
+        if not record or record.get("status") != "pending":
+            return {"error": f"No pending approval for cycle {cycle_id}"}
+
+        ims_path = record.get("ims_path", _IMS_PATH)
+        cam_inputs = record["cam_inputs"]
+
+        mark_approved(cycle_id, approver="dashboard")
+
+        handler = IMSFileHandler(ims_path)
+        handler.parse()  # prime the tree
+        handler.apply_updates(cam_inputs)
+        tasks_updated = handler.parse()
+
+        cp_result = calculate_critical_path(tasks_updated)
+        sra_results = SRARunner(tasks_updated, seed=None).run()
+        health, rationale = compute_health(sra_results, cp_result, tasks_updated)
+
+        llm = LLMInterface()
+        synthesis = llm.synthesize(
+            tasks_updated, cp_result, sra_results, cam_inputs,
+            schedule_health=health, health_rationale=rationale,
+        )
+
+        rg = ReportGenerator()
+        report_path = rg.generate(
+            tasks_updated, cp_result, sra_results, cam_inputs, synthesis
+        )
+
+        logger.info(
+            "action=approval_applied cycle=%s health=%s report=%s",
+            cycle_id, health, report_path,
+        )
+        return {
+            "cycle_id": cycle_id,
+            "phase": "complete",
+            "schedule_health": health,
+            "report_path": report_path,
+            "approval_applied": True,
+        }
+
     # ------------------------------------------------------------------
     # Internal pipeline
     # ------------------------------------------------------------------
@@ -127,7 +200,6 @@ class CycleRunner:
     def _run_inner(self, cycle_id: str, status: dict) -> dict:
         from agent.file_handler import IMSFileHandler
         from agent.cam_directory import CAMDirectory
-        from agent.voice.cam_simulator import build_atlas_personas
         from agent.interview_orchestrator import InterviewOrchestrator
         from agent.validation import ScheduleValidator
         from agent.critical_path import calculate_critical_path
@@ -136,6 +208,7 @@ class CycleRunner:
         from agent.report_generator import ReportGenerator
         from agent.notifier import build_cycle_summary, send_slack, send_email
         from agent.voice_briefing import generate_briefing
+        from agent.schedule_health import compute_health
 
         # ── 1. Parse IMS ──────────────────────────────────────────────
         handler = IMSFileHandler(self._ims_path)
@@ -155,12 +228,18 @@ class CycleRunner:
         status["phase"] = "interviewing"
         self._write_phase(status)
 
-        personas = build_atlas_personas(tasks)
-        orchestrator = InterviewOrchestrator(
-            directory, personas,
-            parallel=not self._simulated,  # sequential in simulated mode (API rate limits)
-        )
-        all_cam_inputs, completion_report = orchestrator.run(tasks)
+        if self._mode == "teams_chat":
+            all_cam_inputs, completion_report = self._run_teams_chat_interviews(
+                tasks, directory, cycle_id
+            )
+        else:
+            from agent.voice.cam_simulator import build_atlas_personas
+            personas = build_atlas_personas(tasks)
+            orchestrator = InterviewOrchestrator(
+                directory, personas,
+                parallel=False,  # sequential in simulated mode (API rate limits)
+            )
+            all_cam_inputs, completion_report = orchestrator.run(tasks)
 
         status["cams_responded"] = completion_report["responded"]
         status["tasks_captured"] = len(all_cam_inputs)
@@ -193,41 +272,73 @@ class CycleRunner:
 
         validator = ScheduleValidator()
         val_result = validator.validate(all_cam_inputs, tasks)
-        if not val_result.passed:
-            holds = [f.detail for f in val_result.failures]
-            status["validation_holds"] = holds
+
+        holds_dicts = [
+            {"task_id": f.task_id, "cam_name": f.cam_name,
+             "rule": f.rule, "detail": f.detail}
+            for f in val_result.failures
+        ]
+        warn_dicts = [
+            {"task_id": w.task_id, "cam_name": w.cam_name,
+             "rule": w.rule, "detail": w.detail}
+            for w in val_result.warnings
+        ]
+        status["validation_holds"] = holds_dicts
+        status["validation_warnings"] = warn_dicts
+
+        if holds_dicts:
             logger.warning(
-                "action=validation_holds cycle=%s count=%d", cycle_id, len(holds)
+                "action=validation_failures cycle=%s count=%d — holding IMS write for approval",
+                cycle_id, len(holds_dicts),
             )
-            # Log but do not block — human can audit the persisted status
 
         # ── 6. UPDATING ───────────────────────────────────────────────
         status["phase"] = "updating"
         self._write_phase(status)
 
-        handler.apply_updates(all_cam_inputs)
-        tasks_updated = handler.parse()
-        logger.info("action=ims_updated cycle=%s", cycle_id)
+        if holds_dicts:
+            # Hard failures present — hold the IMS write, require PM approval
+            from agent.approval_store import save_pending
+            approval_path = save_pending(
+                cycle_id, all_cam_inputs, holds_dicts, self._ims_path
+            )
+            status["approval_required"] = True
+            status["approval_path"] = str(approval_path)
+            logger.info(
+                "action=ims_write_held cycle=%s approval_path=%s", cycle_id, approval_path
+            )
+            # Analyse against the current (unmodified) IMS so the PM sees the picture
+            tasks_for_analysis = tasks
+        else:
+            handler.apply_updates(all_cam_inputs)
+            tasks_for_analysis = handler.parse()
+            logger.info("action=ims_updated cycle=%s", cycle_id)
 
         # ── 7. ANALYZING ──────────────────────────────────────────────
         status["phase"] = "analyzing"
         self._write_phase(status)
 
-        cp_result = calculate_critical_path(tasks_updated)
+        cp_result = calculate_critical_path(tasks_for_analysis)
         logger.info(
             "action=cpm_done cycle=%s critical=%d",
             cycle_id, len(cp_result.get("critical_path", [])),
         )
 
-        sra = SRARunner(tasks_updated, seed=None)
-        sra_results = sra.run()
+        sra_results = SRARunner(tasks_for_analysis, seed=None).run()
         logger.info("action=sra_done cycle=%s milestones=%d", cycle_id, len(sra_results))
 
-        llm = LLMInterface()
-        synthesis = llm.synthesize(tasks_updated, cp_result, sra_results, all_cam_inputs)
-        health = synthesis.get("schedule_health", "UNKNOWN")
+        # Deterministic health — no LLM flip-flopping
+        health, health_rationale = compute_health(sra_results, cp_result, tasks_for_analysis)
         status["schedule_health"] = health
-        logger.info("action=synthesis_done cycle=%s health=%s", cycle_id, health)
+        logger.info("action=health_computed cycle=%s health=%s rationale=%s", cycle_id, health, health_rationale)
+
+        llm = LLMInterface()
+        synthesis = llm.synthesize(
+            tasks_for_analysis, cp_result, sra_results, all_cam_inputs,
+            schedule_health=health,
+            health_rationale=health_rationale,
+        )
+        logger.info("action=synthesis_done cycle=%s", cycle_id)
 
         # ── 8. DISTRIBUTING ───────────────────────────────────────────
         status["phase"] = "distributing"
@@ -235,15 +346,15 @@ class CycleRunner:
 
         rg = ReportGenerator()
         report_path = rg.generate(
-            tasks_updated, cp_result, sra_results, all_cam_inputs, synthesis
+            tasks_for_analysis, cp_result, sra_results, all_cam_inputs, synthesis
         )
         status["report_path"] = report_path
         logger.info("action=report_generated cycle=%s path=%s", cycle_id, report_path)
 
         self._update_dashboard_state(
-            cycle_id, health, tasks_updated, cp_result,
+            cycle_id, health, tasks_for_analysis, cp_result,
             sra_results, synthesis, all_cam_inputs, directory,
-            completion_report, report_path,
+            completion_report, report_path, status,
         )
 
         if self._notify:
@@ -270,16 +381,160 @@ class CycleRunner:
             send_slack(summary)
             send_email(summary)
 
-        status["phase"] = "complete"
+            if status.get("approval_required"):
+                self._notify_approval_required(cycle_id, holds_dicts)
+
+        status["phase"] = "complete" if not status.get("approval_required") else "awaiting_approval"
         logger.info(
-            "action=cycle_complete cycle=%s health=%s report=%s",
-            cycle_id, health, report_path,
+            "action=cycle_complete cycle=%s health=%s report=%s approval_required=%s",
+            cycle_id, health, report_path, status.get("approval_required"),
         )
         return status
 
     # ------------------------------------------------------------------
+    # Teams Chat interview mode
+    # ------------------------------------------------------------------
+
+    def _run_teams_chat_interviews(
+        self,
+        tasks: list[dict],
+        directory: Any,
+        cycle_id: str,
+    ) -> tuple[list[dict], dict]:
+        """
+        Proactively start a Teams Chat interview for every CAM that has a
+        stored session (serviceUrl + userId from a previous reactive contact).
+
+        CAMs without a stored session fall back to the CAM simulator so the
+        cycle always completes.
+        """
+        from agent.voice.teams_chat_connector import (
+            ChatInterviewManager,
+            ChatInterviewSession,
+            load_cam_sessions,
+            proactive_create_conversation,
+            _bf_reply,
+        )
+        from agent.voice.cam_simulator import build_atlas_personas
+        from agent.interview_orchestrator import InterviewOrchestrator
+        import threading
+
+        cam_sessions = load_cam_sessions()
+        manager = ChatInterviewManager.get()
+        all_tasks_non_ms = [t for t in tasks if not t.get("is_milestone")]
+
+        sessions_started: list[ChatInterviewSession] = []
+        cams_no_session: list[str] = []
+
+        for cam_record in directory.get_all_cams():
+            cam_name = cam_record.get("name", "")
+            cam_email = cam_record.get("email", "").lower()
+            stored = cam_sessions.get(cam_email) or cam_sessions.get(cam_name.lower())
+
+            cam_tasks = [
+                t for t in all_tasks_non_ms
+                if t.get("cam") == cam_name and t.get("percent_complete", 0) < 100
+            ]
+            if not cam_tasks:
+                continue
+
+            if stored:
+                service_url = stored.get("service_url", "")
+                user_id = stored.get("user_id", "")
+                if service_url and user_id:
+                    try:
+                        new_conv_id = proactive_create_conversation(
+                            service_url, user_id
+                        )
+                        if new_conv_id:
+                            session = ChatInterviewSession(cam_name, cam_tasks, all_tasks=tasks)
+                            session.service_url = service_url
+                            session.conversation_id = new_conv_id
+                            session.user_id = user_id
+                            manager.register(user_id, session)
+
+                            # Send the opening greeting proactively
+                            greeting = session.start()
+                            _bf_reply(service_url, new_conv_id, new_conv_id, greeting)
+                            sessions_started.append(session)
+                            logger.info(
+                                "action=proactive_interview_started cam=%s conv=%s",
+                                cam_name, new_conv_id[:8],
+                            )
+                            continue
+                    except Exception as exc:
+                        logger.warning(
+                            "action=proactive_start_failed cam=%s error=%s — falling back to simulator",
+                            cam_name, exc,
+                        )
+
+            cams_no_session.append(cam_name)
+            logger.info(
+                "action=teams_chat_fallback cam=%s reason=no_stored_session", cam_name
+            )
+
+        # Wait for all proactive sessions to complete
+        all_cam_inputs: list[dict] = []
+        responded = 0
+
+        for session in sessions_started:
+            completed = session.done.wait(timeout=_TEAMS_INTERVIEW_TIMEOUT)
+            if completed:
+                inputs = session.get_cam_inputs()
+                all_cam_inputs.extend(inputs)
+                responded += 1
+                logger.info("action=teams_session_complete cam=%s inputs=%d", session.cam_name, len(inputs))
+            else:
+                logger.warning(
+                    "action=teams_interview_timeout cam=%s timeout_sec=%d",
+                    session.cam_name, _TEAMS_INTERVIEW_TIMEOUT,
+                )
+
+        # Simulator fallback for CAMs without stored sessions
+        if cams_no_session:
+            personas = build_atlas_personas(tasks)
+            fallback_directory = directory.__class__()
+            # Build a filtered directory with only the fallback CAMs
+            fallback_directory.load_from_ims(tasks)
+            # Filter to only the cams that need simulator
+            from agent.interview_orchestrator import InterviewOrchestrator
+            orchestrator = InterviewOrchestrator(fallback_directory, personas, parallel=False)
+            sim_inputs, sim_report = orchestrator.run(tasks)
+            # Filter to only the fallback CAM inputs
+            fallback_inputs = [
+                inp for inp in sim_inputs
+                if inp.get("cam_name") in cams_no_session
+            ]
+            all_cam_inputs.extend(fallback_inputs)
+            responded += sim_report.get("responded", 0)
+
+        total_cams = len(directory.get_all_cams())
+        threshold_met = (responded / total_cams) >= _COMPLETION_THRESHOLD if total_cams else False
+
+        completion_report = {
+            "responded": responded,
+            "total": total_cams,
+            "threshold_met": threshold_met,
+        }
+        return all_cam_inputs, completion_report
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _notify_approval_required(self, cycle_id: str, holds: list[dict]) -> None:
+        """Send a Slack/email alert that the IMS write is held pending approval."""
+        from agent.notifier import send_slack, send_email
+        hold_lines = "\n".join(f"  • {h['rule']}: {h['detail']}" for h in holds[:5])
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:9000")
+        msg = (
+            f"*IMS Write Held — Approval Required*\n"
+            f"Cycle `{cycle_id}` detected validation failures that require PM review "
+            f"before writing to the schedule:\n{hold_lines}\n\n"
+            f"Approve or reject at: {dashboard_url}/api/approvals"
+        )
+        send_slack(msg)
+        send_email(msg)
 
     def _snapshot_ims(self, cycle_id: str) -> None:
         src = Path(self._ims_path)
@@ -300,7 +555,10 @@ class CycleRunner:
             if path.exists():
                 existing = json.loads(path.read_text(encoding="utf-8"))
             existing["current_cycle"] = status
-            path.write_text(json.dumps(existing, indent=2, default=str), encoding="utf-8")
+            import tempfile, os as _os
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(existing, indent=2, default=str), encoding="utf-8")
+            _os.replace(tmp, path)
         except Exception as exc:
             logger.warning("action=phase_write_error error=%s", exc)
 
@@ -316,6 +574,7 @@ class CycleRunner:
         directory: Any,
         completion_report: dict,
         report_path: str,
+        status: dict,
     ) -> None:
         state_path = Path(_DASHBOARD_STATE_FILE)
         history_path = Path(_CYCLE_HISTORY_FILE)
@@ -354,11 +613,16 @@ class CycleRunner:
             },
             "completion_report": completion_report,
             "report_path": report_path,
+            # Surface validation holds so the dashboard can show an alert panel
+            "validation_holds": status.get("validation_holds", []),
+            "validation_warnings": status.get("validation_warnings", []),
+            "approval_required": status.get("approval_required", False),
         }
 
-        state_path.write_text(
-            json.dumps(state, indent=2, default=str), encoding="utf-8"
-        )
+        import os as _os
+        tmp = state_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+        _os.replace(tmp, state_path)
 
         # Append to rolling history (keep 1 year = 52 weekly cycles)
         history: list = []
@@ -373,10 +637,11 @@ class CycleRunner:
             "schedule_health": health,
             "cams_responded": completion_report["responded"],
             "cams_total": completion_report["total"],
+            "approval_required": status.get("approval_required", False),
         })
-        history_path.write_text(
-            json.dumps(history[-52:], indent=2), encoding="utf-8"
-        )
+        tmp_h = history_path.with_suffix(".tmp")
+        tmp_h.write_text(json.dumps(history[-52:], indent=2), encoding="utf-8")
+        _os.replace(tmp_h, history_path)
         logger.info("action=dashboard_updated cycle=%s", cycle_id)
 
     def _persist_status(self, status: dict) -> None:
@@ -388,10 +653,7 @@ class CycleRunner:
 
     @staticmethod
     def purge_old_data(retention_days: int = _RETENTION_DAYS) -> dict[str, int]:
-        """Delete cycle status JSONs and IMS snapshots older than retention_days.
-
-        Returns counts of deleted files per category.
-        """
+        """Delete cycle status JSONs and IMS snapshots older than retention_days."""
         from datetime import timedelta
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         deleted = {"cycle_status": 0, "snapshots": 0}

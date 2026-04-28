@@ -53,6 +53,8 @@ class LLMInterface:
         cp_result: dict[str, Any],
         sra_result: list[dict[str, Any]],
         cam_inputs: list[dict[str, Any]],
+        schedule_health: str = "",
+        health_rationale: str = "",
     ) -> dict[str, str]:
         """
         Synthesize schedule intelligence from parsed data.
@@ -62,12 +64,20 @@ class LLMInterface:
             cp_result: Critical path analysis result dict.
             sra_result: List of SRA results per milestone.
             cam_inputs: List of CAM status inputs.
+            schedule_health: Pre-computed health label (GREEN/YELLOW/RED).
+                             When provided the LLM is told the label and writes
+                             rationale around it rather than deciding it itself.
+            health_rationale: One-sentence reason from compute_health().
 
         Returns:
             Dict with keys: narrative, top_risks, recommended_actions, schedule_health.
         """
-        prompt = _build_synthesis_prompt(tasks, cp_result, sra_result, cam_inputs)
-        logger.info("action=llm_call type=synthesis model=%s", self._model)
+        prompt = _build_synthesis_prompt(
+            tasks, cp_result, sra_result, cam_inputs,
+            schedule_health=schedule_health,
+            health_rationale=health_rationale,
+        )
+        logger.info("action=llm_call type=synthesis model=%s health=%s", self._model, schedule_health)
 
         response = self._client.messages.create(
             model=self._model,
@@ -79,7 +89,11 @@ class LLMInterface:
         raw = response.content[0].text
         logger.info("action=llm_response type=synthesis tokens=%d", response.usage.output_tokens)
 
-        return _parse_synthesis_response(raw)
+        result = _parse_synthesis_response(raw)
+        # Override with the deterministic value — LLM must not change the label
+        if schedule_health:
+            result["schedule_health"] = schedule_health
+        return result
 
     def ask(self, question: str, context: str) -> str:
         """
@@ -199,6 +213,8 @@ def _build_synthesis_prompt(
     cp_result: dict[str, Any],
     sra_result: list[dict[str, Any]],
     cam_inputs: list[dict[str, Any]],
+    schedule_health: str = "",
+    health_rationale: str = "",
 ) -> str:
     """Build the synthesis prompt from structured data."""
     behind = [
@@ -269,17 +285,36 @@ def _build_synthesis_prompt(
             f"expected ~{exp}%"
         )
 
-    lines += [
-        "",
-        "=== INSTRUCTIONS ===",
-        "Based ONLY on the data above, provide:",
-        "1. SCHEDULE_HEALTH: one word (GREEN / YELLOW / RED) with a one-sentence rationale",
-        "2. NARRATIVE: 2-3 paragraph executive summary of schedule health",
-        "3. TOP_RISKS: numbered list of top 5 risks (cite specific tasks/milestones/CAMs)",
-        "4. RECOMMENDED_ACTIONS: numbered list of 3-5 specific actions for the PM this week",
-        "",
-        "Use exactly these section headers.",
-    ]
+    if schedule_health:
+        health_line = (
+            f"SCHEDULE_HEALTH is pre-computed as {schedule_health} "
+            f"({health_rationale or 'deterministic threshold evaluation'}). "
+            "Use this label exactly — do not change it."
+        )
+        lines += [
+            "",
+            "=== INSTRUCTIONS ===",
+            health_line,
+            "Based ONLY on the data above, provide:",
+            "1. SCHEDULE_HEALTH: repeat the pre-computed label above with a one-sentence rationale",
+            "2. NARRATIVE: 2-3 paragraph executive summary of schedule health",
+            "3. TOP_RISKS: numbered list of top 5 risks (cite specific tasks/milestones/CAMs)",
+            "4. RECOMMENDED_ACTIONS: numbered list of 3-5 specific actions for the PM this week",
+            "",
+            "Use exactly these section headers.",
+        ]
+    else:
+        lines += [
+            "",
+            "=== INSTRUCTIONS ===",
+            "Based ONLY on the data above, provide:",
+            "1. SCHEDULE_HEALTH: one word (GREEN / YELLOW / RED) with a one-sentence rationale",
+            "2. NARRATIVE: 2-3 paragraph executive summary of schedule health",
+            "3. TOP_RISKS: numbered list of top 5 risks (cite specific tasks/milestones/CAMs)",
+            "4. RECOMMENDED_ACTIONS: numbered list of 3-5 specific actions for the PM this week",
+            "",
+            "Use exactly these section headers.",
+        ]
 
     return "\n".join(lines)
 

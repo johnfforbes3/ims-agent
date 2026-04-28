@@ -122,10 +122,17 @@ class IMSFileHandler:
                 update.get("timestamp", ""),
             )
 
-        output_path = self.file_path.with_stem(self.file_path.stem + "_updated")
-        self._tree.write(str(output_path), xml_declaration=True, encoding="utf-8")
-        self.file_path = output_path
-        logger.info("action=file_written path=%s", output_path)
+        # Write to a temp file then atomically replace the authoritative IMS file.
+        # os.replace is atomic on POSIX and atomic on Windows when src/dst share a volume.
+        # This keeps the original path as the single source of truth across all cycles.
+        import os
+        tmp_path = self.file_path.with_suffix(".tmp")
+        self._tree.write(str(tmp_path), xml_declaration=True, encoding="utf-8")
+        os.replace(tmp_path, self.file_path)
+        # Reset the parsed tree so the next parse() re-reads the updated file
+        self._tree = None
+        self._root = None
+        logger.info("action=file_written path=%s", self.file_path)
 
     # ------------------------------------------------------------------
     # Private helpers

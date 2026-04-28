@@ -239,9 +239,10 @@ def _print_cp_diff(cp_before: dict, cp_after: dict) -> None:
         print(f"    No change ({len(new_ids)} tasks remain on critical path)")
 
 
-def _print_sra_comparison(sra_before: dict, sra_after: dict) -> None:
-    before_ms = {m["task_id"]: m for m in sra_before.get("milestones", [])}
-    after_ms  = {m["task_id"]: m for m in sra_after.get("milestones",  [])}
+def _print_sra_comparison(sra_before: list, sra_after: list) -> None:
+    # SRARunner.run() returns a list of milestone dicts, not a dict
+    before_ms = {m["task_id"]: m for m in (sra_before or [])}
+    after_ms  = {m["task_id"]: m for m in (sra_after  or [])}
     if not after_ms:
         return
 
