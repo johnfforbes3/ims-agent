@@ -362,30 +362,82 @@
     </div>
   </div>
 
-  <!-- Current Cycle Progress (if active) -->
+  <!-- Current Cycle Progress (shown when active; JS updates it live) -->
   {% set current = state.get('current_cycle', {}) %}
-  {% if current and current.get('phase') not in ['complete', 'failed', ''] %}
-  <div class="card" style="border-left:4px solid #1a73e8">
+  {% set _phase = current.get('phase', '') %}
+  {% set _active = _phase and _phase not in ['complete', 'failed'] %}
+  <div class="card" id="cycle-progress-card"
+       style="border-left:4px solid #1a73e8;{{ 'display:none' if not _active else '' }}">
     <h2>Cycle In Progress</h2>
-    <p style="font-size:13px">
-      <strong>Phase:</strong> {{ current.get('phase', '—').upper() }} &nbsp;|&nbsp;
-      <strong>Cycle ID:</strong> {{ current.get('cycle_id', '—') }} &nbsp;|&nbsp;
-      <strong>CAMs:</strong> {{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}
+    <p style="font-size:13px" id="cycle-progress-text">
+      <strong>Phase:</strong> <span id="cp-phase">{{ _phase.upper() if _phase else '—' }}</span>
+      &nbsp;|&nbsp;
+      <strong>Cycle ID:</strong> <span id="cp-cycle">{{ current.get('cycle_id', '—') }}</span>
+      &nbsp;|&nbsp;
+      <strong>CAMs:</strong> <span id="cp-cams">{{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}</span>
     </p>
   </div>
-  {% endif %}
 
 </div><!-- /container -->
 
 <script>
-  // ── Auto-refresh countdown ────────────────────────────────────────────────
-  let seconds = 60;
+  // ── Unified polling & live countdown ─────────────────────────────────────
+  // When a cycle is idle:  poll every 60 s, full-page reload each time.
+  // When a cycle is active: poll every 5 s, update the Cycle In Progress card
+  //   in-place via AJAX; only do a full reload when the cycle finishes.
   const countdownEl = document.getElementById('countdown');
-  setInterval(() => {
-    seconds--;
-    if (countdownEl) countdownEl.textContent = seconds;
-    if (seconds <= 0) window.location.reload();
+  let _nextPollAt  = Date.now();   // epoch ms of next scheduled poll
+  let _pollMs      = 60000;        // 60 s idle, 5 s active
+  let _wasActive   = false;
+
+  function _updateCycleCard(state) {
+    const cur   = state.current_cycle || {};
+    const phase = (cur.phase || '').toLowerCase();
+    const card  = document.getElementById('cycle-progress-card');
+    if (!card) return;
+    if (phase && phase !== 'complete' && phase !== 'failed') {
+      document.getElementById('cp-phase').textContent  = phase.toUpperCase();
+      document.getElementById('cp-cycle').textContent  = cur.cycle_id  || '—';
+      document.getElementById('cp-cams').textContent   =
+        (cur.cams_responded || 0) + '/' + (cur.cams_total || 0);
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  }
+
+  async function _poll() {
+    try {
+      const status = await fetch('/api/status').then(r => r.json());
+      const active = !!status.cycle_active;
+
+      if (_wasActive && !active) {
+        // Cycle just completed — reload to pull in fresh health/report data
+        window.location.reload();
+        return;
+      }
+
+      _wasActive = active;
+      _pollMs    = active ? 5000 : 60000;
+
+      if (active) {
+        const state = await fetch('/api/state').then(r => r.json());
+        _updateCycleCard(state);
+      }
+    } catch (_) {
+      _pollMs = 10000;   // network hiccup — back off briefly
+    }
+    _nextPollAt = Date.now() + _pollMs;
+  }
+
+  // Tick every second: update countdown badge and fire poll when due
+  setInterval(async () => {
+    const remaining = Math.max(0, Math.ceil((_nextPollAt - Date.now()) / 1000));
+    if (countdownEl) countdownEl.textContent = remaining;
+    if (Date.now() >= _nextPollAt) await _poll();
   }, 1000);
+
+  _poll();  // immediate first poll on page load
 
   // ── Manual cycle trigger ──────────────────────────────────────────────────
   function triggerCycle() {
@@ -403,14 +455,6 @@
         btn.disabled = false;
       });
   }
-
-  // ── Cycle status poll ─────────────────────────────────────────────────────
-  function pollStatus() {
-    fetch('/api/status')
-      .then(r => r.json())
-      .then(d => { if (d.cycle_active) setTimeout(() => window.location.reload(), 5000); });
-  }
-  pollStatus();
 
   // ── Chat persistence (sessionStorage) ────────────────────────────────────
   // Messages are stored as [{role, html}] so a page reload restores the thread.

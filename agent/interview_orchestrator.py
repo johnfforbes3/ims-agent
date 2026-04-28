@@ -46,6 +46,7 @@ class InterviewOrchestrator:
     def run(
         self, tasks: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        self._all_tasks = tasks  # stored for milestone name lookup in _interview_one
         """
         Interview all available CAMs and return (cam_inputs, completion_report).
 
@@ -149,7 +150,7 @@ class InterviewOrchestrator:
         from agent.voice.cam_simulator import CAMSimulator
 
         simulator = CAMSimulator(persona)
-        agent = InterviewAgent(cam_name, cam_tasks)
+        agent = InterviewAgent(cam_name, cam_tasks, all_tasks=self._all_tasks)
 
         turn = agent.start()
         turns_taken = 0

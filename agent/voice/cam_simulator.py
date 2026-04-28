@@ -215,7 +215,7 @@ class CAMSimulator:
             task_lines.append(line)
 
         history_lines = []
-        for turn in self._conversation_history[-6:]:  # last 3 exchanges for context
+        for turn in self._conversation_history:
             role = "Agent" if turn["role"] == "user" else p.cam_name
             history_lines.append(f"{role}: {turn['content']}")
 
@@ -223,6 +223,10 @@ class CAMSimulator:
             f"You are: {p.cam_name}, {p.role}\n"
             f"Communication style: {p.communication_style}\n\n"
             f"Your task status right now:\n" + "\n".join(task_lines) + "\n\n"
-            + (f"Recent conversation:\n" + "\n".join(history_lines) + "\n\n"
+            + (f"Conversation so far:\n" + "\n".join(history_lines) + "\n\n"
                if history_lines else "")
+            + "Important: if you have already explained a blocker or root cause "
+              "earlier in this conversation, do not re-explain it in full. "
+              "Reference it briefly (e.g. 'same RF spec issue I mentioned') "
+              "and move on.\n\n"
         )

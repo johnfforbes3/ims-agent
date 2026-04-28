@@ -59,12 +59,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-006 — CAM simulator re-explains same blocker for every task that shares it
+### TD-006 — CAM simulator re-explains same blocker for every task that shares it — **RESOLVED**
+**Resolved:** Phase 5 sprint 2 — 2026-04-27  
 **File:** `agent/voice/cam_simulator.py` — `_build_context`  
-**Severity:** Medium  
-**Description:** Each task is asked independently. When multiple tasks share the same root blocker (e.g., Alice's SE-02, SE-03, SE-05, SE-06, SE-08 all blocked by missing RF specs), the simulator re-explains the full blocker each time because it has no memory of "I already told the agent this." This causes: (a) very long interviews, (b) the CAM persona becoming increasingly impatient at being asked the same thing repeatedly, (c) verbosity noise in the report's blocker table.  
-**Why deferred:** Phase 2 simulator is intentionally stateless per task for simplicity. FB-2-004.  
-**Suggested fix:** Pass the previously-captured blocker list into the simulator context: "You have already explained the following blockers in this call: [list]. For tasks with the same root cause, reference your earlier answer briefly rather than re-explaining in full."
+**Description:** `_build_context()` now passes the full conversation history (was last 6 turns / 3 exchanges) so all prior blocker explanations remain visible to Claude throughout the interview. An explicit instruction is appended: "if you have already explained a blocker or root cause earlier in this conversation, do not re-explain it in full — reference it briefly and move on." Together these eliminate the repeated full-blocker re-explanation when multiple tasks share the same root cause.
 
 ---
 
@@ -77,12 +75,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-008 — `_nearest_milestone_name()` always returns a generic string
-**File:** `agent/voice/interview_agent.py:398`  
-**Severity:** Low  
-**Description:** The risk flag prompt says "Is this something that could affect the **next program milestone** milestone?" — the word "milestone" is doubled (minor), and the function always returns the literal string "next program milestone" rather than finding the actual next upcoming milestone by date (e.g., "PDR on 2026-05-29").  
-**Why deferred:** Required access to the full task list from within the InterviewAgent, which was a minor scope expansion.  
-**Suggested fix:** Pass the full task list to `InterviewAgent.__init__`. Filter for `is_milestone=True`, sort by `finish` date, and return the name of the first milestone whose `finish` date is after today. Fall back to "next program milestone" if none found.
+### TD-008 — `_nearest_milestone_name()` always returns a generic string — **RESOLVED**
+**Resolved:** Phase 5 sprint 2 — 2026-04-27  
+**File:** `agent/interview_orchestrator.py`, `agent/voice/interview_agent.py`  
+**Description:** `_nearest_milestone_name()` was already implemented correctly in `InterviewAgent` (filters `self._milestones` by `finish >= now`, returns shortened milestone name). The gap was that `InterviewOrchestrator._interview_one()` constructed `InterviewAgent(cam_name, cam_tasks)` without passing `all_tasks`, so `self._milestones` was always empty and the fallback "the next milestone" was always returned. Fixed by storing `tasks` as `self._all_tasks` at the start of `InterviewOrchestrator.run()` and passing `all_tasks=self._all_tasks` to every `InterviewAgent` constructor call.
 
 ---
 
@@ -202,7 +198,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 5 / Sprint 2
 
-### TD-021 — Dashboard auto-refresh conflicts with cycle-active fast-poll; countdown is misleading
+### TD-021 — Dashboard auto-refresh conflicts with cycle-active fast-poll; countdown is misleading — **RESOLVED**
+**Resolved:** Phase 5 sprint 2 — 2026-04-27  
+
+
 **File:** `agent/dashboard/templates/index.html` — `pollStatus()`, countdown `setInterval`  
 **Severity:** Medium  
 **Description:** The dashboard has two independent timers: a 60-second full-page reload countdown and a one-shot `pollStatus()` call that triggers `window.location.reload()` after 5 seconds if a cycle is active. When a cycle is running, the page reloads every 5 seconds but the countdown still initialises at 60 and counts down from there — giving the impression of a stuck or restarting timer rather than the actual 5-second refresh cadence. More critically, the "Cycle In Progress" card (showing phase / CAMs responded) only updates on full reload; there is no live push or incremental AJAX update, so progress is only visible in arrears.  
