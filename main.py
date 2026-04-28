@@ -210,27 +210,32 @@ def _run_demo_interview(
 
 
 def _run_init_mpp(ims_path: str) -> None:
-    """One-time seed: convert the working XML → a timestamped .mpp in data/ims_master/."""
+    """One-time seed: convert the working XML → a timestamped master in data/ims_master/.
+
+    COM available  → writes IMS_<ts>.mpp  (native MS Project binary)
+    MPXJ fallback  → writes IMS_<ts>.xml  (MSPDI XML, openable by MS Project)
+    """
     from datetime import datetime, timezone
     from pathlib import Path
-    from agent.mpp_converter import is_available, xml_to_mpp
+    from agent.mpp_converter import is_available, xml_to_master, master_extension, diagnose
 
-    from agent.mpp_converter import diagnose
     status = diagnose()
+    print(f"\nBackend status:\n{status}\n")
     if not is_available():
-        print(f"\nERROR: MS Project COM automation is not working.\n\n{status}\n")
+        print("ERROR: No conversion backend is available (neither COM nor MPXJ).")
         sys.exit(1)
 
     master_dir = Path(os.getenv("IMS_MASTER_DIR", "data/ims_master"))
     master_dir.mkdir(parents=True, exist_ok=True)
 
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%Mz")
-    out = master_dir / f"IMS_{ts}.mpp"
+    ext = master_extension()                     # ".mpp" or ".xml"
+    out = master_dir / f"IMS_{ts}{ext}"
 
     print(f"Converting {ims_path} → {out} ...")
-    xml_to_mpp(ims_path, str(out))
+    actual = xml_to_master(ims_path, str(out))
     print(f"Done.  Master IMS folder: {master_dir.resolve()}")
-    print(f"File:                     {out.name}")
+    print(f"File:                     {Path(actual).name}")
 
 
 def _run_demo_chat(

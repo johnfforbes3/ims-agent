@@ -78,3 +78,10 @@ msal>=1.30.0
 # Enables the agent to open/save .mpp files so the program team's master schedule
 # is always an MS Project file with the update timestamp in the filename.
 pywin32>=306
+
+# MPXJ fallback — JVM-based .mpp reader / MSPDI XML writer
+# Used when MS Project COM is unavailable (e.g. C2R AppV isolation pre-Quick-Repair).
+# Reads any .mpp natively; writes MSPDI XML (.xml). MS Project opens MSPDI XML natively.
+# Also requires: OpenJDK 21 extracted to C:\Users\forbe\.jre21  (no installer needed)
+jpype1>=1.5.0
+mpxj>=16.0.0

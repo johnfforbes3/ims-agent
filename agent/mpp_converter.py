@@ -1,39 +1,35 @@
 """
-MPP Converter — converts between .mpp (MS Project binary) and .xml (MSPDI)
-using Microsoft Project COM automation via pywin32.
+MPP Converter — converts between .mpp (MS Project binary) and .xml (MSPDI).
 
-Requires Microsoft Project to be installed on the local machine.
-If MS Project is not available (or COM fails), ``is_available()`` returns
-False and the caller falls back to XML-only mode — no cycle interruption.
+Two backends, tried in order:
 
-Click-to-Run (C2R) / CO_E_SERVER_EXEC_FAILURE fix
----------------------------------------------------
-Standard M365 / Microsoft 365 Business installations use Click-to-Run (C2R),
-which virtualises the Office executables inside an AppV container.  Calling
-``Dispatch("MSProject.Application")`` from an external process raises
-``CO_E_SERVER_EXEC_FAILURE`` because COM activation goes through the C2R
-bootstrap layer, which needs to be correctly registered.
+1. COM (pywin32) — uses MS Project itself.  Full .mpp fidelity.
+   Blocked on C2R installations until a Quick Repair is run:
+     Settings → Apps → Microsoft Project Professional → Modify → Quick Repair
 
-**To fix (one-time, ~5 minutes):**
+2. MPXJ (jpype + mpxj.jar) — JVM-based, reads any .mpp and writes MSPDI XML.
+   Can READ real .mpp files without MS Project installed.
+   Cannot WRITE native .mpp binary — writes MSPDI XML (.xml) instead.
+   MS Project opens MSPDI XML natively (same data, different container).
+   Requires: pip install jpype1 mpxj  +  OpenJDK 21 at _JAVA_HOME.
 
-  1. Open Settings → Apps → Installed apps
-  2. Find "Microsoft 365 …" (or "Office …") → click the ⋯ menu → Modify
-  3. Choose **Quick Repair** → Repair
-  4. After the repair completes, COM automation works normally.
+   MPXJ write output uses extension .xml, not .mpp.  The master-IMS folder
+   will contain  IMS_2026-04-28_1014z.xml  until COM is repaired, at which
+   point every cycle switches automatically to  IMS_2026-04-28_1014z.mpp.
 
-Alternatively, install OpenJDK 21 (https://adoptium.net/) then
-``pip install mpxj`` and we will switch this module to MPXJ-based conversion
-(no MS Project COM required at all).  Update ``_BACKEND`` below to "mpxj"
-once Java is available.
-
-Public API:
-    is_available()          → bool
-    mpp_to_xml(mpp, xml)    → None
-    xml_to_mpp(xml, mpp)    → None
-    find_latest_mpp(dir)    → Path | None
-    diagnose()              → str   (human-readable status string)
+Public API
+----------
+    is_com_available()  → bool          COM backend ready
+    is_mpxj_available() → bool          MPXJ backend ready
+    is_available()      → bool          either backend ready
+    master_extension()  → str           ".mpp" or ".xml" based on backend
+    mpp_to_xml(mpp, xml)  → None        read .mpp → write MSPDI XML
+    xml_to_master(xml, out)  → str      write best-available output; returns actual path
+    find_latest_master(dir) → Path|None find the one .mpp/.xml in ims_master/
+    diagnose()          → str           human-readable status
 """
 
+import glob as _glob
 import logging
 import subprocess
 import time
@@ -41,193 +37,265 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# MS Project FileFormat constant for MSPDI XML (PjMSPDI = 22)
+# COM constants
 _MSP_FORMAT_XML = 22
-
-# Path to the MS Project executable (Click-to-Run default)
 _WINPROJ_EXE = r"C:\Program Files\Microsoft Office\Root\Office16\WINPROJ.EXE"
-
-# How long to wait (seconds) for WINPROJ to start before connecting via COM
 _LAUNCH_WAIT_SEC = 8
 
-# Cached availability result (avoids re-probing on every cycle)
-_available: bool | None = None
+# MPXJ / Java constants
+_JAVA_HOME = r"C:\Users\forbe\.jre21"
+_JVM_DLL   = rf"{_JAVA_HOME}\bin\server\jvm.dll"
+
+# Cached probe results
+_com_ok:  bool | None = None
+_mpxj_ok: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Availability probes
+# ---------------------------------------------------------------------------
+
+def is_com_available() -> bool:
+    """Return True if MS Project COM automation works."""
+    global _com_ok
+    if _com_ok is not None:
+        return _com_ok
+
+    if not Path(_WINPROJ_EXE).exists():
+        _com_ok = False
+        return False
+    try:
+        import win32com.client, pythoncom
+        pythoncom.CoInitialize()
+        msp = win32com.client.Dispatch("MSProject.Application")
+        msp.Quit()
+        _com_ok = True
+        logger.info("action=com_available")
+        return True
+    except Exception as exc:
+        logger.warning(
+            "action=com_unavailable error=%s — falling back to MPXJ.\n"
+            "  To restore .mpp output: Settings → Apps → "
+            "Microsoft Project → Modify → Quick Repair", exc,
+        )
+        _com_ok = False
+        return False
+
+
+def is_mpxj_available() -> bool:
+    """Return True if the MPXJ/JPype backend can start."""
+    global _mpxj_ok
+    if _mpxj_ok is not None:
+        return _mpxj_ok
+
+    if not Path(_JVM_DLL).exists():
+        logger.debug("action=mpxj_unavailable reason=jvm_dll_not_found path=%s", _JVM_DLL)
+        _mpxj_ok = False
+        return False
+    try:
+        import mpxj as _mpxj_mod, jpype
+        if not jpype.isJVMStarted():
+            jars = _glob.glob(_mpxj_mod.mpxj_dir + "/*.jar")
+            jpype.startJVM(_JVM_DLL, classpath=jars, convertStrings=False)
+        # Quick class probe
+        jpype.JClass("org.mpxj.reader.UniversalProjectReader")
+        _mpxj_ok = True
+        logger.info("action=mpxj_available jvm=%s", _JVM_DLL)
+        return True
+    except Exception as exc:
+        logger.warning("action=mpxj_unavailable error=%s", exc)
+        _mpxj_ok = False
+        return False
 
 
 def is_available() -> bool:
-    """Return True if MS Project COM automation is working on this machine.
+    """Return True if any backend can perform conversions."""
+    return is_com_available() or is_mpxj_available()
 
-    The result is cached after the first successful probe.  A failed probe
-    logs a one-time WARNING with remediation instructions.
-    """
-    global _available
-    if _available is not None:
-        return _available
 
-    if not Path(_WINPROJ_EXE).exists():
-        logger.debug("action=mpp_unavailable reason=winproj_not_found")
-        _available = False
-        return False
-
-    try:
-        import win32com.client
-        import pythoncom
-        pythoncom.CoInitialize()
-        msp = win32com.client.Dispatch("MSProject.Application")
-        msp.Quit()
-        _available = True
-        logger.info("action=mpp_available backend=com")
-        return True
-    except ImportError:
-        logger.debug("action=mpp_unavailable reason=pywin32_not_installed")
-        _available = False
-        return False
-    except Exception as exc:
-        logger.warning(
-            "action=mpp_unavailable reason=com_failed error=%s\n"
-            "  MPP conversion is disabled — the agent continues in XML-only mode.\n"
-            "  To enable .mpp output, run a Quick Repair on your Microsoft 365 installation:\n"
-            "    Settings → Apps → Microsoft 365 → Modify → Quick Repair",
-            exc,
-        )
-        _available = False
-        return False
+def master_extension() -> str:
+    """Return '.mpp' when COM works, '.xml' when MPXJ is the active backend."""
+    return ".mpp" if is_com_available() else ".xml"
 
 
 def diagnose() -> str:
-    """Return a human-readable status string for the MPP backend."""
+    """Human-readable status string covering both backends."""
+    lines = []
+    # COM
     if not Path(_WINPROJ_EXE).exists():
-        return f"MS Project not found at {_WINPROJ_EXE}"
-    try:
-        import win32com.client
-        import pythoncom
-        pythoncom.CoInitialize()
-        msp = win32com.client.Dispatch("MSProject.Application")
-        ver = getattr(msp, "Version", "unknown")
-        msp.Quit()
-        return f"COM OK — MS Project {ver}"
-    except ImportError:
-        return "pywin32 not installed — run: pip install pywin32"
-    except Exception as exc:
-        return (
-            f"COM failed ({exc})\n"
-            "Fix: Settings → Apps → Microsoft 365 → Modify → Quick Repair\n"
-            "Alt: Install OpenJDK 21 (https://adoptium.net/) then: pip install mpxj"
+        lines.append(f"COM: MS Project not found at {_WINPROJ_EXE}")
+    elif is_com_available():
+        lines.append("COM: OK ✓")
+    else:
+        lines.append(
+            "COM: BLOCKED (C2R AppV isolation)\n"
+            "  Fix: Settings → Apps → Microsoft Project Professional → Modify → Quick Repair"
         )
+    # MPXJ
+    if is_mpxj_available():
+        lines.append(f"MPXJ: OK ✓  (reads .mpp, writes .xml — JVM at {_JAVA_HOME})")
+    elif not Path(_JVM_DLL).exists():
+        lines.append(
+            f"MPXJ: JVM not found at {_JVM_DLL}\n"
+            "  Install: https://adoptium.net/  (OpenJDK 21, zip/no-install)"
+        )
+    else:
+        lines.append("MPXJ: jpype/mpxj not installed — run: pip install jpype1 mpxj")
+    return "\n".join(lines)
 
 
-def _get_msp_instance() -> "win32com.client.CDispatch":
-    """Launch WINPROJ.EXE (if not already running) and return a COM handle.
+# ---------------------------------------------------------------------------
+# JVM helpers
+# ---------------------------------------------------------------------------
 
-    Uses the C2R-safe pattern: subprocess launch → brief wait → GetActiveObject.
-    Falls back to a normal Dispatch if GetActiveObject is not available
-    (e.g. a perpetual-licence non-C2R install).
-    """
-    import win32com.client
-    import win32api
-    import pythoncom
+def _ensure_jvm() -> None:
+    """Start the JVM with the MPXJ classpath if not already running."""
+    import mpxj as _m, jpype
+    if not jpype.isJVMStarted():
+        jars = _glob.glob(_m.mpxj_dir + "/*.jar")
+        jpype.startJVM(_JVM_DLL, classpath=jars, convertStrings=False)
 
-    pythoncom.CoInitialize()
 
-    # Try connecting to an already-running instance first
-    try:
-        msp = win32com.client.GetActiveObject("MSProject.Application")
-        logger.debug("action=msp_got_active_instance")
-        return msp
-    except Exception:
-        pass  # not running yet — launch it
-
-    # Launch WINPROJ.EXE in the background (minimised, no splash)
-    proc = subprocess.Popen(
-        [_WINPROJ_EXE, "/s"],          # /s suppresses the splash screen
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-    logger.info("action=winproj_launched pid=%d wait=%ss", proc.pid, _LAUNCH_WAIT_SEC)
-    time.sleep(_LAUNCH_WAIT_SEC)
-
-    # Connect to the now-running instance
-    for attempt in range(1, 4):
-        try:
-            msp = win32com.client.GetActiveObject("MSProject.Application")
-            logger.info("action=msp_connected attempt=%d", attempt)
-            return msp
-        except Exception:
-            time.sleep(2)
-
-    raise RuntimeError(
-        "MS Project launched but COM connection timed out.  "
-        "Ensure Project is fully started and not blocked by a dialog."
-    )
-
+# ---------------------------------------------------------------------------
+# Core API
+# ---------------------------------------------------------------------------
 
 def mpp_to_xml(mpp_path: str, xml_path: str) -> None:
-    """Open a .mpp file with MS Project COM and save it as MSPDI XML.
+    """Read a .mpp file and write it as MSPDI XML.
 
-    Args:
-        mpp_path: Absolute (or resolvable) path to the source .mpp file.
-        xml_path: Absolute (or resolvable) path for the output .xml file.
-
-    Raises:
-        RuntimeError: If pywin32 / MS Project is not available or COM fails.
+    Tries COM first (full fidelity), falls back to MPXJ.
+    Raises RuntimeError if neither backend is available.
     """
-    if not is_available():
-        raise RuntimeError("pywin32 not installed or MS Project not found")
-
     mpp_abs = str(Path(mpp_path).resolve())
     xml_abs = str(Path(xml_path).resolve())
     Path(xml_abs).parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info("action=mpp_to_xml_start src=%s dst=%s", mpp_abs, xml_abs)
-    msp = _get_msp_instance()
-    _owned = False
+    if is_com_available():
+        _com_mpp_to_xml(mpp_abs, xml_abs)
+    elif is_mpxj_available():
+        _mpxj_mpp_to_xml(mpp_abs, xml_abs)
+    else:
+        raise RuntimeError(f"No MPP backend available.\n{diagnose()}")
+
+
+def xml_to_master(xml_path: str, out_path: str) -> str:
+    """Write the best-available output from an MSPDI XML source.
+
+    - COM available  → writes real .mpp to out_path, returns out_path
+    - MPXJ only      → writes MSPDI .xml; if out_path ends in .mpp the
+                        extension is changed to .xml automatically
+    - Neither        → raises RuntimeError
+
+    Returns the actual path written.
+    """
+    xml_abs = str(Path(xml_path).resolve())
+
+    if is_com_available():
+        mpp_abs = str(Path(out_path).resolve())
+        Path(mpp_abs).parent.mkdir(parents=True, exist_ok=True)
+        _com_xml_to_mpp(xml_abs, mpp_abs)
+        return mpp_abs
+    elif is_mpxj_available():
+        # Force .xml extension — MPXJ can't write binary .mpp
+        xml_out = str(Path(out_path).with_suffix(".xml").resolve())
+        Path(xml_out).parent.mkdir(parents=True, exist_ok=True)
+        _mpxj_xml_to_xml(xml_abs, xml_out)
+        logger.info(
+            "action=master_written_as_xml path=%s "
+            "(COM unavailable — Quick Repair to enable .mpp output)", xml_out,
+        )
+        return xml_out
+    else:
+        raise RuntimeError(f"No MPP backend available.\n{diagnose()}")
+
+
+def find_latest_master(directory: str) -> Path | None:
+    """Return the single .mpp or .xml master file in *directory*, or None."""
+    d = Path(directory)
+    if not d.is_dir():
+        return None
+    # Prefer .mpp; fall back to .xml
+    for ext in ("*.mpp", "*.xml"):
+        files = sorted(d.glob(ext), key=lambda p: p.stat().st_mtime, reverse=True)
+        if files:
+            return files[0]
+    return None
+
+
+# ---------------------------------------------------------------------------
+# COM backend
+# ---------------------------------------------------------------------------
+
+def _get_com_instance():
+    import win32com.client, pythoncom
+    pythoncom.CoInitialize()
+    try:
+        return win32com.client.GetActiveObject("MSProject.Application")
+    except Exception:
+        pass
+    proc = subprocess.Popen(
+        [_WINPROJ_EXE, "/s"],
+        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+    logger.info("action=winproj_launched pid=%d", proc.pid)
+    time.sleep(_LAUNCH_WAIT_SEC)
+    for _ in range(3):
+        try:
+            return win32com.client.GetActiveObject("MSProject.Application")
+        except Exception:
+            time.sleep(2)
+    raise RuntimeError("MS Project launched but COM connection timed out.")
+
+
+def _com_mpp_to_xml(mpp_abs: str, xml_abs: str) -> None:
+    logger.info("action=com_mpp_to_xml src=%s dst=%s", mpp_abs, xml_abs)
+    msp = _get_com_instance()
     try:
         msp.FileOpen(mpp_abs, ReadOnly=True)
         msp.FileSaveAs(xml_abs, Format=_MSP_FORMAT_XML)
         msp.FileClose(Save=False)
-        logger.info("action=mpp_to_xml_done src=%s dst=%s", mpp_abs, xml_abs)
+        logger.info("action=com_mpp_to_xml_done")
     except Exception as exc:
-        logger.error("action=mpp_to_xml_failed error=%s", exc)
+        logger.error("action=com_mpp_to_xml_failed error=%s", exc)
         raise
 
 
-def xml_to_mpp(xml_path: str, mpp_path: str) -> None:
-    """Open an MSPDI XML file with MS Project COM and save it as .mpp.
-
-    Args:
-        xml_path: Absolute (or resolvable) path to the source .xml file.
-        mpp_path: Absolute (or resolvable) path for the output .mpp file.
-
-    Raises:
-        RuntimeError: If pywin32 / MS Project is not available or COM fails.
-    """
-    if not is_available():
-        raise RuntimeError("pywin32 not installed or MS Project not found")
-
-    xml_abs = str(Path(xml_path).resolve())
-    mpp_abs = str(Path(mpp_path).resolve())
-    Path(mpp_abs).parent.mkdir(parents=True, exist_ok=True)
-
-    logger.info("action=xml_to_mpp_start src=%s dst=%s", xml_abs, mpp_abs)
-    msp = _get_msp_instance()
+def _com_xml_to_mpp(xml_abs: str, mpp_abs: str) -> None:
+    logger.info("action=com_xml_to_mpp src=%s dst=%s", xml_abs, mpp_abs)
+    msp = _get_com_instance()
     try:
         msp.FileOpen(xml_abs)
-        msp.FileSaveAs(mpp_abs)      # default format → .mpp
+        msp.FileSaveAs(mpp_abs)
         msp.FileClose(Save=False)
-        logger.info("action=xml_to_mpp_done src=%s dst=%s", xml_abs, mpp_abs)
+        logger.info("action=com_xml_to_mpp_done")
     except Exception as exc:
-        logger.error("action=xml_to_mpp_failed error=%s", exc)
+        logger.error("action=com_xml_to_mpp_failed error=%s", exc)
         raise
 
 
-def find_latest_mpp(directory: str) -> Path | None:
-    """Return the single .mpp file in *directory*, or None if absent.
+# ---------------------------------------------------------------------------
+# MPXJ backend
+# ---------------------------------------------------------------------------
 
-    The master folder is maintained with exactly one .mpp at a time
-    (the latest cycle's output).  This helper returns it regardless of
-    its timestamped name.
-    """
-    d = Path(directory)
-    if not d.is_dir():
-        return None
-    mpps = sorted(d.glob("*.mpp"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return mpps[0] if mpps else None
+def _mpxj_mpp_to_xml(mpp_abs: str, xml_abs: str) -> None:
+    """Read .mpp via MPXJ and write MSPDI XML."""
+    import jpype
+    _ensure_jvm()
+    logger.info("action=mpxj_mpp_to_xml src=%s dst=%s", mpp_abs, xml_abs)
+    reader = jpype.JClass("org.mpxj.reader.UniversalProjectReader")()
+    proj = reader.read(mpp_abs)
+    writer = jpype.JClass("org.mpxj.mspdi.MSPDIWriter")()
+    writer.write(proj, xml_abs)
+    logger.info("action=mpxj_mpp_to_xml_done tasks=%d", proj.getTasks().size())
+
+
+def _mpxj_xml_to_xml(xml_src: str, xml_dst: str) -> None:
+    """Round-trip MSPDI XML through MPXJ (normalises the file)."""
+    import jpype
+    _ensure_jvm()
+    logger.info("action=mpxj_xml_to_xml src=%s dst=%s", xml_src, xml_dst)
+    reader = jpype.JClass("org.mpxj.reader.UniversalProjectReader")()
+    proj = reader.read(xml_src)
+    writer = jpype.JClass("org.mpxj.mspdi.MSPDIWriter")()
+    writer.write(proj, xml_dst)
+    logger.info("action=mpxj_xml_to_xml_done tasks=%d", proj.getTasks().size())
