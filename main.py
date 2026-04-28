@@ -117,8 +117,9 @@ def _run_demo() -> None:
 
 def _run_trigger(ims_path: str) -> None:
     from agent.cycle_runner import CycleRunner
-    print("Triggering one full cycle...")
-    runner = CycleRunner(ims_path=ims_path)
+    mode = os.getenv("CALL_TRANSPORT", "simulated")
+    print(f"Triggering one full cycle...  (mode={mode})")
+    runner = CycleRunner(ims_path=ims_path, mode=mode)
     status = runner.run()
     print(f"\nCycle complete — health: {status['schedule_health']}")
     print(f"Report: {status['report_path']}")
