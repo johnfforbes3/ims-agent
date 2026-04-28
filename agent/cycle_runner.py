@@ -318,7 +318,7 @@ class CycleRunner:
 
         if self._mode == "teams_chat":
             all_cam_inputs, completion_report = self._run_teams_chat_interviews(
-                tasks, directory, cycle_id
+                tasks, directory, cycle_id, status=status
             )
         else:
             from agent.voice.cam_simulator import build_atlas_personas
@@ -489,6 +489,7 @@ class CycleRunner:
         tasks: list[dict],
         directory: Any,
         cycle_id: str,
+        status: dict | None = None,
     ) -> tuple[list[dict], dict]:
         """
         Proactively start a Teams Chat interview for every CAM that has a
@@ -561,44 +562,89 @@ class CycleRunner:
                 "action=teams_chat_fallback cam=%s reason=no_stored_session", cam_name
             )
 
-        # Wait for all proactive sessions to complete
+        # ── Initialise live-status tracking ───────────────────────────
+        # cam_status_live is written to the dashboard state after each
+        # session completes so the UI shows per-CAM progress in real time.
+        cam_live: dict[str, str] = {}
+        for s in sessions_started:
+            cam_live[s.cam_name] = "pending"
+        for cname in cams_no_session:
+            cam_live[cname] = "pending"
+
+        if status is not None:
+            status["cam_status_live"] = cam_live
+            self._write_phase(status)
+
+        # ── Wait for proactive Teams sessions to complete ─────────────
         all_cam_inputs: list[dict] = []
-        responded = 0
+        # Use a set of CAM names to guarantee no double-counting even if
+        # a CAM appears in both the Teams and simulator paths by mistake.
+        responded_set: set[str] = set()
 
         for session in sessions_started:
             completed = session.done.wait(timeout=_TEAMS_INTERVIEW_TIMEOUT)
             if completed:
                 inputs = session.get_cam_inputs()
                 all_cam_inputs.extend(inputs)
-                responded += 1
+                responded_set.add(session.cam_name)
+                cam_live[session.cam_name] = "complete"
                 directory.record_attempt(session.cam_name, "completed")
                 logger.info("action=teams_session_complete cam=%s inputs=%d", session.cam_name, len(inputs))
             else:
+                cam_live[session.cam_name] = "no_answer"
                 directory.record_attempt(session.cam_name, "no_answer")
                 logger.warning(
                     "action=teams_interview_timeout cam=%s timeout_sec=%d",
                     session.cam_name, _TEAMS_INTERVIEW_TIMEOUT,
                 )
 
-        # Simulator fallback for CAMs without stored sessions
+            # Update dashboard after each session so the UI reflects progress
+            if status is not None:
+                status["cams_responded"] = len(responded_set)
+                status["cam_status_live"] = dict(cam_live)
+                self._write_phase(status)
+
+        # ── Simulator fallback for CAMs without stored sessions ────────
         if cams_no_session:
             personas = build_atlas_personas(tasks)
             fallback_directory = directory.__class__()
-            # Build a filtered directory with only the fallback CAMs
             fallback_directory.load_from_ims(tasks)
-            # Filter to only the cams that need simulator
             from agent.interview_orchestrator import InterviewOrchestrator
             orchestrator = InterviewOrchestrator(fallback_directory, personas, parallel=False)
-            sim_inputs, sim_report = orchestrator.run(tasks)
-            # Filter to only the fallback CAM inputs
+            sim_inputs, _sim_report = orchestrator.run(tasks)
+            # Keep only inputs for the CAMs that actually needed the fallback
             fallback_inputs = [
                 inp for inp in sim_inputs
                 if inp.get("cam_name") in cams_no_session
             ]
             all_cam_inputs.extend(fallback_inputs)
-            responded += len(set(inp.get("cam_name") for inp in fallback_inputs))
+            for inp in fallback_inputs:
+                cname = inp.get("cam_name") or ""
+                if cname:
+                    responded_set.add(cname)
+                    cam_live[cname] = "complete"
 
-        total_cams = len(directory.get_all_cams())
+            if status is not None:
+                status["cams_responded"] = len(responded_set)
+                status["cam_status_live"] = dict(cam_live)
+                self._write_phase(status)
+
+        # ── Build completion report ───────────────────────────────────
+        # total_cams = active CAMs only (those with at least one incomplete task)
+        # so "responded" is never greater than "total".
+        active_cam_names: set[str] = set()
+        for cam_record in directory.get_all_cams():
+            cname = cam_record.name if hasattr(cam_record, "name") else cam_record.get("name", "")
+            has_tasks = any(
+                t.get("cam") == cname and not t.get("is_milestone") and t.get("percent_complete", 0) < 100
+                for t in tasks
+            )
+            if has_tasks:
+                active_cam_names.add(cname)
+
+        total_cams = len(active_cam_names) if active_cam_names else len(directory.get_all_cams())
+        # Clamp responded to [0, total_cams] to prevent display artefacts
+        responded = min(len(responded_set), total_cams)
         threshold_met = (responded / total_cams) >= _COMPLETION_THRESHOLD if total_cams else False
 
         completion_report = {

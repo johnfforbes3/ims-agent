@@ -44,6 +44,10 @@ _BF_TOKEN_AUTHORITY = "https://login.microsoftonline.com/ac1eafc0-ad8c-4b29-b615
 _BF_SCOPE = "https://api.botframework.com/.default"
 _CAM_SESSIONS_FILE = Path(os.getenv("DATA_DIR", "data")) / "cam_sessions.json"
 
+# Seconds to keep a completed session alive after the interview finishes
+# so the CAM's final wrap-up messages are received and acknowledged gracefully.
+_GRACE_SECONDS = int(os.getenv("INTERVIEW_GRACE_SECONDS", "45"))
+
 
 # ---------------------------------------------------------------------------
 # Bot Framework token helper
@@ -254,6 +258,8 @@ class ChatInterviewSession:
         self.service_url: str = ""
         self.conversation_id: str = ""
         self.user_id: str = ""
+        # Tracks when the interview completed (for grace-period window)
+        self._completed_at: float | None = None
 
     def start(self) -> str:
         """Return the opening greeting text."""
@@ -266,8 +272,35 @@ class ChatInterviewSession:
         from agent.voice.interview_agent import InterviewState
         turn = self.agent.process(utterance)
         if self.agent.state in (InterviewState.COMPLETE, InterviewState.ABORTED):
+            if self._completed_at is None:
+                self._completed_at = time.monotonic()
             self.done.set()
         return turn.text if turn.text else None
+
+    def is_in_grace_period(self) -> bool:
+        """True if the interview is done but still within the post-completion grace window.
+
+        During this window the CAM may send a final wrap-up message.  We accept
+        and acknowledge it rather than dropping it silently.
+        """
+        if not self.is_done or self._completed_at is None:
+            return False
+        return (time.monotonic() - self._completed_at) < _GRACE_SECONDS
+
+    def accept_final_message(self, utterance: str) -> str:
+        """Accept a post-completion message from the CAM and return an acknowledgment.
+
+        Called when the session is done but still within the grace period.
+        The message is logged so it's available for review.
+        """
+        logger.info(
+            "action=grace_period_message cam=%s text=%r",
+            self.cam_name, utterance[:120],
+        )
+        return (
+            "Thank you for that additional detail — I've noted it for the report. "
+            "Your status update is complete, and I appreciate you taking the time!"
+        )
 
     def get_cam_inputs(self) -> list[dict]:
         """

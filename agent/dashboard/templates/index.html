@@ -226,15 +226,15 @@
       <h2>CAM Response Status</h2>
       {% set cam_status = state.get('cam_response_status', {}) %}
       {% if cam_status %}
-      <table>
+      <table id="cam-status-table">
         <thead>
           <tr><th>CAM</th><th>Status</th><th>Attempts</th><th>Last Outcome</th></tr>
         </thead>
         <tbody>
         {% for cam, info in cam_status.items() %}
-          <tr>
+          <tr data-cam="{{ cam }}">
             <td>{{ cam }}</td>
-            <td>
+            <td class="cam-status-cell">
               {% if info.responded %}
                 <span class="dot dot-ok"></span>Responded
               {% else %}
@@ -388,30 +388,59 @@
 <script>
   // ── Unified polling & live countdown ─────────────────────────────────────
   // When a cycle is idle:  poll every 60 s, full-page reload each time.
-  // When a cycle is active: poll every 5 s, update the Cycle In Progress card
+  // When a cycle is active: poll every 5 s, update progress card + CAM table
   //   in-place via AJAX; only do a full reload when the cycle finishes.
   const countdownEl = document.getElementById('countdown');
-  let _nextPollAt  = Date.now();   // epoch ms of next scheduled poll
-  let _pollMs      = 60000;        // 60 s idle, 5 s active
-  let _wasActive   = false;
+  let _pollMs    = 60000;      // 60 s idle, 5 s active
+  let _nextPollAt = Date.now() + _pollMs;  // start countdown from now
+  let _wasActive  = false;
+  let _polling    = false;     // guard against concurrent polls
+
+  // Live CAM status label helpers
+  const _statusHtml = {
+    complete:  '<span class="dot dot-ok"></span>Responded',
+    no_answer: '<span class="dot dot-miss"></span>No Response',
+    pending:   '<span class="dot dot-pend"></span>Interviewing\u2026',
+  };
 
   function _updateCycleCard(state) {
     const cur   = state.current_cycle || {};
     const phase = (cur.phase || '').toLowerCase();
     const card  = document.getElementById('cycle-progress-card');
     if (!card) return;
+
     if (phase && phase !== 'complete' && phase !== 'failed') {
-      document.getElementById('cp-phase').textContent  = phase.toUpperCase();
-      document.getElementById('cp-cycle').textContent  = cur.cycle_id  || '—';
-      document.getElementById('cp-cams').textContent   =
+      document.getElementById('cp-phase').textContent = phase.toUpperCase();
+      document.getElementById('cp-cycle').textContent = cur.cycle_id || '—';
+      document.getElementById('cp-cams').textContent  =
         (cur.cams_responded || 0) + '/' + (cur.cams_total || 0);
       card.style.display = '';
+
+      // ── Live CAM status table ──────────────────────────────────────
+      // During the interviewing phase, cur.cam_status_live holds per-CAM
+      // progress written by cycle_runner after each session completes.
+      const camLive = cur.cam_status_live;
+      if (camLive && typeof camLive === 'object') {
+        const table = document.getElementById('cam-status-table');
+        if (table) {
+          for (const row of table.tBodies[0].rows) {
+            const camName = row.dataset.cam || '';
+            if (!camName) continue;
+            const liveStatus = camLive[camName];
+            if (!liveStatus) continue;
+            const cell = row.querySelector('.cam-status-cell');
+            if (cell) cell.innerHTML = _statusHtml[liveStatus] || cell.innerHTML;
+          }
+        }
+      }
     } else {
       card.style.display = 'none';
     }
   }
 
   async function _poll() {
+    if (_polling) return;
+    _polling = true;
     try {
       const status = await fetch('/api/status').then(r => r.json());
       const active = !!status.cycle_active;
@@ -431,15 +460,17 @@
       }
     } catch (_) {
       _pollMs = 10000;   // network hiccup — back off briefly
+    } finally {
+      _polling = false;
     }
     _nextPollAt = Date.now() + _pollMs;
   }
 
   // Tick every second: update countdown badge and fire poll when due
-  setInterval(async () => {
+  setInterval(() => {
     const remaining = Math.max(0, Math.ceil((_nextPollAt - Date.now()) / 1000));
     if (countdownEl) countdownEl.textContent = remaining;
-    if (Date.now() >= _nextPollAt) await _poll();
+    if (!_polling && Date.now() >= _nextPollAt) _poll();
   }, 1000);
 
   _poll();  // immediate first poll on page load

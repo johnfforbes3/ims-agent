@@ -537,14 +537,31 @@ async def bot_messages(request: Request):
             _bf_reply(service_url, conversation_id, activity_id, greeting)
             logger.info("action=interview_started cam=%s user=%s", session.cam_name, user_id[:8])
         else:
-            # Subsequent messages — show typing indicator, process, reply
             _bf_typing(service_url, conversation_id)
-            next_msg = session.process(message_text)
-            if next_msg:
-                _bf_reply(service_url, conversation_id, activity_id, next_msg)
             if session.is_done:
-                manager.remove_session(user_id)
-                logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+                # Interview already finished — handle final wrap-up message gracefully
+                if session.is_in_grace_period():
+                    ack = session.accept_final_message(message_text)
+                    _bf_reply(service_url, conversation_id, activity_id, ack)
+                    logger.info("action=grace_reply_sent cam=%s", session.cam_name)
+                else:
+                    # Grace period expired — clean up and let the default "no interview" path
+                    # handle any further messages
+                    manager.remove_session(user_id)
+                    logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+                    _bf_reply(
+                        service_url, conversation_id, activity_id,
+                        "Hi! I'm the ATLAS Scheduler. No interview is currently scheduled. "
+                        "You'll receive a message when it's time for your status check.",
+                    )
+            else:
+                # Normal mid-interview message
+                next_msg = session.process(message_text)
+                if next_msg:
+                    _bf_reply(service_url, conversation_id, activity_id, next_msg)
+                if session.is_done:
+                    logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+                    # Keep session alive for grace period — do NOT remove yet
 
         return JSONResponse({"status": "ok"})
 
@@ -591,6 +608,19 @@ async def internal_cam_message(request: Request):
         if session.service_url and session.conversation_id:
             _bf_typing(session.service_url, session.conversation_id)
 
+        if session.is_done:
+            # Interview already finished — check grace period
+            if session.is_in_grace_period():
+                ack = session.accept_final_message(text)
+                if ack and session.service_url and session.conversation_id:
+                    _bf_send(session.service_url, session.conversation_id, ack)
+                logger.info("action=relay_grace_period_ack email=%s", email)
+            else:
+                # Grace window expired — remove stale session
+                manager.remove_session_by_email(email)
+                logger.info("action=relay_stale_session_removed email=%s", email)
+            return JSONResponse({"status": "ok"})
+
         next_msg = session.process(text)
 
         if next_msg and session.service_url and session.conversation_id:
@@ -598,8 +628,9 @@ async def internal_cam_message(request: Request):
             logger.info("action=relay_question_sent email=%s", email)
 
         if session.is_done:
-            manager.remove_session_by_email(email)
             logger.info("action=relay_interview_complete email=%s", email)
+            # Keep session alive for grace period; it will be cleaned up when
+            # the grace window expires on the next message or explicit removal.
 
         return JSONResponse({"status": "ok"})
 
