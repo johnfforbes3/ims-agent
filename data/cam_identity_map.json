@@ -24,10 +24,9 @@
     "responder_type": "graph"
   },
   "Eva Johnson": {
-    "email": "john@intelligenceexpanse.onmicrosoft.com",
-    "display_name": "John Forbes",
-    "auto_respond": false,
-    "responder_type": "human",
-    "note": "Real user — responds manually in Teams"
+    "email": "eva@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "Eva Johnson",
+    "auto_respond": true,
+    "responder_type": "graph"
   }
 }

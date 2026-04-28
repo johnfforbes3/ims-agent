@@ -233,9 +233,9 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 ### TD-024 — Eva Johnson has no Teams chat session; shows "not_contacted" on dashboard
 **File:** `data/cam_sessions.json`, `data/cam_identity_map.json`  
 **Severity:** Low  
-**Description:** Eva Johnson is registered as a CAM in `cam_identity_map.json` and appears in the CAM Response Status panel on the dashboard, but has no entry in `cam_sessions.json`. In `teams_chat` mode she falls back to the CAM simulator, which means her interview completes but is never surfaced as a real Teams conversation. The dashboard correctly shows `responded=False, outcome=not_contacted` for her because `record_attempt()` is never called on the fallback path for Teams mode.  
-**Why deferred:** Eva's M365 account exists in the tenant but she has not yet messaged the ATLAS Scheduler bot to generate a first-contact `conversation_id`.  
-**Suggested fix:** Have Eva send any message to the ATLAS Scheduler bot in Teams (or use the `--bootstrap-sessions` flow once implemented per TD-023). Then add her entry to `cam_sessions.json` and `auto_respond` her account in `cam_identity_map.json` the same way Alice/Bob/Carol/David are configured.
+**Status:** IN PROGRESS — 2026-04-28. `cam_identity_map.json` updated: Eva now has `email: eva@intelligenceexpanse.onmicrosoft.com`, `auto_respond: true`, `responder_type: graph`. M365 account creation + first-contact bootstrap still pending (see TODAY_ACTIONS.txt Action 5).  
+**Description:** Eva Johnson is registered as a CAM in `cam_identity_map.json` and appears in the CAM Response Status panel on the dashboard, but has no entry in `cam_sessions.json`. In `teams_chat` mode she falls back to the CAM simulator. Resolution requires: (1) create eva@intelligenceexpanse.onmicrosoft.com in M365 Admin, (2) run cam-responder for Eva and complete device-code auth, (3) bootstrap first 1:1 Teams contact with the bot.  
+**Remaining fix:** See TODAY_ACTIONS.txt Action 5 for step-by-step instructions.
 
 ---
 

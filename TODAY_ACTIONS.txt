@@ -92,7 +92,83 @@ Steps:
 
 
 --------------------------------------------------------------------------------
-ACTION 5:  Execute the Full Test Procedure After Quick Repair
+ACTION 5:  Create Eva Johnson M365 Account and Bootstrap Teams Session
+--------------------------------------------------------------------------------
+Eva Johnson needs a real M365 account in the tenant so the cam-responder can
+authenticate as her and auto-reply to the ATLAS bot — exactly like Alice, Bob,
+Carol, and David.  cam_identity_map.json has already been updated with
+eva@intelligenceexpanse.onmicrosoft.com and auto_respond=true.
+
+STEP 1 — Create the M365 account (Microsoft 365 Admin Center)
+  1. Go to https://admin.microsoft.com → Users → Active users → Add a user.
+  2. Fill in:
+       First name:        Eva
+       Last name:         Johnson
+       Display name:      Eva Johnson
+       Username:          eva   (domain: intelligenceexpanse.onmicrosoft.com)
+       Password:          set a strong password and note it down
+       Uncheck "Require this user to change their password when they first sign in"
+  3. Assign a license — Microsoft 365 Business Basic (same as the other CAMs).
+  4. Click "Add" / "Finish".  Eva is now eva@intelligenceexpanse.onmicrosoft.com.
+
+STEP 2 — Authenticate Eva with the cam-responder (device-code flow, one-time)
+  Open a terminal in the project folder:
+    cd "C:\Users\forbe\OneDrive\Documents\AI Projects\04 - IMS AGENT\ims-agent"
+
+  Start the dashboard server in one terminal (needed to capture first contact):
+    python main.py --serve
+
+  In a second terminal, run the responder for Eva only:
+    python main.py --cam-responder --cam "Eva Johnson"
+
+  The terminal will print a device-code URL and a short code, e.g.:
+    To sign in, use a web browser to open https://microsoft.com/devicelogin
+    and enter the code ABCDE1234
+
+  In a browser, go to https://microsoft.com/devicelogin, enter the code,
+  and sign in as eva@intelligenceexpanse.onmicrosoft.com with her password.
+  The cam-responder terminal will show "action=auth_success" when done.
+  Eva's token is now cached in data/cam_tokens/ for future runs.
+
+STEP 3 — Bootstrap Eva's first Teams contact with the ATLAS bot
+  After authenticating, Eva needs a 1:1 chat with the ATLAS bot to exist so
+  the cam-responder can find it.  Do ONE of the following:
+
+  Option A (easiest): Open Teams as Eva and send the bot a message:
+    - Sign into https://teams.microsoft.com as eva@intelligenceexpanse.onmicrosoft.com
+    - Search for "ATLAS Scheduler" (or the bot's display name) in the search bar
+    - Open the 1:1 chat and type anything (e.g. "hello")
+    - The /bot/messages endpoint on the running server captures the session
+    - data/cam_sessions.json is updated automatically with Eva's conversation_id
+
+  Option B: Use the bot's proactive message via --demo-chat:
+    - In a new terminal run:
+        python main.py --demo-chat --cam "Eva Johnson"
+    - This sends Eva a proactive greeting, creating the 1:1 chat
+    - cam_sessions.json is updated automatically once Eva replies
+
+STEP 4 — Verify Eva's session is saved
+  Command:
+    python -c "import json; s=json.load(open('data/cam_sessions.json')); print(s.get('eva@intelligenceexpanse.onmicrosoft.com','MISSING'))"
+  Expected:
+    {'user_id': '29:...', 'service_url': 'https://smba...', 'conversation_id': '19:...'}
+
+STEP 5 — Run the full 5-CAM trigger cycle
+  With the server running and all cam-responders active:
+    Terminal 1:  python main.py --serve
+    Terminal 2:  python main.py --cam-responder
+    Terminal 3:  python main.py --trigger  (or set CALL_TRANSPORT=teams_chat)
+
+  Expected in logs:
+    action=proactive_greeting_sent  (x5 — all five CAMs)
+    action=relay_interview_complete  (x5)
+    action=cycle_complete health=<RED|YELLOW|GREEN>
+
+  Dashboard (http://localhost:9000) should show all 5 CAMs as responded=true.
+
+
+--------------------------------------------------------------------------------
+ACTION 6:  Execute the Full Test Procedure After Quick Repair
 --------------------------------------------------------------------------------
 Once MS Project COM is restored (Action 1) and --init-mpp produces a true .mpp
 (Action 2), run the complete TEST_PROCEDURE.txt from top to bottom to certify
