@@ -69,3 +69,12 @@ azure-communication-callautomation>=1.3.0
 
 # Microsoft Authentication Library — needed by TeamsGraphConnector
 msal>=1.30.0
+
+# =============================================================================
+# Phase 5 Sprint 3 — MPP Source-of-Truth Workflow
+# =============================================================================
+
+# MS Project COM automation — convert .mpp ↔ MSPDI XML (Windows + MS Project required)
+# Enables the agent to open/save .mpp files so the program team's master schedule
+# is always an MS Project file with the update timestamp in the filename.
+pywin32>=306

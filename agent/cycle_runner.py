@@ -39,6 +39,7 @@ _DASHBOARD_STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.
 _CYCLE_HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
 _COMPLETION_THRESHOLD = float(os.getenv("INTERVIEW_COMPLETION_THRESHOLD", "0.80"))
 _IMS_EXPORTS_DIR = os.getenv("IMS_EXPORTS_DIR", "data/ims_exports")
+_IMS_MASTER_DIR = os.getenv("IMS_MASTER_DIR", "data/ims_master")
 _RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", "90"))
 # Teams chat interview timeout in seconds (default 90 min per CAM)
 _TEAMS_INTERVIEW_TIMEOUT = int(os.getenv("TEAMS_INTERVIEW_TIMEOUT_SEC", "5400"))
@@ -135,22 +136,63 @@ class CycleRunner:
     def is_active(cls) -> bool:
         return cls._active
 
-    @classmethod
     @staticmethod
     def _export_ims_snapshot(cycle_id: str, ims_path: str) -> str:
-        """Copy the updated IMS XML to data/ims_exports/ for MS Project viewing.
+        """Copy the updated IMS XML to ims_exports/ and produce a timestamped
+        .mpp in ims_master/ (the single source of truth for the program team).
 
-        Returns the path of the versioned copy.
+        Master folder always holds exactly ONE .mpp file whose name encodes
+        the update timestamp, e.g. ``IMS_2026-04-28_1014Z.mpp``.  The
+        previous file is deleted before the new one is written so the folder
+        is never ambiguous.
+
+        Returns the path of the versioned XML copy.
         """
+        from agent.mpp_converter import is_available, xml_to_mpp, find_latest_mpp
+
+        # ── XML exports (versioned + latest) ──────────────────────────
         exports_dir = Path(_IMS_EXPORTS_DIR)
         exports_dir.mkdir(parents=True, exist_ok=True)
         src = Path(ims_path)
-        versioned = exports_dir / f"{cycle_id}_ims.xml"
-        latest = exports_dir / "latest_ims.xml"
-        shutil.copy2(src, versioned)
-        shutil.copy2(src, latest)
-        logger.info("action=ims_exported cycle=%s path=%s", cycle_id, versioned)
-        return str(versioned)
+        versioned_xml = exports_dir / f"{cycle_id}_ims.xml"
+        shutil.copy2(src, versioned_xml)
+        shutil.copy2(src, exports_dir / "latest_ims.xml")
+        logger.info("action=ims_xml_exported cycle=%s path=%s", cycle_id, versioned_xml)
+
+        # ── MPP master (timestamped, replaces previous) ────────────────
+        master_dir = Path(_IMS_MASTER_DIR)
+        master_dir.mkdir(parents=True, exist_ok=True)
+
+        if is_available():
+            # Human-readable timestamp: IMS_2026-04-28_1014Z.mpp
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%Mz")
+            new_mpp = master_dir / f"IMS_{ts}.mpp"
+
+            # Also write a versioned .mpp copy to exports alongside the XML
+            versioned_mpp = exports_dir / f"{cycle_id}_ims.mpp"
+
+            try:
+                xml_to_mpp(str(src), str(new_mpp))
+                shutil.copy2(new_mpp, versioned_mpp)
+                shutil.copy2(new_mpp, exports_dir / "latest_ims.mpp")
+                logger.info("action=mpp_exported cycle=%s master=%s", cycle_id, new_mpp)
+
+                # Remove the old master .mpp (keep folder unambiguous)
+                for old in master_dir.glob("*.mpp"):
+                    if old != new_mpp:
+                        try:
+                            old.unlink()
+                            logger.info("action=mpp_old_removed path=%s", old)
+                        except OSError as exc:
+                            logger.warning("action=mpp_remove_failed path=%s error=%s", old, exc)
+            except Exception as exc:
+                logger.error("action=mpp_export_failed cycle=%s error=%s", cycle_id, exc)
+        else:
+            logger.warning(
+                "action=mpp_skip reason=ms_project_unavailable cycle=%s — XML only", cycle_id
+            )
+
+        return str(versioned_xml)
 
     @classmethod
     def apply_approved(cls, cycle_id: str, approver: str = "dashboard") -> dict[str, Any]:
@@ -230,6 +272,23 @@ class CycleRunner:
         from agent.schedule_health import compute_health
 
         # ── 1. Parse IMS ──────────────────────────────────────────────
+        # If a .mpp master exists, convert it to the working XML first so
+        # the agent always operates from the program team's authoritative file.
+        from agent.mpp_converter import is_available as mpp_ok, mpp_to_xml, find_latest_mpp
+        master_mpp = find_latest_mpp(_IMS_MASTER_DIR)
+        if master_mpp and mpp_ok():
+            try:
+                mpp_to_xml(str(master_mpp), self._ims_path)
+                logger.info(
+                    "action=mpp_ingested cycle=%s src=%s dst=%s",
+                    cycle_id, master_mpp.name, self._ims_path,
+                )
+            except Exception as exc:
+                logger.error(
+                    "action=mpp_ingest_failed cycle=%s error=%s — falling back to existing XML",
+                    cycle_id, exc,
+                )
+
         handler = IMSFileHandler(self._ims_path)
         tasks = handler.parse()
         logger.info("action=ims_parsed cycle=%s tasks=%d", cycle_id, len(tasks))
@@ -639,6 +698,7 @@ class CycleRunner:
             "validation_holds": status.get("validation_holds", []),
             "validation_warnings": status.get("validation_warnings", []),
             "approval_required": status.get("approval_required", False),
+            "ims_master_dir": str(Path(_IMS_MASTER_DIR).resolve()),
             "ims_exports_dir": str(Path(_IMS_EXPORTS_DIR).resolve()),
             "latest_ims_path": str((Path(_IMS_EXPORTS_DIR) / "latest_ims.xml").resolve()),
         }

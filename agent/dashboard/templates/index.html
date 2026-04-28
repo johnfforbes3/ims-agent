@@ -147,9 +147,9 @@
       </div>
     </div>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-      {% if state.get('latest_ims_path') %}
-      <span style="font-size:0.78rem;opacity:0.8">
-        IMS: <code style="user-select:all">{{ state.get('ims_exports_dir','') }}</code>
+      {% if state.get('ims_master_dir') %}
+      <span style="font-size:0.78rem;opacity:0.8" title="Open this folder in Explorer to find the latest .mpp">
+        Master IMS: <code style="user-select:all">{{ state.get('ims_master_dir','') }}</code>
       </span>
       {% endif %}
       <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">

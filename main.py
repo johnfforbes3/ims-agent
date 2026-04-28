@@ -209,6 +209,30 @@ def _run_demo_interview(
         server_thread.join(timeout=5)
 
 
+def _run_init_mpp(ims_path: str) -> None:
+    """One-time seed: convert the working XML → a timestamped .mpp in data/ims_master/."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from agent.mpp_converter import is_available, xml_to_mpp
+
+    from agent.mpp_converter import diagnose
+    status = diagnose()
+    if not is_available():
+        print(f"\nERROR: MS Project COM automation is not working.\n\n{status}\n")
+        sys.exit(1)
+
+    master_dir = Path(os.getenv("IMS_MASTER_DIR", "data/ims_master"))
+    master_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%Mz")
+    out = master_dir / f"IMS_{ts}.mpp"
+
+    print(f"Converting {ims_path} → {out} ...")
+    xml_to_mpp(ims_path, str(out))
+    print(f"Done.  Master IMS folder: {master_dir.resolve()}")
+    print(f"File:                     {out.name}")
+
+
 def _run_demo_chat(
     cam_name: str,
     ims_path: str,
@@ -280,6 +304,9 @@ def main() -> None:
                        help="Tier 3: conduct a CAM status interview via Teams chat messages")
     group.add_argument("--cam-responder", action="store_true",
                        help="Start Graph API auto-responders for all configured fake CAM accounts")
+    group.add_argument("--init-mpp", action="store_true",
+                       help="One-time: convert data/sample_ims.xml → data/ims_master/ as a "
+                            "timestamped .mpp to seed the master IMS folder")
 
     # --demo-interview arguments
     parser.add_argument("--meeting-url", default="",
@@ -326,6 +353,8 @@ def main() -> None:
             ims_path=ims_path,
             cam_email=args.cam_email,
         )
+    elif args.init_mpp:
+        _run_init_mpp(ims_path)
     elif args.cam_responder:
         from agent.graph_cam_responder import run_cam_responder
         import sys

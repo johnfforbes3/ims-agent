@@ -219,6 +219,26 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
+### TD-025 — MS Project COM automation blocked by Click-to-Run AppV isolation
+**File:** `agent/mpp_converter.py`
+**Severity:** Medium
+**Description:** M365 Click-to-Run (C2R) installations virtualise Office executables inside an AppV container. `win32com.client.Dispatch("MSProject.Application")` raises `CO_E_SERVER_EXEC_FAILURE (0x80080005)` because the COM activation goes through the C2R bootstrap layer, which doesn't allow COM calls from external processes. `GetActiveObject` also fails because the running WINPROJ.EXE process doesn't register itself in the Windows ROT when launched outside the C2R container. `/regserver` does not fix it. The agent falls back gracefully to XML-only mode; `.mpp` files are not written until this is resolved.
+**Why deferred:** Requires a one-time user action to fix.
+**Fix options (either one resolves it):**
+1. **Quick Repair (5 min):** Settings → Apps → Microsoft 365 → ⋯ → Modify → Quick Repair. Rewrites the C2R COM activation infrastructure.
+2. **MPXJ backend (no MS Project COM needed):** Install OpenJDK 21 (https://adoptium.net/) then `pip install mpxj`. Update `mpp_converter.py` to add an MPXJ code path alongside the COM path.
+
+---
+
+### TD-024 — Eva Johnson has no Teams chat session; shows "not_contacted" on dashboard
+**File:** `data/cam_sessions.json`, `data/cam_identity_map.json`  
+**Severity:** Low  
+**Description:** Eva Johnson is registered as a CAM in `cam_identity_map.json` and appears in the CAM Response Status panel on the dashboard, but has no entry in `cam_sessions.json`. In `teams_chat` mode she falls back to the CAM simulator, which means her interview completes but is never surfaced as a real Teams conversation. The dashboard correctly shows `responded=False, outcome=not_contacted` for her because `record_attempt()` is never called on the fallback path for Teams mode.  
+**Why deferred:** Eva's M365 account exists in the tenant but she has not yet messaged the ATLAS Scheduler bot to generate a first-contact `conversation_id`.  
+**Suggested fix:** Have Eva send any message to the ATLAS Scheduler bot in Teams (or use the `--bootstrap-sessions` flow once implemented per TD-023). Then add her entry to `cam_sessions.json` and `auto_respond` her account in `cam_identity_map.json` the same way Alice/Bob/Carol/David are configured.
+
+---
+
 ### TD-023 — Bootstrap first-contact required before Teams chat mode works for new CAMs
 **File:** `data/cam_sessions.json`, `agent/voice/teams_chat_connector.py`  
 **Severity:** Medium  
