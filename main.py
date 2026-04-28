@@ -278,6 +278,8 @@ def main() -> None:
                        help="Tier 3: join a Teams meeting and run a live voice interview")
     group.add_argument("--demo-chat", action="store_true",
                        help="Tier 3: conduct a CAM status interview via Teams chat messages")
+    group.add_argument("--cam-responder", action="store_true",
+                       help="Start Graph API auto-responders for all configured fake CAM accounts")
 
     # --demo-interview arguments
     parser.add_argument("--meeting-url", default="",
@@ -324,6 +326,9 @@ def main() -> None:
             ims_path=ims_path,
             cam_email=args.cam_email,
         )
+    elif args.cam_responder:
+        from agent.graph_cam_responder import run_cam_responder
+        run_cam_responder(cam_filter=args.cam, ims_path=ims_path)
     else:
         if not Path(ims_path).exists():
             print(f"\nERROR: IMS file not found: {ims_path}")

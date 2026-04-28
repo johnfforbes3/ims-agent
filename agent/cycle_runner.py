@@ -426,9 +426,10 @@ class CycleRunner:
         sessions_started: list[ChatInterviewSession] = []
         cams_no_session: list[str] = []
 
+        from agent.cam_identity import get_cam_email
         for cam_record in directory.get_all_cams():
             cam_name = cam_record.get("name", "")
-            cam_email = cam_record.get("email", "").lower()
+            cam_email = get_cam_email(cam_name).lower()
             stored = cam_sessions.get(cam_email) or cam_sessions.get(cam_name.lower())
 
             cam_tasks = [

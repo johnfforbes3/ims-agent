@@ -36,6 +36,9 @@ reports/cycles/
 data/*.mpp
 data/*.mpp.bak
 
+# CAM delegated auth token caches — contain serialized MSAL tokens
+data/cam_tokens/
+
 # OS
 .DS_Store
 Thumbs.db

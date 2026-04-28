@@ -73,6 +73,23 @@ Variables marked **Required** have no safe default and the agent will not start 
 
 ---
 
+## Graph CAM Responder (Tier 4 — Delegated Auth)
+
+Runs auto-responding simulated CAM accounts via Microsoft Graph API. Requires M365 accounts and one-time Azure portal setup (see `agent/graph_cam_responder.py` header).
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `AZURE_TENANT_ID` | — | **Yes** for cam-responder | Tenant ID for the M365 tenant hosting the fake CAM accounts (e.g., `intelligenceexpanse.onmicrosoft.com`). Used by MSAL device code flow. |
+| `AZURE_CLIENT_ID` | — | No (falls back to `TEAMS_BOT_APP_ID`) | App Registration client ID. If unset, `TEAMS_BOT_APP_ID` is used. Must have `Chat.ReadWrite` delegated permission and public client flows enabled. |
+| `CAM_RESPONDER_POLL_SEC` | `5` | No | Seconds between Graph API message-poll ticks for each responder account. |
+| `CAM_RESPONDER_DELAY_SEC` | `2.0` | No | Simulated human typing delay (seconds) before posting each CAM response. |
+
+> **One-time Azure portal steps:** App Registration → API permissions → add `Chat.ReadWrite` (Delegated) → Grant admin consent. App Registration → Authentication → enable "Allow public client flows" → add redirect URI `https://login.microsoftonline.com/common/oauth2/nativeclient`.
+
+> **Token cache:** MSAL tokens are cached in `data/cam_tokens/` (excluded from git). Each account authenticates once via device code flow; subsequent runs use the cached refresh token silently.
+
+---
+
 ## Teams / ACS Integration (Tier 3 — Voice)
 
 | Variable | Default | Required | Description |

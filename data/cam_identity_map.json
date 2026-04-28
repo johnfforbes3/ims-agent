@@ -1,0 +1,33 @@
+{
+  "Alice Nguyen": {
+    "email": "alice@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "Alice Nguyen",
+    "auto_respond": true,
+    "responder_type": "graph"
+  },
+  "Bob Martinez": {
+    "email": "bob@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "Bob Martinez",
+    "auto_respond": true,
+    "responder_type": "graph"
+  },
+  "Carol Smith": {
+    "email": "carol@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "Carol Smith",
+    "auto_respond": true,
+    "responder_type": "graph"
+  },
+  "David Lee": {
+    "email": "david@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "David Lee",
+    "auto_respond": true,
+    "responder_type": "graph"
+  },
+  "Eva Johnson": {
+    "email": "john@intelligenceexpanse.onmicrosoft.com",
+    "display_name": "John Forbes",
+    "auto_respond": false,
+    "responder_type": "human",
+    "note": "Real user — responds manually in Teams"
+  }
+}
