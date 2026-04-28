@@ -1,0 +1,1237 @@
+================================================================================
+  IMS AGENT — COMPREHENSIVE TEST PROCEDURE
+  Version: Phase 5 / Sprint 3
+  Last updated: 2026-04-28
+================================================================================
+
+INSTRUCTIONS
+------------
+Work through each section in order on a clean environment.
+Mark each step:  PASS | FAIL | SKIP (with reason)
+Record actual output in the RESULT field.
+Testers should sign and date the bottom of each section when complete.
+
+LEGEND
+  [P]  = PASS      [F]  = FAIL      [S]  = SKIP
+  Step boxes: [ ] = not started    [x] = complete
+
+================================================================================
+  SECTION 0: PREREQUISITES & ENVIRONMENT SETUP
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+0.1  Python environment
+     Verify Python 3.11+ is installed and the venv is active.
+
+     Command:   python --version
+     Expected:  Python 3.11.x or higher
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.2  Dependencies installed
+     Command:   pip install -r requirements.txt
+     Expected:  All packages install without error
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.3  .env file present and populated
+     Verify .env exists and contains at minimum:
+       ANTHROPIC_API_KEY    — valid Anthropic key
+       IMS_FILE_PATH        — data/sample_ims.xml  (or path to real IMS)
+       REPORTS_DIR          — reports
+       LOGS_DIR             — logs
+     Command:   python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(os.getenv('ANTHROPIC_API_KEY','MISSING')[:8])"
+     Expected:  First 8 chars of key (not MISSING)
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.4  IMS file present
+     Command:   python -c "from pathlib import Path; print(Path('data/sample_ims.xml').exists())"
+     Expected:  True
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.5  Logs and reports directories created
+     Command:   python -c "import os; os.makedirs('logs',exist_ok=True); os.makedirs('reports',exist_ok=True); print('OK')"
+     Expected:  OK
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.6  MPXJ / JVM backend available
+     Command:   python -c "from agent.mpp_converter import is_mpxj_available, diagnose; print(is_mpxj_available()); print(diagnose())"
+     Expected:  True  (and diagnose shows "MPXJ: OK")
+     Result:    _____________________________________________  [ ] P [ ] F
+
+0.7  COM backend status (document current state — may be BLOCKED)
+     Command:   python -c "from agent.mpp_converter import is_com_available, diagnose; print(is_com_available()); print(diagnose())"
+     Expected:  True (if Quick Repair done) OR documented as BLOCKED
+     COM OK?    [ ] YES  [ ] BLOCKED (Quick Repair required — see TODAY_ACTIONS.txt)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 0 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 1: UNIT TEST SUITE
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Run the automated pytest suite.  All tests must pass before proceeding.
+
+1.1  Full test suite
+     Command:   pytest tests/ -v --tb=short 2>&1 | head -80
+     Expected:  All tests PASSED, 0 errors
+     Tests run: ___________  Passed: ___________  Failed: ___________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.2  Coverage report (optional but recommended)
+     Command:   pytest tests/ --cov=agent --cov-report=term-missing 2>&1 | tail -20
+     Expected:  Coverage >= 70%
+     Coverage:  ___________  %
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+SPECIFIC TEST FILES — confirm each passes individually if suite shows failures:
+
+1.3  test_file_handler.py
+     Command:   pytest tests/test_file_handler.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.4  test_critical_path.py
+     Command:   pytest tests/test_critical_path.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.5  test_sra_runner.py
+     Command:   pytest tests/test_sra_runner.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.6  test_validation.py
+     Command:   pytest tests/test_validation.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.7  test_cam_input.py
+     Command:   pytest tests/test_cam_input.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.8  test_cam_directory.py
+     Command:   pytest tests/test_cam_directory.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.9  test_report_generator.py
+     Command:   pytest tests/test_report_generator.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.10 test_scheduler.py
+     Command:   pytest tests/test_scheduler.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.11 test_qa_engine.py
+     Command:   pytest tests/test_qa_engine.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.12 test_cycle_runner.py
+     Command:   pytest tests/test_cycle_runner.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.13 test_phase5.py
+     Command:   pytest tests/test_phase5.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.14 test_interview_agent.py
+     Command:   pytest tests/test_interview_agent.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.15 test_ims_tools.py
+     Command:   pytest tests/test_ims_tools.py -v
+     Result:    _____________________________________________  [ ] P [ ] F
+
+1.16 test_tts_engine.py
+     Command:   pytest tests/test_tts_engine.py -v
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no ELEVENLABS_API_KEY)
+
+1.17 test_stt_engine.py
+     Command:   pytest tests/test_stt_engine.py -v
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no audio input)
+
+
+SECTION 1 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 2: PHASE 1 — CORE ANALYSIS PIPELINE
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the standalone analysis pipeline: IMS parsing → CAM input → CPM → SRA →
+LLM synthesis → report generation.
+
+2.1  Phase 1 default run
+     Command:   python main.py --ims-file data/sample_ims.xml
+     Expected:  "Report saved to: reports/..."  No unhandled exceptions
+     Report path observed: _____________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.2  Report file created
+     Verify the report file exists at the path printed in 2.1.
+     Expected:  File exists, non-zero size
+     File size: ____________ bytes
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.3  IMS parsing — task count
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+ms = [t for t in tasks if t.get('is_milestone')]
+print(f'tasks={len(tasks)} milestones={len(ms)}')"
+     Expected:  tasks=58  (or actual IMS count)  milestones >= 1
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.4  Critical path calculation
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.critical_path import calculate_critical_path
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+cp = calculate_critical_path(tasks)
+print('cp tasks:', len(cp.get('critical_path',[])), 'total_float:', cp.get('project_float_days'))"
+     Expected:  critical_path length > 0, project_float_days is numeric
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.5  SRA Monte Carlo
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.sra_runner import SRARunner
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+results = SRARunner(tasks, seed=42).run()
+print(f'milestones={len(results)}')
+if results: print('first:', results[0]['milestone_name'], results[0]['risk_level'])"
+     Expected:  milestones > 0, risk_level in (LOW, MEDIUM, HIGH)
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.6  Deterministic schedule health
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.critical_path import calculate_critical_path
+from agent.sra_runner import SRARunner
+from agent.schedule_health import compute_health
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+cp = calculate_critical_path(tasks)
+sra = SRARunner(tasks, seed=42).run()
+health, rationale = compute_health(sra, cp, tasks)
+print(f'health={health}')
+print(f'rationale={rationale}')"
+     Expected:  health in (RED, YELLOW, GREEN), rationale is non-empty string
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.7  LLM synthesis (requires ANTHROPIC_API_KEY)
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.critical_path import calculate_critical_path
+from agent.sra_runner import SRARunner
+from agent.schedule_health import compute_health
+from agent.llm_interface import LLMInterface
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+cp = calculate_critical_path(tasks)
+sra = SRARunner(tasks, seed=42).run()
+h, r = compute_health(sra, cp, tasks)
+s = LLMInterface().synthesize(tasks, cp, sra, [], schedule_health=h, health_rationale=r)
+print('keys:', list(s.keys()))
+print('narrative[:100]:', s.get('narrative','')[:100])"
+     Expected:  keys include narrative, top_risks, recommended_actions; narrative non-empty
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+2.8  Log file written
+     Command:   python -c "from pathlib import Path; p=Path('logs/ims_agent.log'); print(p.exists(), p.stat().st_size if p.exists() else 0)"
+     Expected:  True  <size > 0>
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+
+SECTION 2 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 3: PHASE 2 — SIMULATED INTERVIEW LAYER
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests CAM simulator (LLM-backed personas), interview orchestrator, and the
+Phase 2 demo mode.  No real Teams or voice infrastructure required.
+
+3.1  CAM simulator personas
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.voice.cam_simulator import build_atlas_personas
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+personas = build_atlas_personas(tasks)
+print('personas:', len(personas), list(personas.keys())[:3])"
+     Expected:  At least 1 persona, keys are CAM names
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+3.2  Interview orchestrator — simulated cycle
+     Command:   python -c "
+from agent.file_handler import IMSFileHandler
+from agent.cam_directory import CAMDirectory
+from agent.voice.cam_simulator import build_atlas_personas
+from agent.interview_orchestrator import InterviewOrchestrator
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+directory = CAMDirectory()
+directory.load_from_ims(tasks)
+personas = build_atlas_personas(tasks)
+orch = InterviewOrchestrator(directory, personas, parallel=False)
+inputs, report = orch.run(tasks)
+print(f'inputs={len(inputs)} responded={report[\"responded\"]}/{report[\"total\"]}')"
+     Expected:  inputs > 0, responded/total shows at least one CAM responded
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+3.3  Phase 2 demo mode
+     Command:   python main.py --demo  (runs run_phase2_demo.main())
+     Expected:  Demo completes without exception; simulated voice interview output printed
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+3.4  TTS engine — ElevenLabs (requires ELEVENLABS_API_KEY)
+     Command:   python -c "
+from agent.voice.tts_engine import TTSEngine
+e = TTSEngine()
+wav = e.synthesize('Test audio check.')
+print('wav bytes:', len(wav))"
+     Expected:  wav bytes > 1000  (valid audio data)
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no API key)
+
+3.5  Voice briefing generation (requires ELEVENLABS_API_KEY + VOICE_BRIEFING_ENABLED=true)
+     Command:   python -c "
+from agent.voice_briefing import generate_briefing
+path = generate_briefing({'narrative':'Test briefing.','top_risks':'Risk 1.','recommended_actions':'Action 1.'}, 'test_cycle')
+print('briefing path:', path)"
+     Expected:  path points to an .mp3 file in reports/briefings/
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 3 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 4: PHASE 3 — FULL AUTOMATION LOOP
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the complete production cycle path: CycleRunner, scheduler, validation
+gate, approval workflow, and dashboard.
+
+--- 4A: SINGLE CYCLE (--trigger) ---
+
+4.1  Manual cycle trigger
+     Command:   python main.py --trigger
+     Expected:  "Cycle complete — health: <RED|YELLOW|GREEN>"
+                No unhandled exceptions
+     Health observed: _____________________
+     Cycle ID:        _____________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.2  Dashboard state file written
+     Command:   python -c "import json; s=json.load(open('data/dashboard_state.json')); print('health:', s['schedule_health'], 'cycle:', s['cycle_id'])"
+     Expected:  health and cycle_id match what --trigger printed
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.3  Cycle history file written
+     Command:   python -c "import json; h=json.load(open('data/cycle_history.json')); print('entries:', len(h)); print('last:', h[-1]['cycle_id'])"
+     Expected:  entries >= 1, last entry matches trigger cycle
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.4  Cycle status JSON written
+     Command:   python -c "
+from pathlib import Path
+import json
+files = sorted(Path('reports/cycles').glob('*_status.json'), reverse=True)
+latest = json.loads(files[0].read_text())
+print('phase:', latest['phase'], 'health:', latest['schedule_health'])"
+     Expected:  phase = "complete", health = RED/YELLOW/GREEN
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.5  IMS snapshot written
+     Command:   python -c "
+from pathlib import Path
+snaps = sorted(Path('data/snapshots').glob('*.xml'), reverse=True)
+print('snapshots:', len(snaps), 'latest:', snaps[0].name if snaps else 'none')"
+     Expected:  At least 1 snapshot, named with the cycle ID
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.6  IMS exports written
+     Command:   python -c "
+from pathlib import Path
+exports = Path('data/ims_exports')
+print('versioned xml:', len(list(exports.glob('*_ims.xml'))))
+print('latest_ims.xml:', (exports/'latest_ims.xml').exists())"
+     Expected:  versioned xml >= 1, latest_ims.xml exists
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.7  Master file written to ims_master/
+     Command:   python -c "
+from pathlib import Path
+master = Path('data/ims_master')
+files = list(master.glob('*.mpp')) + list(master.glob('*.xml'))
+print('master files:', len(files))
+if files: print('name:', files[0].name)"
+     Expected:  Exactly 1 file; name format = IMS_YYYY-MM-DD_HHMMz.{mpp|xml}
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.8  Report generated
+     Command:   python -c "
+from pathlib import Path
+import json
+files = sorted(Path('reports/cycles').glob('*_status.json'), reverse=True)
+latest = json.loads(files[0].read_text())
+rp = Path(latest['report_path'])
+print('exists:', rp.exists(), 'size:', rp.stat().st_size if rp.exists() else 0)"
+     Expected:  exists=True, size > 0
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+4.9  Duplicate-run protection
+     Start a second trigger while one is running (open two terminals; fire quickly):
+     Terminal 1: python main.py --trigger
+     Terminal 2: python main.py --trigger  (within first 5 seconds)
+     Expected:  Terminal 2 prints RuntimeError: "A cycle is already running"
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+--- 4B: VALIDATION GATE & APPROVAL WORKFLOW ---
+
+4.10 Backwards movement triggers approval hold
+     Set VALIDATION_ALLOW_BACKWARDS=false in .env (should be default).
+     Manually create a modified IMS where one task has lower % than baseline,
+     then run a cycle in simulated mode.
+     Note: easiest is to set a task's percent_complete manually in the XML,
+     then run python main.py --trigger.
+     Expected:  Cycle completes with phase=awaiting_approval,
+                approval_required=true in dashboard state,
+                file appears in data/pending_approvals/
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+4.11 Approval API — list pending
+     (Requires a held cycle from 4.10 or a pending_approvals file)
+     Start server:  python main.py --serve  (in a separate terminal)
+     Command:   curl -s http://localhost:9000/api/approvals
+     Expected:  JSON array; at least one record with status=pending
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+4.12 Approve via dashboard API
+     Command:   curl -s -X POST http://localhost:9000/api/approvals/<cycle_id>/approve \
+                  -H "Content-Type: application/json" \
+                  -d '{"approver":"test_tester"}'
+     Expected:  {"status": "accepted", ...}
+                Post-approval cycle runs in background; report generated
+     Cycle ID tested: _______________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+4.13 Reject via dashboard API
+     Command:   curl -s -X POST http://localhost:9000/api/approvals/<cycle_id>/reject \
+                  -H "Content-Type: application/json" \
+                  -d '{"approver":"test_tester","reason":"Test rejection"}'
+     Expected:  {"status": "rejected", ...}
+                Record in pending_approvals shows status=rejected
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+--- 4C: SCHEDULER ---
+
+4.14 Scheduler starts and reports next run time
+     Command:   python main.py --schedule
+     (Run for 10 seconds then Ctrl+C)
+     Expected:  "Scheduler started — cron='0 6 * * 1' tz=America/New_York"
+                "Next cycle: <ISO datetime>"
+                "Dashboard: http://localhost:9000"
+     Actual next run: _______________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 4D: NOTIFICATIONS ---
+
+4.15 Slack notification (requires SLACK_WEBHOOK_URL in .env)
+     Run python main.py --trigger with SLACK_WEBHOOK_URL set.
+     Expected:  Log shows "action=slack_sent"
+                Slack workspace receives a formatted cycle summary message
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no webhook)
+
+4.16 Email notification (requires SMTP settings in .env)
+     Run python main.py --trigger with all EMAIL_* vars set.
+     Expected:  Log shows "action=email_sent"
+                Recipient mailbox receives HTML cycle summary email
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no SMTP)
+
+4.17 Approval-required Slack alert
+     Trigger a cycle that holds for approval (see 4.10).
+     Expected:  Slack receives a separate "IMS Write Held — Approval Required" message
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 4 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 5: DASHBOARD SERVER
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the FastAPI dashboard.  Run the server first:
+   python main.py --serve
+Server should be up at http://localhost:9000
+
+5.1  Dashboard HTML loads
+     Open http://localhost:9000 in a browser.
+     Expected:  IMS Agent dashboard page loads; shows schedule health, milestones,
+                CAM response status, master IMS folder path
+     Schedule health shown: ____________   Cycle ID: ____________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.2  Dashboard auto-refresh header
+     Inspect HTML source: confirm <meta http-equiv="refresh" content="60">
+     Expected:  Page refreshes every 60 seconds automatically
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.3  GET /health — unauthenticated
+     Command:   curl -s http://localhost:9000/health
+     Expected:  {"status":"healthy","uptime_seconds":...,"cycle_active":false,...}
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.4  GET /api/state — no key (auth disabled in dev)
+     Command:   curl -s http://localhost:9000/api/state
+     Expected:  Full dashboard state JSON (schedule_health, milestones, cam_response_status, etc.)
+     Contains ims_master_dir?  [ ] YES  [ ] NO
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.5  GET /api/history
+     Command:   curl -s http://localhost:9000/api/history
+     Expected:  JSON array; each entry has cycle_id, schedule_health, cams_responded
+     Entries: ____________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.6  GET /api/status
+     Command:   curl -s http://localhost:9000/api/status
+     Expected:  {"cycle_active": false}  (when no cycle is running)
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.7  POST /api/trigger — fire cycle via API
+     Command:   curl -s -X POST http://localhost:9000/api/trigger
+     Expected:  {"status":"triggered","message":"Cycle started in background"}
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.8  POST /api/trigger — duplicate rejection
+     Fire two triggers in quick succession; second should return HTTP 409.
+     Command:   curl -s -X POST http://localhost:9000/api/trigger && curl -s -X POST http://localhost:9000/api/trigger
+     Expected:  First: {"status":"triggered"...}   Second: 409 Conflict
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.9  GET /metrics
+     Command:   curl -s http://localhost:9000/metrics
+     Expected:  JSON with cycles_completed, cycles_failed, qa_queries_total, etc.
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.10 POST /api/admin/purge
+     Command:   curl -s -X POST http://localhost:9000/api/admin/purge
+     Expected:  {"status":"ok","deleted":{"cycle_status":...,"snapshots":...}}
+     Result:    _____________________________________________  [ ] P [ ] F
+
+5.11 Authentication enforcement (requires DASHBOARD_API_KEY set in .env)
+     Set DASHBOARD_API_KEY=testkey123 and restart server.
+     Command:   curl -s http://localhost:9000/api/state
+     Expected:  HTTP 401 — {"detail":"Invalid or missing API key"}
+     Command:   curl -s -H "X-API-Key: testkey123" http://localhost:9000/api/state
+     Expected:  State JSON returned
+     GET without key: _____________  GET with key: _____________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+5.12 Admin key enforcement (requires DASHBOARD_ADMIN_KEY set)
+     Set DASHBOARD_ADMIN_KEY=adminkey456 (different from API key).
+     Command:   curl -s -X POST -H "X-API-Key: testkey123" http://localhost:9000/api/trigger
+     Expected:  HTTP 401
+     Command:   curl -s -X POST -H "X-Admin-Key: adminkey456" http://localhost:9000/api/trigger
+     Expected:  {"status":"triggered"...}
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 5 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 6: PHASE 4 — Q&A INTERFACE
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the natural language Q&A engine.  Requires a completed cycle (run
+python main.py --trigger first to populate dashboard_state.json).
+
+--- 6A: REST API ---
+
+6.1  Q&A direct answer — schedule health (no LLM call)
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":"What is the schedule health?"}'
+     Expected:  {"answer":"Schedule health is **<color>**...","direct":true,...}
+     direct=true? [ ] YES   [ ] NO
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.2  Q&A direct answer — top risks
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":"What are the top risks?"}'
+     Expected:  answer includes top risks text, direct=true
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.3  Q&A direct answer — recommended actions
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":"What should I focus on this week?"}'
+     Expected:  answer includes recommended actions, direct=true
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.4  Q&A direct answer — critical path tasks
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":"What are the critical path tasks?"}'
+     Expected:  answer lists critical path task IDs, direct=true
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.5  Q&A LLM answer — complex question (requires ANTHROPIC_API_KEY)
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":"Why is the schedule at risk and what should the PM do about it?"}'
+     Expected:  answer is a substantive paragraph, direct=false, source_cycle populated
+     direct=false? [ ] YES   source_cycle populated? [ ] YES
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.6  Q&A — no state (empty dashboard)
+     Temporarily rename dashboard_state.json, then ask a question.
+     Expected:  {"answer":"No schedule data is available yet. Run a cycle first.",...}
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+6.7  Q&A — empty question rejected
+     Command:   curl -s -X POST http://localhost:9000/api/ask \
+                  -H "Content-Type: application/json" \
+                  -d '{"question":""}'
+     Expected:  HTTP 400 — {"detail":"question is required"}
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.8  Q&A — oversized question rejected
+     Command:   python -c "
+import urllib.request, json
+q = 'x' * 501
+req = urllib.request.Request('http://localhost:9000/api/ask',
+  data=json.dumps({'question':q}).encode(),
+  headers={'Content-Type':'application/json'})
+try:
+    urllib.request.urlopen(req)
+except urllib.error.HTTPError as e:
+    print(e.code, e.read())"
+     Expected:  HTTP 400 — question too long
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.9  Q&A rate limiting (requires QA_RATE_LIMIT_PER_HOUR set to a small value, e.g. 3)
+     Fire 4 requests rapidly from the same IP.
+     Expected:  4th request returns HTTP 429
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+--- 6B: DASHBOARD CHAT WIDGET ---
+
+6.10 Chat widget visible in browser
+     Open http://localhost:9000 in a browser.
+     Expected:  Chat panel visible at bottom of page
+     Result:    _____________________________________________  [ ] P [ ] F
+
+6.11 Chat widget responds to question
+     Type "What is the schedule health?" in the chat panel and send.
+     Expected:  Answer appears in the chat panel within ~5 seconds
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 6C: SLACK SLASH COMMAND ---
+
+6.12 /ims slash command (requires SLACK_APP_TOKEN + SLACK_BOT_TOKEN)
+     Start server:  python main.py --schedule  (or --serve)
+     In Slack workspace, type:  /ims what are the top risks?
+     Expected:  Bot replies with formatted answer in the same channel
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no Slack tokens)
+
+6.13 /ims — empty command
+     In Slack workspace, type:  /ims
+     Expected:  Usage message: "Usage: /ims <your question>"
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 6 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 7: PHASE 5 — MPP SOURCE-OF-TRUTH WORKFLOW
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the mpp_converter dual-backend, --init-mpp seeding, and the cycle-level
+MPP ingest/export workflow.
+
+--- 7A: BACKEND PROBES ---
+
+7.1  diagnose() output
+     Command:   python -c "from agent.mpp_converter import diagnose; print(diagnose())"
+     Expected:  Reports status of both COM and MPXJ backends
+     COM status:  [ ] OK   [ ] BLOCKED   [ ] NOT FOUND
+     MPXJ status: [ ] OK   [ ] NOT FOUND
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.2  master_extension() reflects active backend
+     Command:   python -c "from agent.mpp_converter import master_extension; print(master_extension())"
+     Expected:  .mpp  (if COM available)  OR  .xml  (if MPXJ only)
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.3  MPXJ: read MSPDI XML → re-write as normalised XML
+     Command:   python -c "
+from agent.mpp_converter import _mpxj_xml_to_xml
+_mpxj_xml_to_xml('data/sample_ims.xml', '/tmp/ims_test_out.xml')"
+     Expected:  Completes without error; log shows tasks=58 (or actual count)
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.4  MPXJ: read .mpp file (requires a real .mpp in data/ims_master/)
+     Command:   python -c "
+from pathlib import Path
+from agent.mpp_converter import mpp_to_xml, find_latest_master
+master = find_latest_master('data/ims_master')
+if master and master.suffix == '.mpp':
+    mpp_to_xml(str(master), '/tmp/ims_from_mpp.xml')
+    print('OK', Path('/tmp/ims_from_mpp.xml').stat().st_size)
+else:
+    print('SKIP — no .mpp available, only:', master)"
+     Expected:  OK <size> if .mpp present, SKIP message if only .xml in master
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no .mpp yet)
+
+7.5  COM backend: XML to .mpp (requires Quick Repair — see TODAY_ACTIONS.txt)
+     Command:   python -c "
+from agent.mpp_converter import is_com_available, _com_xml_to_mpp
+if is_com_available():
+    _com_xml_to_mpp('data/sample_ims.xml', '/tmp/ims_test.mpp')
+    from pathlib import Path
+    print('mpp size:', Path('/tmp/ims_test.mpp').stat().st_size)
+else:
+    print('COM not available — Quick Repair required')"
+     Expected:  mpp size > 0 if COM available; otherwise "COM not available"
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (COM blocked)
+
+--- 7B: --init-mpp SEEDING ---
+
+7.6  --init-mpp creates timestamped master file
+     Command:   python main.py --init-mpp
+     Expected:  Prints backend status + "File: IMS_<date>_<time>z.<ext>"
+                File appears in data/ims_master/
+     File created: _________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.7  Master folder contains exactly one file
+     Command:   python -c "
+from pathlib import Path
+files = list(Path('data/ims_master').glob('*.*'))
+print('count:', len(files))
+for f in files: print(' ', f.name)"
+     Expected:  count=1 (or 2 if transitioning between backends during testing)
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.8  --init-mpp: no backend available error path
+     (Skip unless you want to simulate this by breaking both backends temporarily)
+     Expected:  "ERROR: No conversion backend is available" + diagnose output
+     Result:    _____________________________________________  [ ] SKIP
+
+--- 7C: CYCLE-LEVEL MPP INGEST ---
+
+7.9  Cycle ingests from XML master (MPXJ mode)
+     With data/ims_master/ containing IMS_*.xml, run a trigger cycle.
+     Check logs for: action=xml_master_ingested
+     Command:   python main.py --trigger 2>&1 | grep -i "ingested\|mpp\|master"
+     Expected:  "action=xml_master_ingested" in output
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.10 Cycle ingests from .mpp master (COM mode — requires Quick Repair)
+     With data/ims_master/ containing IMS_*.mpp, run a trigger cycle.
+     Check logs for: action=mpp_ingested
+     Expected:  "action=mpp_ingested cycle=... src=IMS_*.mpp"
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (COM blocked)
+
+7.11 Cycle exports new master to ims_master/
+     Run trigger cycle; verify master folder has a fresh timestamped file.
+     Command:   python -c "
+from pathlib import Path
+files = list(Path('data/ims_master').glob('*.*'))
+print([f.name for f in files])"
+     Expected:  One file named IMS_<today's date>_<time>z.<ext>
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.12 Old master replaced (not accumulated)
+     Run two trigger cycles in sequence.
+     Expected:  data/ims_master/ still contains exactly ONE file after both cycles
+     Count after 2nd cycle: ____________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.13 Versioned exports in ims_exports/
+     Command:   python -c "
+from pathlib import Path
+exports = Path('data/ims_exports')
+vxml = sorted(exports.glob('*_ims.xml'))
+print('versioned xmls:', len(vxml))
+print('latest_ims.xml:', (exports/'latest_ims.xml').exists())"
+     Expected:  versioned xmls >= 1; latest_ims.xml exists
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.14 Dashboard state exposes master dir path
+     Command:   python -c "
+import json
+s = json.load(open('data/dashboard_state.json'))
+print('ims_master_dir:', s.get('ims_master_dir'))
+print('ims_exports_dir:', s.get('ims_exports_dir'))"
+     Expected:  Both paths are populated absolute paths
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+7.15 Master dir visible in dashboard UI
+     Open http://localhost:9000 in browser.
+     Expected:  Header shows "Master IMS:" with the ims_master/ directory path
+     Result:    _____________________________________________  [ ] P [ ] F
+
+
+SECTION 7 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 8: TIER 3 — TEAMS CHAT INTERVIEW DEMO
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Tests the full Teams chat interview pipeline: proactive outbound messages,
+Graph API polling (cam-responder), relay endpoint, and end-to-end interview
+completion.
+
+Prerequisites:
+  - M365 tenant active (intelligenceexpanse.onmicrosoft.com)
+  - Azure Bot Service registered; TEAMS_BOT_APP_ID + TEAMS_BOT_APP_SECRET in .env
+  - AZURE_TENANT_ID in .env
+  - ngrok running:  ngrok http 9000  (or tunnelmole/Tailscale equivalent)
+  - Azure Bot Service messaging endpoint updated to https://<ngrok>/bot/messages
+  - data/cam_identity_map.json populated (Alice, Bob, Carol, David at minimum)
+  - data/cam_sessions.json populated (conversation_ids for all auto-respond CAMs)
+  - CAM token cache warm (device-code auth done once per account)
+
+--- 8A: BOT SERVER STARTUP ---
+
+8.1  Bot server starts on configured port
+     Command:   python main.py --serve
+     Expected:  "Dashboard running at http://localhost:9000"
+                No startup exceptions
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.2  /bot/messages endpoint is live
+     Command:   curl -s -X POST http://localhost:9000/bot/messages \
+                  -H "Content-Type: application/json" \
+                  -d '{"type":"conversationUpdate","from":{"id":"test"}}'
+     Expected:  {"status":"ok"}  (non-message activity silently accepted)
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.3  /internal/cam_message endpoint is live
+     Command:   curl -s -X POST http://localhost:9000/internal/cam_message \
+                  -H "Content-Type: application/json" \
+                  -d '{"email":"noone@test.com","text":"hello"}'
+     Expected:  {"status":"no_session"}  (no active session — expected)
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 8B: CAM RESPONDER ---
+
+8.4  cam-responder starts for all configured accounts
+     Command:   python main.py --cam-responder
+     Expected:  Logs show "action=responder_start" for each configured auto-respond CAM
+                Or device-code auth prompt if token cache is stale
+     CAMs started: ___________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.5  cam-responder starts for a single named CAM
+     Command:   python main.py --cam-responder --cam "Alice Nguyen"
+     Expected:  Only Alice Nguyen's responder starts
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 8C: DEMO CHAT INTERVIEW ---
+
+8.6  --demo-chat launches server + interview
+     Command:   python main.py --demo-chat --cam "Alice Nguyen"
+     Expected:  "Bot messaging server ready on port 9000"
+                "Starting proactive interview for Alice Nguyen..."
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.7  Ngrok updater fires (auto-detects ngrok URL)
+     In --demo-chat startup output, look for ngrok URL detection.
+     Expected:  Log shows "action=ngrok_detected url=https://..."
+                OR "action=ngrok_skip reason=ngrok_not_running"
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.8  End-to-end relay loop — interview completes
+     Run server in one terminal, cam-responder in another.
+     Trigger a teams_chat cycle:
+       python main.py --trigger  (with CALL_TRANSPORT=teams_chat in .env)
+     Wait for interview to complete (up to 90 min timeout; typically < 2 min in demo).
+     Expected in logs:
+       action=proactive_greeting_sent
+       action=relay_received
+       action=relay_question_sent
+       action=relay_interview_complete
+       action=teams_session_complete
+     All 4 CAMs completed? [ ] YES  [ ] PARTIAL (____/4)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+8.9  CAM response status on dashboard
+     After a teams_chat cycle, open http://localhost:9000.
+     Expected:  CAM Response Status panel shows responded=true for each CAM
+                that completed the interview
+     Alice:  [ ] responded=true   [ ] not_contacted
+     Bob:    [ ] responded=true   [ ] not_contacted
+     Carol:  [ ] responded=true   [ ] not_contacted
+     David:  [ ] responded=true   [ ] not_contacted
+     Result:    _____________________________________________  [ ] P [ ] F
+
+8.10 cam_sessions.json persisted correctly
+     Command:   python -c "
+import json
+sessions = json.load(open('data/cam_sessions.json'))
+for email, data in sessions.items():
+    print(email, 'conv_id:', data.get('conversation_id','')[:20])"
+     Expected:  All configured CAM emails have non-empty conversation_id
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 8D: ACS VOICE INTERVIEW DEMO (TIER 3 — Azure ACS) ---
+
+8.11 --demo-interview launches (requires ACS_CONNECTION_STRING + meeting URL)
+     Command:   python main.py --demo-interview \
+                  --meeting-url "https://teams.microsoft.com/l/meetup-join/..." \
+                  --callback-url "https://<ngrok>.ngrok.io" \
+                  --cam "Alice Nguyen"
+     Expected:  "ACS callback server ready on port 9000"
+                Interview proceeds with TTS voice output
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no ACS/meeting)
+
+8.12 /acs/callback endpoint receives events
+     (Tested implicitly via 8.11; or mock a CloudEvent POST)
+     Command:   curl -s -X POST http://localhost:9000/acs/callback \
+                  -H "Content-Type: application/json" \
+                  -d '[{"type":"Microsoft.Communication.CallConnected","data":{"callConnectionId":"test"}}]'
+     Expected:  {"status":"ok"}
+     Result:    _____________________________________________  [ ] P [ ] F
+
+
+SECTION 8 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 9: DATA RETENTION & PURGE
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+9.1  Purge via CLI (no server needed)
+     Command:   python -c "
+from agent.cycle_runner import CycleRunner
+deleted = CycleRunner.purge_old_data(retention_days=0)
+print('deleted:', deleted)"
+     Expected:  deleted dict shows cycle_status and snapshots counts (may be 0 if nothing old)
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+9.2  Purge via API
+     (Server running)
+     Command:   curl -s -X POST http://localhost:9000/api/admin/purge
+     Expected:  {"status":"ok","deleted":{...}}
+     Result:    _____________________________________________  [ ] P [ ] F
+
+9.3  Retention respects DATA_RETENTION_DAYS
+     Confirm that files newer than DATA_RETENTION_DAYS (default 90) are NOT deleted.
+     Set DATA_RETENTION_DAYS=0 in .env, trigger a cycle, run purge.
+     Expected:  The cycle just run IS deleted (age > 0 seconds ≥ 0 days)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 9 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 10: CONFIGURATION & ENVIRONMENT VARIABLES
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Verify that key env vars are respected (spot-check the most impactful ones).
+
+10.1 SRA_ITERATIONS changes Monte Carlo run count
+     Set SRA_ITERATIONS=100 in .env; run:
+     python -c "
+import os; os.environ['SRA_ITERATIONS']='100'
+from agent.file_handler import IMSFileHandler
+from agent.sra_runner import SRARunner
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+results = SRARunner(tasks, seed=42).run()
+print('done, milestones:', len(results))"
+     Expected:  Completes faster with 100 iterations; results still valid
+     Result:    _____________________________________________  [ ] P [ ] F
+
+10.2 VALIDATION_ALLOW_BACKWARDS=true suppresses backwards-movement failures
+     Set VALIDATION_ALLOW_BACKWARDS=true in .env; create a test input with
+     decreasing percent_complete; run ScheduleValidator.
+     Expected:  ValidationResult.failures is empty (no failure for backwards movement)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+10.3 SCHEDULE_CRON overrides default schedule
+     Set SCHEDULE_CRON=*/5 * * * * in .env; start scheduler.
+     Expected:  "cron='*/5 * * * *'" in startup output; next run within 5 minutes
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+10.4 DASHBOARD_PORT changes listen port
+     Set DASHBOARD_PORT=8080 in .env; start server.
+     Expected:  Dashboard at http://localhost:8080, not :9000
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+10.5 LOG_FORMAT=json produces structured output
+     Set LOG_FORMAT=json in .env; run a cycle.
+     Command:   python main.py --trigger 2>&1 | head -5
+     Expected:  Each log line is valid JSON with ts, level, logger, msg keys
+     Result:    _____________________________________________  [ ] P [ ] F
+
+10.6 IMS_MASTER_DIR and IMS_EXPORTS_DIR respected
+     Set custom paths in .env and run --init-mpp.
+     Expected:  Master file appears in the custom directory, not data/ims_master/
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 10 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 11: ERROR HANDLING & EDGE CASES
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+11.1 Missing IMS file — graceful error
+     Command:   python main.py --ims-file data/does_not_exist.xml
+     Expected:  "ERROR: IMS file not found: data/does_not_exist.xml"  and exit code 1
+     Result:    _____________________________________________  [ ] P [ ] F
+
+11.2 Corrupt IMS file — graceful error
+     Create data/corrupt_test.xml with invalid XML, run:
+     python main.py --ims-file data/corrupt_test.xml
+     Expected:  ParseError with informative message; no unhandled exception
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+11.3 LLM API key missing — graceful degradation
+     Remove ANTHROPIC_API_KEY from .env temporarily; run a cycle.
+     Expected:  AuthenticationError logged; synthesis step fails gracefully;
+                cycle status shows error but does not crash process
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+11.4 No cam_sessions.json — graceful fallback
+     Rename data/cam_sessions.json; run a teams_chat cycle.
+     Expected:  Falls back to simulator for all CAMs; cycle completes normally
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+11.5 --demo-interview missing --meeting-url
+     Command:   python main.py --demo-interview
+     Expected:  "ERROR: --meeting-url is required for --demo-interview"  exit 1
+     Result:    _____________________________________________  [ ] P [ ] F
+
+11.6 --demo-interview missing --callback-url
+     Command:   python main.py --demo-interview --meeting-url "https://teams.test"
+     Expected:  "ERROR: --callback-url is required for --demo-interview"  exit 1
+     Result:    _____________________________________________  [ ] P [ ] F
+
+11.7 --init-mpp with no backend available
+     With JVM unavailable AND COM blocked, run --init-mpp.
+     Expected:  "ERROR: No conversion backend is available" + diagnose output; exit 1
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 11 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 12: REGRESSION CHECKLIST
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Spot-checks for previously-resolved bugs.  Confirm each has not regressed.
+
+12.1 TD-001 — Schedule health is deterministic (not LLM-generated)
+     Run the same cycle twice with seed=42. Health must match both times.
+     Health run 1: ____________   Health run 2: ____________
+     Match? [ ] YES   [ ] NO
+     Result:    _____________________________________________  [ ] P [ ] F
+
+12.2 TD-019 — Teams chat relay loop works end-to-end
+     After a full teams_chat cycle, confirm cam_response_status shows
+     responded=true for all CAMs that have stored sessions.
+     (Requires Teams environment — see Section 8.)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+12.3 TD-022 — _notify_approval_required no longer crashes
+     Trigger a cycle with a backwards-movement input.
+     Expected:  No AttributeError on 'str' object;
+                Slack/email receives "IMS Write Held" notification (if configured)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+12.4 9/5 arithmetic bug — SRA probabilities not skewed by division error
+     Verify prob_on_baseline values are between 0.0 and 1.0:
+     python -c "
+from agent.file_handler import IMSFileHandler
+from agent.sra_runner import SRARunner
+tasks = IMSFileHandler('data/sample_ims.xml').parse()
+results = SRARunner(tasks, seed=42).run()
+probs = [r.get('prob_on_baseline',0) for r in results]
+print('min:', min(probs), 'max:', max(probs))
+assert all(0 <= p <= 1 for p in probs), 'FAIL: probability out of range'"
+     Expected:  min >= 0.0, max <= 1.0, assertion passes
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+12.5 Master folder unambiguous — only one file present after a cycle
+     After running two back-to-back trigger cycles, confirm exactly 1 file
+     in data/ims_master/.
+     python -c "from pathlib import Path; files=list(Path('data/ims_master').glob('*.*')); print(len(files))"
+     Expected:  1
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+12.6 Dashboard state includes ims_master_dir and ims_exports_dir keys
+     python -c "import json; s=json.load(open('data/dashboard_state.json')); print('master_dir' in str(s), 'exports_dir' in str(s))"
+     Expected:  True True
+     Result:    _____________________________________________  [ ] P [ ] F
+
+
+SECTION 12 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  FINAL SIGN-OFF
+================================================================================
+
+All sections complete?  [ ] YES   [ ] NO (outstanding items listed below)
+
+Outstanding items / known failures:
+  1. ___________________________________________________________________
+  2. ___________________________________________________________________
+  3. ___________________________________________________________________
+
+Overall test result:  [ ] PASS — all required tests passed
+                      [ ] CONDITIONAL PASS — all required; some optional skipped
+                      [ ] FAIL — one or more required tests failed
+
+Tester name: ________________________________
+Title:       ________________________________
+Signature:   ________________________________
+Date/Time:   ________________________________
+
+Reviewed by: ________________________________
+Date/Time:   ________________________________
+
+
+================================================================================
+  APPENDIX A: QUICK REFERENCE — CLI MODES
+================================================================================
+
+  python main.py                           Phase 1: one-shot analysis + report
+  python main.py --trigger                 Phase 3: one full cycle then exit
+  python main.py --serve                   Phase 3: dashboard only (port 9000)
+  python main.py --schedule                Phase 3: scheduler + dashboard (production)
+  python main.py --demo                    Phase 2: simulated voice interview demo
+  python main.py --demo-chat --cam <name>  Tier 3: Teams chat interview demo
+  python main.py --demo-interview \        Tier 3: ACS voice interview via Teams meeting
+       --meeting-url <url> \
+       --callback-url <url>
+  python main.py --cam-responder           Teams: start Graph API auto-responders
+  python main.py --cam-responder --cam <n> Teams: responder for one specific CAM
+  python main.py --init-mpp                Phase 5: seed data/ims_master/ from XML
+
+
+================================================================================
+  APPENDIX B: QUICK REFERENCE — API ENDPOINTS
+================================================================================
+
+  GET  /                                  HTML dashboard
+  GET  /health                            Health check (unauthenticated)
+  GET  /metrics                           In-memory metrics snapshot
+  GET  /api/state                         Current dashboard state JSON
+  GET  /api/history                       Rolling cycle history JSON
+  GET  /api/status                        Is a cycle currently running?
+  POST /api/trigger                       Manually fire a cycle (admin)
+  POST /api/admin/purge                   Delete old cycle data (admin)
+  GET  /api/approvals                     List all approval records
+  POST /api/approvals/{id}/approve        Approve a held IMS write (admin)
+  POST /api/approvals/{id}/reject         Reject a held IMS write (admin)
+  POST /api/ask                           Q&A — ask a question about the schedule
+  POST /acs/callback                      ACS Call Automation event webhook
+  POST /graph/callback                    MS Graph Communications callback
+  GET  /graph/audio/{id}                  Serve WAV audio for Graph playPrompt
+  POST /bot/messages                      Bot Framework Teams chat messages
+  POST /internal/cam_message             Internal relay: GraphCAMResponder → session
+
+
+================================================================================
+  APPENDIX C: QUICK REFERENCE — KEY DATA FILES
+================================================================================
+
+  data/sample_ims.xml             Working IMS schedule (MSPDI XML format)
+  data/cam_identity_map.json      CAM name → Teams email + auto_respond flag
+  data/cam_sessions.json          CAM email → conversation_id + service_url
+  data/cam_tokens/                MSAL token cache per CAM (device-code auth)
+  data/dashboard_state.json       Live dashboard state (updated after each cycle)
+  data/cycle_history.json         Rolling history of up to 52 cycles
+  data/ims_master/                Timestamped master IMS files (ONE file at a time)
+  data/ims_exports/               All versioned XML + master copies per cycle
+  data/snapshots/                 Pre-update IMS snapshots per cycle
+  data/pending_approvals/         Pending PM approval records
+  reports/                        HTML + PDF reports (one per cycle)
+  reports/briefings/              Voice briefing MP3s (if VOICE_BRIEFING_ENABLED)
+  reports/cycles/                 Per-cycle status JSON files
+  logs/ims_agent.log              Unified agent log
+
+
+================================================================================
+  END OF TEST PROCEDURE
+================================================================================

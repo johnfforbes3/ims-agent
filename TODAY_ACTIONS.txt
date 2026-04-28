@@ -1,0 +1,121 @@
+================================================================================
+  IMS AGENT — ACTIONS FOR TODAY  (2026-04-28)
+================================================================================
+
+
+--------------------------------------------------------------------------------
+ACTION 1:  Run Quick Repair on Microsoft Project
+--------------------------------------------------------------------------------
+Fix MS Project COM automation so the agent can write true .mpp files instead
+of MSPDI XML. The current block is caused by Click-to-Run (C2R) AppV isolation.
+Quick Repair re-registers Project's COM servers so external processes can reach
+them.
+
+Steps:
+  1. Press Windows key, open Settings (gear icon).
+  2. Click "Apps" → "Installed apps."
+  3. Find "Microsoft Project Professional 2024" (or similar) in the list.
+  4. Click the three-dot menu ( ⋯ ) to its right → click "Modify."
+  5. When the Office repair dialog appears, select "Quick Repair."
+  6. Click "Repair" and wait for it to finish (typically 2–5 minutes).
+  7. When prompted, approve any UAC elevation dialog.
+  8. No reboot is required after Quick Repair.
+
+
+--------------------------------------------------------------------------------
+ACTION 2:  Re-run --init-mpp After Repair to Verify True .mpp Output
+--------------------------------------------------------------------------------
+After Quick Repair, verify that the agent can now write a native .mpp file
+(instead of the .xml fallback it currently uses). This seeds the master IMS
+folder with the first proper MS Project binary.
+
+Steps:
+  1. Open a terminal in the project folder:
+       cd "C:\Users\forbe\OneDrive\Documents\AI Projects\04 - IMS AGENT\ims-agent"
+  2. Run:
+       python main.py --init-mpp
+  3. Check the output. You should see:
+       COM: OK ✓
+       ...
+       File:  IMS_2026-04-28_<time>z.mpp       ← .mpp (not .xml)
+  4. Open File Explorer → navigate to:
+       data\ims_master\
+  5. Confirm there is exactly ONE .mpp file there (the old .xml from earlier
+     today may also be present — delete it once the .mpp is confirmed good).
+  6. Double-click the .mpp to confirm MS Project opens it cleanly.
+
+
+--------------------------------------------------------------------------------
+ACTION 3:  Set Up Teams Chat for Eva Johnson (TD-024)
+--------------------------------------------------------------------------------
+Eva Johnson was added as a CAM and appears on the dashboard under "CAM Response
+Status" with no response. She has no Teams chat session stored yet, so the
+agent falls back to the simulator for her. She needs an initial first-contact
+message so the relay loop can drive her interviews going forward.
+
+Steps:
+  1. Ensure Eva's entry exists in data/cam_identity.json with her Teams UPN
+     (email). If not, add it now following the same pattern as Alice/Bob/Carol.
+       Example entry:
+         "Eva Johnson": {
+             "email": "eva.johnson@intelligenceexpanse.onmicrosoft.com",
+             "auto_respond": true
+         }
+  2. Start the bot server:
+       python main.py --serve
+  3. In a separate terminal, run the cam-responder so Eva's account auto-replies:
+       python main.py --cam-responder --cam "Eva Johnson"
+  4. Send Eva a first message via the bot (use the Teams client or Graph Explorer)
+     to establish her conversation_id. The relay endpoint will capture it.
+  5. Confirm data/cam_sessions.json now contains an entry for Eva's email with
+     a non-empty "conversation_id".
+  6. Re-run a trigger cycle to verify Eva shows "responded: true":
+       python main.py --trigger
+  7. Open the dashboard (http://localhost:9000) and confirm Eva appears in
+     CAM Response Status with responded = true.
+
+
+--------------------------------------------------------------------------------
+ACTION 4:  Cancel M365 Business Basic Trial Before Deadline
+--------------------------------------------------------------------------------
+The M365 Business Basic trial tenant (intelligenceexpanse.onmicrosoft.com) must
+be cancelled before it auto-charges. Trial end date: 2026-05-25.
+
+Steps:
+  1. Go to https://admin.microsoft.com and sign in as the tenant admin.
+  2. Navigate to Billing → Your products.
+  3. Find "Microsoft 365 Business Basic (Trial)" and click it.
+  4. Select "Cancel subscription" and follow the confirmation prompts.
+  5. Note the cancellation confirmation number for your records.
+
+  DEADLINE:  Cancel by  2026-05-25  to avoid being charged.
+
+
+--------------------------------------------------------------------------------
+ACTION 5:  Execute the Full Test Procedure After Quick Repair
+--------------------------------------------------------------------------------
+Once MS Project COM is restored (Action 1) and --init-mpp produces a true .mpp
+(Action 2), run the complete TEST_PROCEDURE.txt from top to bottom to certify
+the current build.  Focus particularly on Section 7 (MPP workflow) which
+previously had to be skipped or partially run due to the COM block.
+
+Steps:
+  1. Open TEST_PROCEDURE.txt in a text editor (it is in the ims-agent root).
+  2. Work through Sections 0-12 in order.
+  3. On each step mark PASS, FAIL, or SKIP and record the actual output.
+  4. Complete the Final Sign-Off at the bottom.
+  5. Commit the signed-off file:
+       cd "C:\Users\forbe\OneDrive\Documents\AI Projects\04 - IMS AGENT\ims-agent"
+       git add TEST_PROCEDURE.txt
+       git commit -m "docs: completed test procedure run YYYY-MM-DD"
+       git push origin master
+  Priority tests after Quick Repair (Section 7 items previously skipped):
+    - 7.4  MPXJ reads a real .mpp file
+    - 7.5  COM writes a native .mpp from XML
+    - 7.10 Cycle ingests .mpp master via COM
+    - 7.11 Cycle exports new .mpp to ims_master/
+
+
+================================================================================
+  END OF ACTION LIST
+================================================================================
