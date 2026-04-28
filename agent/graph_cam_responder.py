@@ -211,7 +211,7 @@ class GraphCAMResponder:
                 continue
             if created <= cutoff:
                 continue
-            from_app = msg.get("from", {}).get("application") or {}
+            from_app = (msg.get("from") or {}).get("application") or {}
             if from_app.get("id") == _BOT_APP_ID:
                 new_bot.append(msg)
 

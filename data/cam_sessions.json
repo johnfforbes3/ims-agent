@@ -18,5 +18,10 @@
     "user_id": "29:8c4be827-2010-4347-9d96-0aa2f1c6ee9f",
     "service_url": "https://smba.trafficmanager.net/amer/",
     "conversation_id": "19:8c4be827-2010-4347-9d96-0aa2f1c6ee9f_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
+  },
+  "eva@intelligenceexpanse.onmicrosoft.com": {
+    "user_id": "29:8c91ac71-ab01-4520-86df-b25b46d469ab",
+    "service_url": "https://smba.trafficmanager.net/amer/",
+    "conversation_id": "19:8c91ac71-ab01-4520-86df-b25b46d469ab_9afa38ea-6efc-45b5-9f70-248aa32ff9a4@unq.gbl.spaces"
   }
 }
