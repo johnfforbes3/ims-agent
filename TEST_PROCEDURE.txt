@@ -299,11 +299,12 @@ print(f'inputs={len(inputs)} responded={report[\"responded\"]}/{report[\"total\"
 
 3.4  TTS engine — ElevenLabs (requires ELEVENLABS_API_KEY)
      Command:   python -c "
-from agent.voice.tts_engine import TTSEngine
-e = TTSEngine()
+from agent.voice.tts_engine import build_tts_engine
+e = build_tts_engine()
 wav = e.synthesize('Test audio check.')
-print('wav bytes:', len(wav))"
-     Expected:  wav bytes > 1000  (valid audio data)
+print('engine:', type(e).__name__, 'wav bytes:', len(wav))"
+     Expected:  wav bytes > 1000  (valid audio data) when ELEVENLABS_API_KEY set;
+                MockTTSEngine returned with wav bytes >= 0 when no key configured
      Actual:    _____________________________________________
      Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP (no API key)
 
@@ -502,9 +503,11 @@ Server should be up at http://localhost:9000
      Schedule health shown: ____________   Cycle ID: ____________
      Result:    _____________________________________________  [ ] P [ ] F
 
-5.2  Dashboard auto-refresh header
-     Inspect HTML source: confirm <meta http-equiv="refresh" content="60">
-     Expected:  Page refreshes every 60 seconds automatically
+5.2  Dashboard auto-refresh mechanism
+     Confirm JavaScript-based auto-refresh is present in the page source.
+     Command:   curl -s http://localhost:9000 | python -c "import sys; src=sys.stdin.read(); print('JS refresh found' if any(k in src for k in ['setInterval','auto-refresh','countdown','reload()']) else 'NOT FOUND')"
+     Expected:  "JS refresh found"
+     Note:      Dashboard uses JavaScript countdown (not <meta http-equiv="refresh">).
      Result:    _____________________________________________  [ ] P [ ] F
 
 5.3  GET /health — unauthenticated
@@ -731,11 +734,14 @@ else:
 
 7.5  COM backend: XML to .mpp (requires Quick Repair — see TODAY_ACTIONS.txt)
      Command:   python -c "
+import os, tempfile
+from pathlib import Path
 from agent.mpp_converter import is_com_available, _com_xml_to_mpp
 if is_com_available():
-    _com_xml_to_mpp('data/sample_ims.xml', '/tmp/ims_test.mpp')
-    from pathlib import Path
-    print('mpp size:', Path('/tmp/ims_test.mpp').stat().st_size)
+    out = os.path.join(tempfile.gettempdir(), 'ims_test.mpp')
+    _com_xml_to_mpp('data/sample_ims.xml', out)
+    print('mpp size:', Path(out).stat().st_size)
+    Path(out).unlink(missing_ok=True)
 else:
     print('COM not available — Quick Repair required')"
      Expected:  mpp size > 0 if COM available; otherwise "COM not available"

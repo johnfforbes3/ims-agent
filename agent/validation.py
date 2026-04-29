@@ -19,7 +19,11 @@ load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
 _MAX_JUMP_PCT = int(os.getenv("VALIDATION_MAX_JUMP_PCT", "50"))
-_ALLOW_BACKWARDS = os.getenv("VALIDATION_ALLOW_BACKWARDS", "false").lower() == "true"
+
+
+def _allow_backwards() -> bool:
+    """Re-read env var at call time so runtime changes (os.environ, monkeypatch) take effect."""
+    return os.getenv("VALIDATION_ALLOW_BACKWARDS", "false").lower() == "true"
 
 
 @dataclass
@@ -90,7 +94,7 @@ class ScheduleValidator:
 
             prev_pct = current.get("percent_complete", 0)
 
-            if not _ALLOW_BACKWARDS and new_pct < prev_pct:
+            if not _allow_backwards() and new_pct < prev_pct:
                 failures.append(ValidationFailure(
                     task_id=task_id, cam_name=cam_name,
                     rule="backwards_movement",

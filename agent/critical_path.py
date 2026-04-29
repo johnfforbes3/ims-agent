@@ -93,11 +93,17 @@ def calculate_critical_path(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         if 0.5 <= f <= _NEAR_CRITICAL_DAYS and tid not in critical_path
     ]
 
+    # Scalar summary: minimum float across all critical-path tasks (≈ 0 by definition,
+    # but expressed as a float in days for downstream consumers and the test procedure).
+    cp_floats = [total_float[tid] for tid in critical_path if tid in total_float]
+    project_float_days: float = min(cp_floats) if cp_floats else 0.0
+
     logger.info(
-        "action=cpm_complete tasks=%d critical=%d near_critical=%d",
+        "action=cpm_complete tasks=%d critical=%d near_critical=%d project_float_days=%.2f",
         len(tasks),
         len(critical_path),
         len(near_critical),
+        project_float_days,
     )
 
     return {
@@ -107,6 +113,7 @@ def calculate_critical_path(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "changed_on": [],   # populated by diffing against prior result in Phase 3
         "changed_off": [],
         "projected_finish": project_finish,
+        "project_float_days": project_float_days,
     }
 
 
@@ -191,4 +198,5 @@ def _empty_result() -> dict[str, Any]:
         "changed_on": [],
         "changed_off": [],
         "projected_finish": None,
+        "project_float_days": 0.0,
     }

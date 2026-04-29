@@ -1,6 +1,6 @@
 {
-  "last_updated": "2026-04-28T10:13:37.093167+00:00",
-  "cycle_id": "20260428T095857Z",
+  "last_updated": "2026-04-28T23:56:39.433808+00:00",
+  "cycle_id": "20260428T234914Z",
   "schedule_health": "RED",
   "critical_path_task_ids": [
     "1",
@@ -38,7 +38,7 @@
       "p50_date": "2026-05-30",
       "p80_date": "2026-05-31",
       "p95_date": "2026-06-01",
-      "prob_on_baseline": 0.3602,
+      "prob_on_baseline": 0.3558,
       "risk_level": "HIGH"
     },
     {
@@ -48,7 +48,7 @@
       "p50_date": "2026-08-15",
       "p80_date": "2026-08-16",
       "p95_date": "2026-08-18",
-      "prob_on_baseline": 0.3208,
+      "prob_on_baseline": 0.3168,
       "risk_level": "HIGH"
     },
     {
@@ -58,7 +58,7 @@
       "p50_date": "2026-09-27",
       "p80_date": "2026-09-28",
       "p95_date": "2026-09-29",
-      "prob_on_baseline": 0.079,
+      "prob_on_baseline": 0.0761,
       "risk_level": "HIGH"
     },
     {
@@ -68,7 +68,7 @@
       "p50_date": "2026-11-10",
       "p80_date": "2026-11-12",
       "p95_date": "2026-11-13",
-      "prob_on_baseline": 0.0296,
+      "prob_on_baseline": 0.03,
       "risk_level": "HIGH"
     },
     {
@@ -78,7 +78,7 @@
       "p50_date": "2026-12-22",
       "p80_date": "2026-12-24",
       "p95_date": "2026-12-26",
-      "prob_on_baseline": 0.007,
+      "prob_on_baseline": 0.0068,
       "risk_level": "HIGH"
     },
     {
@@ -88,247 +88,163 @@
       "p50_date": "2026-12-22",
       "p80_date": "2026-12-24",
       "p95_date": "2026-12-26",
-      "prob_on_baseline": 0.0066,
+      "prob_on_baseline": 0.0078,
       "risk_level": "HIGH"
     }
   ],
-  "top_risks": "1. **RF Specification Non-Delivery (HW \u2192 SE Critical Path Cascade):** The hardware team's failure to deliver final RF specs is the single point of failure blocking SE-02 (15% remaining), SE-03 sections 4\u20136, SE-05 (capped at 60\u201365%), and SE-06 \u2014 all of which feed directly into PDR and, via ICD, into the critical path through SW-01 and downstream software tasks.\n\n2. **MS-02 PDR On-Time Probability at 36%:** With SE-06 (PDR Package) at only 10% versus an expected 20%, and its content explicitly blocked on ICD and SE-02 closure, PDR is at immediate risk of slipping. A PDR slip propagates directly to CDR (32% on-time), TRR (8%), and all subsequent milestones.\n\n3. **SE-03 ICD Delay Threatening Software Critical Path:** SE-03 is explicitly on the critical path and is at 60% versus expected 100%. SW-01 (Software Requirements Specification) depends on interface definitions from the ICDs; any further ICD delay directly delays software architecture, algorithm development, and the entire SW testing chain (SW-07 through SW-09).\n\n4. **HW-03 Power Supply Design at 0% vs. Expected 100%:** Bob Martinez's HW-03 has not started despite being fully expected to be complete. Combined with HW-01 at 75% and HW-02 at 55%, the hardware workstream is broadly behind and represents an independent risk to MS-05 Hardware-Software Integration (3% on-time probability).\n\n5. **SE-04 CONOPS and SE-08 Reliability Analysis at 0% Progress:** Both tasks are at 0% actual versus significant expected completion (SE-04 ~100%, SE-08 ~55%). SE-04 has been explicitly deprioritized, and SE-08 has not started. These gaps will stress downstream safety, reliability, and qualification documentation required ahead of TRR (8% on-time probability).",
-  "recommended_actions": "1. **Escalate RF Spec Delivery to Hardware PM with a Hard Deadline This Week:** Alice Nguyen has explicitly identified end of next week as the critical gate. The PM must place a firm, documented commitment on Bob Martinez's team to deliver final RF specifications by that date. This is the single action with the highest leverage across the largest number of blocked tasks.\n\n2. **Convene an Emergency SE/HW Integration Meeting Before End of Week:** Bring Alice Nguyen and Bob Martinez together to align on the exact content and format of the RF spec deliverable, confirm the delivery date, and identify any interim partial releases that could unblock ICD sections 4\u20136 earlier. Do not allow this to remain an asynchronous coordination issue.\n\n3. **Establish a Post-Spec Recovery Plan with Alice Nguyen:** Immediately after the RF spec commitment is secured, lock in Alice Nguyen's projected sequence \u2014 ICD closure in 2\u20133 days, then SE-02 closeout and SE-06 in parallel \u2014 as a formal micro-schedule with daily check-ins. This recovery window is narrow and must be actively managed, not assumed.\n\n4. **Assess HW-03 Power Supply Design for Independent Schedule Risk:** Bob Martinez's HW-03 is at 0% with expected 100% completion and has no blocker documented in the CAM inputs. The PM should require an immediate status update and root cause from Martinez this week to determine whether this represents a separate risk path to MS-05 Hardware-Software Integration.\n\n5. **Brief Customer/Stakeholders on PDR Schedule Risk:** With PDR at 36% on-time probability and the root cause now clearly defined, the PM should prepare a concise risk communication to the customer this week \u2014 framing the RF spec issue, the recovery path, and the timeline \u2014 rather than allowing a potential PDR slip to surface without prior notice.",
-  "narrative": "The program is in a critically degraded schedule state, with 24 of 57 tasks behind schedule and on-time probability collapsing progressively across all major milestones \u2014 from 36% at PDR to just 1% at System Acceptance Test. The root cause is identifiable and concentrated: an unresolved RF specification issue is cascading across Alice Nguyen's entire SE workstream, blocking SE-02, SE-03, SE-04, SE-05, and SE-06 simultaneously. Critically, SE-03 (ICDs) sits on the critical path, meaning this single upstream hardware spec failure is directly threatening the program's ability to execute software development, hardware-software integration, and all downstream test events.\n\nBob Martinez's hardware tasks compound the risk significantly. HW-01 (RF Front End Design) is at 75% versus an expected 100%, and HW-02 and HW-03 are similarly behind \u2014 HW-03 (Power Supply Design) has not started against an expected 100% completion. The hardware team's inability to close the RF specifications is not only blocking its own deliverables but is the proximate cause of the SE workstream gridlock. With 39 CAMs reporting blockers and 11 flagging risks, the breadth of impact suggests this is not isolated to one work package \u2014 it is a program-level exposure.\n\nWithout immediate intervention to force closure of the RF specifications from the hardware team, the schedule trajectory points toward a PDR slip and a compounding delay through CDR, TRR, Hardware-Software Integration, and SAT. Alice Nguyen's assessment \u2014 that hardware specs delivered by end of next week would allow ICD closure in two to three days and enable parallel SE-02 and SE-06 progress \u2014 provides a narrow but concrete recovery window that must be activated this week.",
+  "top_risks": "1. **RF Interface Spec Delivery (HW \u2192 SE dependency):** The single largest schedule driver. Bob Martinez's HW team has not delivered RF specs, blocking SE-02, SE-03, SE-04, SE-05, and SE-06 \u2014 five tasks on or feeding the critical path. Alice Nguyen explicitly identifies this as the constraint requiring a firm HW commitment this week.\n\n2. **MS-04 TRR at 8% on-time probability:** TRR is the gateway to all system-level testing. At 8% confidence against its baseline date of 2026-09-25, test readiness is nearly certain to slip, and no recovery path is visible given the upstream blockage in SW requirements and SE closure tasks.\n\n3. **HW-03 Power Supply Design at 0% vs. expected ~100% (Bob Martinez):** Zero progress on a task that should be complete is a critical execution gap independent of the RF spec issue. This threatens hardware readiness for IT-03 (Hardware-Software Integration), which is on the critical path.\n\n4. **MS-05 Hardware-Software Integration Complete at 3% on-time probability:** With HW tasks HW-01, HW-02, and HW-03 all significantly behind and SW tasks gated on SE closure, convergence of hardware and software for integration by 2026-11-06 is effectively not credible under the current trajectory.\n\n5. **MS-06 System Acceptance Test at 1% on-time probability:** The terminal program milestone has a near-zero probability of being met on its 2026-12-18 baseline date. This represents a potential contract delivery risk and should be escalated beyond the PM level if not already flagged to the customer.",
+  "recommended_actions": "1. **Obtain a firm RF spec delivery commitment from Bob Martinez's HW team by end of this week.** Per Alice Nguyen's direct input, a commitment to \"end of next week\" is insufficient \u2014 each additional day of slip compresses her turnaround window before the PDR gate closes. The PM should convene a direct conversation between Alice Nguyen and Bob Martinez, set a hard date, and document it as a program-level action item with daily tracking.\n\n2. **Conduct an immediate recovery review with Bob Martinez on HW-01, HW-02, and HW-03.** HW-02 at 55% and HW-03 at 0% against expected completion of 100% are not explainable by the RF spec issue alone. The PM needs to understand the root cause of HW underperformance, whether additional resources or schedule relief are required, and what the realistic completion date is for each task.\n\n3. **Assess whether PDR (MS-02, 36% on-time) should be formally re-baselined or restructured.** Given the upstream blockages, the PM should determine with the SE lead and customer whether PDR can be held in a partial or phased manner, or whether the baseline date must be revised now to avoid a chaotic last-minute deferral that further compresses CDR and TRR windows.\n\n4. **Initiate a critical path recovery plan for SW-01 (Software Requirements Specification).** SW-01 is on the critical path and cannot begin substantively until SE-layer documents (SDD, ICDs) close. The PM should work with the SW lead to identify any pre-work that can proceed in parallel and establish a pull-forward plan that is ready to execute the moment RF specs and ICD direction are locked.\n\n5. **Escalate MS-06 SAT schedule risk to program leadership and the customer.** A 1% on-time probability on the final delivery milestone is a program-level risk that warrants immediate upward visibility. The PM should prepare a concise risk notification \u2014 grounded in the SRA outputs above \u2014 and brief leadership this week to ensure corrective action authority is available if recovery options require contract or resource intervention.",
+  "narrative": "The program is exhibiting a systemic cascade failure originating from a single unresolved hardware dependency: RF interface specifications owed by Bob Martinez's HW team. This single blocker is propagating across five of Alice Nguyen's tasks (SE-02 through SE-06), all of which are behind schedule and directly or indirectly gating the PDR package. With PDR on-time probability at only 36%, and every downstream milestone compressing further \u2014 CDR at 32%, TRR at 8%, HW-SW Integration at 3%, and SAT at 1% \u2014 the schedule has virtually no recovery margin remaining.\n\nThe critical path runs directly through the software stack (SW-01 through SW-09) and into hardware-software integration (IT-03), meaning any further slip in SE-layer closure delays software requirements, which in turn delays all downstream software development and testing activities. Alice Nguyen's pre-staging of SDD and ICD sections demonstrates proactive execution on her part, but her turnaround time is being consumed daily while the RF specs remain uncommitted. Bob Martinez's HW tasks are themselves significantly behind: RF Front End Design (HW-01) is at 75% against an expected 100%, Signal Processing Board Design (HW-02) at 55%, and Power Supply Design (HW-03) has not started against an expected 100% completion \u2014 suggesting the HW team has broader execution problems beyond the RF spec issue alone.\n\nWith 25 of 57 tasks behind schedule and 25 CAMs reporting blockers, the schedule stress is not isolated to one work package. However, the RF spec dependency represents the highest-leverage intervention point available to the PM this week: resolving it unlocks multiple blocked tasks simultaneously and stops the compounding slip into PDR and all subsequent gates.",
   "tasks_behind": [
     {
       "task_id": "2",
       "cam_name": "Alice Nguyen",
       "percent_complete": 85,
-      "blocker": "The remaining 15% (RF interface section) is gated on hardware specs that are also feeding into the ICDs, which have not "
+      "blocker": "The remaining 15% depends on HW delivering RF interface specs before the CAM can complete the RF interface sections."
     },
     {
       "task_id": "3",
       "cam_name": "Alice Nguyen",
       "percent_complete": 60,
-      "blocker": "Sections 4 through 6 of the ICD are blocked pending resolution of an RF spec issue."
+      "blocker": "Sections 4 through 6 of the ICD are gated on RF specs that have been previously identified as a blocker."
     },
     {
       "task_id": "4",
       "cam_name": "Alice Nguyen",
       "percent_complete": 0,
-      "blocker": "CONOPS Development has been deprioritized due to focus on unblocking the ICD and PDR package work, and resumption depend"
+      "blocker": "CAM is intentionally sequencing CONOPS after RF specs and ICD direction are locked to ensure consistency with interface "
     },
     {
       "task_id": "5",
       "cam_name": "Alice Nguyen",
       "percent_complete": 40,
-      "blocker": "Incomplete ICDs (sections 4\u20136) are leaving gaps in interface requirements, capping RTM progress at 60\u201365% until those se"
+      "blocker": "RTM progress is blocked by unfinalized RF interface definitions (ICD not yet closed), preventing traceability of RF-rela"
     },
     {
       "task_id": "6",
       "cam_name": "Alice Nguyen",
       "percent_complete": 10,
-      "blocker": "Substantive content is blocked pending closure of the ICD and SE-02, both of which are held up by the unresolved RF spec"
+      "blocker": "Substantive PDR package content is blocked on SDD and ICD closure, which are themselves held up by an unresolved RF spec"
     },
     {
       "task_id": "7",
       "cam_name": "Alice Nguyen",
       "percent_complete": 5,
-      "blocker": "Substantive progress on interface-related hazard analysis is blocked pending closure of ICD sections 4 through 6, driven"
+      "blocker": "ICD approval is pending due to an unresolved RF spec issue, preventing finalization of the hazard analysis that requires"
     },
     {
       "task_id": "8",
       "cam_name": "Alice Nguyen",
       "percent_complete": 0,
-      "blocker": "SE-08 is formally blocked on ICD approval, which is dependent on RF spec sections 4\u20136 closing before work can begin."
+      "blocker": "Reliability Analysis cannot start until the ICDs are approved due to an RF spec dependency."
     },
     {
       "task_id": "9",
       "cam_name": "Alice Nguyen",
       "percent_complete": 0,
-      "blocker": "Multiple upstream tasks (SE-07, SE-08, SE-04, SE-10) that feed into CDR are already delayed or blocked, and a potential "
+      "blocker": "CDR package is blocked by an RF spec dependency cascading through upstream deliverables, and will not progress until the"
     },
     {
       "task_id": "10",
       "cam_name": "Alice Nguyen",
       "percent_complete": 0,
-      "blocker": "V&V Plan cannot begin until CONOPS and a stable RTM are available, both of which are stalled due to unresolved RF spec a"
+      "blocker": "V&V Plan is blocked by an upstream RF spec dependency cascading through the RTM and ICDs, which must close out before V&"
     },
     {
       "task_id": "11",
       "cam_name": "Bob Martinez",
       "percent_complete": 75,
-      "blocker": "Tool license contention on the lab cluster is causing simulation runs to take longer than planned, risking a slip to HW-"
+      "blocker": "Tool license contention on the lab cluster is backing up simulation runs, threatening an early May deadline that would c"
     },
     {
       "task_id": "12",
       "cam_name": "Bob Martinez",
       "percent_complete": 55,
-      "blocker": "A key engineer is on medical leave for approximately three weeks, resulting in only partial coverage and reduced progres"
+      "blocker": "A key engineer is on medical leave for approximately three weeks, with only partial coverage that is insufficient to mai"
     },
     {
       "task_id": "13",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Nothing's holding it up \u2014 it just hasn't hit its planned start date yet. Sequence-dependent on the earlier work. No issu"
+      "blocker": "Power Supply Design is blocked upstream by delays on HW-01 and HW-02, which must deliver finalized RF and signal process"
     },
     {
       "task_id": "14",
       "cam_name": "Bob Martinez",
       "percent_complete": 45,
-      "blocker": "Progress is stalled pending receipt of updated antenna aperture requirements from Alice's ICD, which are required to fin"
+      "blocker": "CAM is waiting on updated antenna aperture requirements from Alice's ICD update before the design can be finalized."
     },
     {
       "task_id": "15",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "HW-05 (RF Front End Prototype Fabrication) cannot start until HW-01 completes, which is delayed by a simulation issue th"
+      "blocker": "Task is blocked by an unresolved simulation issue in upstream task HW-01, which must clear before fabrication can start."
     },
     {
       "task_id": "16",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Task is sequenced behind HW-02, which is indirectly affected by the same medical leave situation previously mentioned."
+      "blocker": "Task has not started because it is downstream of HW-02, which is delayed due to a medical leave coverage issue affecting"
     },
     {
       "task_id": "17",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Antenna Array Fabrication is blocked by the same ICD dependency (HW-04) previously mentioned, meaning any schedule slip "
+      "blocker": "Antenna Array Fabrication cannot start because it is downstream of HW-04 and blocked by an unresolved ICD issue that has"
     },
     {
       "task_id": "18",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Hardware Unit Testing inherits all upstream fabrication task risks as blockers, though no independent blockers exist bey"
+      "blocker": "Hardware Unit Testing is blocked by three unresolved upstream issues \u2014 a simulation problem, a medical leave staffing ga"
     },
     {
       "task_id": "19",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Environmental Stress Screening has not started due to upstream dependency on Hardware Unit Testing, which carries unreso"
+      "blocker": "Three upstream blockers cascading from unit testing are preventing Environmental Stress Screening from starting."
     },
     {
       "task_id": "20",
       "cam_name": "Bob Martinez",
       "percent_complete": 0,
-      "blocker": "Unresolved ICD dependency and cluster access issue are identified as risks that could delay the Hardware Acceptance Test"
-    },
-    {
-      "task_id": "22",
-      "cam_name": "Carol Smith",
-      "percent_complete": 70,
-      "blocker": "A dependency on finalized system interface specs has slightly delayed progress on Software Architecture Design."
-    },
-    {
-      "task_id": "23",
-      "cam_name": "Carol Smith",
-      "percent_complete": 30,
-      "blocker": "Implementation decisions are on hold pending the interface spec dependency being locked down."
+      "blocker": "Three unresolved blockers are holding up Hardware Acceptance Test and will cause the date to slip if any one of them is "
     },
     {
       "task_id": "24",
       "cam_name": "Carol Smith",
       "percent_complete": 20,
-      "blocker": "The task is being held up by the same interface spec dependency previously identified."
+      "blocker": "Task is waiting on interface definitions from SW-02, expected to close out next week, which is gating further accelerati"
+    },
+    {
+      "task_id": "25",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "UI Development cannot start until SW-02 closes out due to an interface dependency."
     },
     {
       "task_id": "26",
       "cam_name": "Carol Smith",
       "percent_complete": 15,
-      "blocker": "Progress is being held up by a pending interface spec dependency, causing the DB team to pause on certain data structure"
+      "blocker": "SW-02 dependency exists but has less impact on this task than on the algorithm work due to greater independence from ful"
     },
     {
-      "task_id": "31",
-      "cam_name": "David Lee",
+      "task_id": "27",
+      "cam_name": "Carol Smith",
       "percent_complete": 0,
-      "blocker": "Integration Test Plan cannot be baselined until the systems engineering team finalizes and closes out their requirements"
-    },
-    {
-      "task_id": "32",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "Calibration equipment required to certify the lab environment is on backorder with a 6-8 week delivery estimate on an ex"
-    },
-    {
-      "task_id": "33",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "Hardware-Software Integration (IT-03) is gated behind both finalized requirements (IT-01) and lab standup (IT-02) resolv"
-    },
-    {
-      "task_id": "34",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "IT-04 (System Functional Testing) is blocked by an upstream dependency chain: IT-03 must complete first, which is itself"
-    },
-    {
-      "task_id": "35",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "IT-05 is gated behind functional testing (IT-04) due to a dependency chain, meaning it cannot begin until upstream tasks"
-    },
-    {
-      "task_id": "36",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "Environmental testing faces a dual constraint: upstream dependency on IT-06 and a potential separate facility coordinati"
-    },
-    {
-      "task_id": "38",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "TRR is blocked by upstream testing phases and requires multiple artifacts (test plan, procedures, lab certification, def"
-    },
-    {
-      "task_id": "39",
-      "cam_name": "David Lee",
-      "percent_complete": 0,
-      "blocker": "ATP development is blocked by unfinalized requirements and the absence of a stable test plan baseline."
-    },
-    {
-      "task_id": "43",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 28,
-      "blocker": "Subcontractor inputs have not yet been received, delaying further progress on Monthly Status Reports."
+      "blocker": "Software Unit Testing cannot begin until predecessor coding tasks SW-03, SW-04, SW-05, and SW-06 reach sufficient maturi"
     },
     {
       "task_id": "44",
       "cam_name": "Eva Johnson",
       "percent_complete": 28,
-      "blocker": "Subcontractor input is delayed, holding up EVM reporting progress."
-    },
-    {
-      "task_id": "45",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 30,
-      "blocker": "Baseline updates are being held up by the same subcontractor input delays affecting this task."
+      "blocker": "EVM reporting is blocked by a subcontractor data issue affecting its inputs."
     },
     {
       "task_id": "46",
       "cam_name": "Eva Johnson",
       "percent_complete": 25,
-      "blocker": "An input delay issue is holding up progress on Subcontractor Management."
-    },
-    {
-      "task_id": "47",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 30,
-      "blocker": "Subcontractor input delays are holding up progress on Configuration Management."
-    },
-    {
-      "task_id": "48",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 30,
-      "blocker": "Subcontractor input delays are holding up progress on Quality Assurance."
-    },
-    {
-      "task_id": "49",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 30,
-      "blocker": "Subcontractor input delays are holding up progress on Customer Coordination Meetings."
-    },
-    {
-      "task_id": "50",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 30,
-      "blocker": "Subcontractor input delays are holding up progress on Data Management."
+      "blocker": "Slow subcontractor data delivery is dragging down percent complete on this task."
     }
   ],
   "cam_response_status": {
@@ -353,68 +269,45 @@
       "last_outcome": "completed"
     },
     "Eva Johnson": {
-      "responded": false,
-      "attempts": 0,
-      "last_outcome": "not_contacted"
+      "responded": true,
+      "attempts": 1,
+      "last_outcome": "completed"
     }
   },
   "completion_report": {
-    "responded": 9,
     "total": 5,
-    "threshold_met": true
+    "responded": 5,
+    "threshold": 0.8,
+    "threshold_met": true,
+    "skipped": [],
+    "failed": []
   },
   "report_path": "reports\\2026-04-28_ims_report.md",
-  "validation_holds": [
-    {
-      "task_id": "22",
-      "cam_name": "Carol Smith",
-      "rule": "backwards_movement",
-      "detail": "Percent decreased 78% \u2192 70% with no explanation provided"
-    },
-    {
-      "task_id": "23",
-      "cam_name": "Carol Smith",
-      "rule": "backwards_movement",
-      "detail": "Percent decreased 38% \u2192 30% with no explanation provided"
-    },
-    {
-      "task_id": "24",
-      "cam_name": "Carol Smith",
-      "rule": "backwards_movement",
-      "detail": "Percent decreased 25% \u2192 20% with no explanation provided"
-    },
-    {
-      "task_id": "26",
-      "cam_name": "Carol Smith",
-      "rule": "backwards_movement",
-      "detail": "Percent decreased 17% \u2192 15% with no explanation provided"
+  "validation_holds": [],
+  "validation_warnings": [],
+  "approval_required": false,
+  "ims_master_dir": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_master",
+  "ims_exports_dir": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_exports",
+  "latest_ims_path": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_exports\\latest_ims.xml",
+  "current_cycle": {
+    "cycle_id": "20260429T000848Z",
+    "phase": "interviewing",
+    "started_at": "2026-04-29T00:08:48.888821+00:00",
+    "completed_at": null,
+    "cams_total": 5,
+    "cams_responded": 0,
+    "tasks_captured": 0,
+    "report_path": "",
+    "schedule_health": "",
+    "error": "",
+    "validation_holds": [],
+    "approval_required": false,
+    "cam_status_live": {
+      "Alice Nguyen": "pending",
+      "Bob Martinez": "pending",
+      "Carol Smith": "pending",
+      "David Lee": "pending",
+      "Eva Johnson": "pending"
     }
-  ],
-  "validation_warnings": [
-    {
-      "task_id": "1",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 1 from Alice Nguyen"
-    },
-    {
-      "task_id": "21",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 21 from Carol Smith"
-    },
-    {
-      "task_id": "37",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 37 from David Lee"
-    },
-    {
-      "task_id": "40",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 40 from David Lee"
-    }
-  ],
-  "approval_required": true
+  }
 }

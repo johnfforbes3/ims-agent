@@ -248,6 +248,66 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
+## Phase 5 / Sprint 4 — Test & Bug Fix Sprint
+
+### TD-026 — Unit tests caused Windows fatal COM crash — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `tests/conftest.py` (new file)  
+**Description:** `test_cycle_runner.py::test_lock_released_after_failure` called `CycleRunner.run()` with a nonexistent IMS path. `_run_inner()` called `find_latest_master()` which found a real `.mpp` file in `data/ims_master/`, triggering MS Project COM automation. The COM call caused a fatal Windows exception (`0x80010108: RPC_E_DISCONNECTED`) that crashed the entire pytest process with no test result captured.  
+**Fix:** Created `tests/conftest.py` with an `autouse=True` fixture patching `agent.mpp_converter.find_latest_master` to return `None` for all unit tests. Tests needing the real MPP workflow opt out explicitly.
+
+---
+
+### TD-027 — MS Project Planning Wizard modal dialog blocked all COM operations — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `agent/mpp_converter.py`  
+**Description:** Task 21 in `data/sample_ims.xml` is linked to a non-movable predecessor. When MS Project opened the file via COM, it displayed a "Planning Wizard" modal dialog asking whether to honour the dependency. This blocked all COM calls with RPC errors (`0x800706be`), making `mpp_to_xml` and `xml_to_mpp` hang indefinitely and eventually raise. Any test or cycle run that triggered COM would stall.  
+**Fix:** Added `msp.DisplayAlerts = False` immediately after obtaining the COM instance in all four functions: `is_com_available()`, `_get_com_instance()`, `_com_mpp_to_xml()`, `_com_xml_to_mpp()`. `DisplayAlerts` is restored to `True` in every `finally` block.
+
+---
+
+### TD-028 — `import sys` inside `main()` caused `UnboundLocalError` in five CLI branches — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `main.py`  
+**Description:** An `import sys` statement existed inside the `elif args.cam_responder:` branch of `main()`. Python scoping rules make any `import` inside a function body create a local binding for the **entire function**, regardless of the branch taken. Any branch that called `sys.exit(1)` before execution reached the `cam_responder` block raised `UnboundLocalError: cannot access local variable 'sys' before assignment`. Affected: `--ims-file <nonexistent>`, `--demo-interview` (missing `--meeting-url`), `--demo-interview --meeting-url <url>` (missing `--callback-url`).  
+**Fix:** Removed the inner `import sys`. The module-level `import sys` at the top of the file is sufficient for all branches.
+
+---
+
+### TD-029 — `VALIDATION_ALLOW_BACKWARDS` read at module import time — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `agent/validation.py`  
+**Description:** `_ALLOW_BACKWARDS = os.getenv("VALIDATION_ALLOW_BACKWARDS", "false").lower() == "true"` was a module-level constant, evaluated once at import. Setting `os.environ["VALIDATION_ALLOW_BACKWARDS"] = "true"` at Python runtime after module import had no effect. Test harnesses and integration tests that tried to flip the flag via `monkeypatch.setenv` or `os.environ` got incorrect results.  
+**Fix:** Replaced the module constant with a `_allow_backwards()` function that calls `os.getenv` at each invocation. The single call site in `validate()` was updated accordingly.
+
+---
+
+### TD-030 — `calculate_critical_path()` returned no `project_float_days` scalar — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `agent/critical_path.py`  
+**Description:** The return dict of `calculate_critical_path()` had no `project_float_days` key, even though `total_float` (a per-task dict) was populated. Callers using `cp.get("project_float_days")` received `None`. The test procedure (step 2.4) documented this key as expected, creating a false FAIL for testers.  
+**Fix:** After computing `critical_path` and `total_float`, the minimum float across all CP tasks is computed and stored as `project_float_days` (a `float`). The key is also added to `_empty_result()`.
+
+---
+
+### TD-031 — Unit tests wrote real status files to `reports/cycles/` on every run — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `tests/test_cycle_runner.py`  
+**Description:** `CycleRunner` writes `*_status.json` files to `_REPORTS_DIR/cycles/` (resolved from the `REPORTS_DIR` env var). Unit tests that called `CycleRunner.run()` without patching `_REPORTS_DIR` created real files in the project's `reports/cycles/` directory. These accumulated across test runs and could interfere with test assertions in other tests (e.g., step 4.4 checking "latest" cycle status).  
+**Fix:** Added an `isolated_data_dirs` autouse fixture in `tests/test_cycle_runner.py` that uses `monkeypatch` to redirect both `_REPORTS_DIR` and `_DATA_DIR` to a `tmp_path`-scoped temporary directory for every test.
+
+---
+
+### TD-032 — COM `mpp_to_xml` / `xml_to_mpp` failed silently — **RESOLVED**
+**Resolved:** Phase 5 sprint 4 — 2026-04-29  
+**File:** `agent/mpp_converter.py`  
+**Description:** After the `is_com_available()` probe called `msp.Quit()`, subsequent COM calls had to re-launch MS Project. The 8-second `_LAUNCH_WAIT_SEC` was sometimes insufficient for the Click-to-Run bootstrap, causing `FileSaveAs` to return a success code without writing the file. The caller received no error but the output path was empty.  
+**Fix:**  
+1. Added post-call output-file verification in both `_com_mpp_to_xml` and `_com_xml_to_mpp`: if the file is missing or zero-size after `FileSaveAs`, a `RuntimeError` is raised with a diagnostic message.  
+2. Increased `_LAUNCH_WAIT_SEC` from 8 → 12 seconds to give Click-to-Run more time to initialise.
+
+---
+
 ## How to Use This Register
 
 - When writing new code that cuts a corner, add an entry here in the same PR.

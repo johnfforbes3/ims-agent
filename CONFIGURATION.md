@@ -115,7 +115,7 @@ Runs auto-responding simulated CAM accounts via Microsoft Graph API. Requires M3
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `VALIDATION_MAX_JUMP_PCT` | `50` | No | Max percent-complete increase in one cycle before flagging as anomaly. |
-| `VALIDATION_ALLOW_BACKWARDS` | `false` | No | Whether to allow percent-complete decreases without flagging. |
+| `VALIDATION_ALLOW_BACKWARDS` | `false` | No | Set to `true` to allow percent-complete decreases without flagging as a backwards-movement failure. Re-read at each validation call (safe to change in `.env` without restarting the process). |
 
 ---
 

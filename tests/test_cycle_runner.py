@@ -18,6 +18,25 @@ def reset_cycle_lock():
     CycleRunner._active = False
 
 
+@pytest.fixture(autouse=True)
+def isolated_data_dirs(tmp_path, monkeypatch):
+    """
+    Redirect all cycle-runner file I/O (reports, data) to a temporary directory.
+
+    This prevents test runs from accumulating *_status.json files in the real
+    reports/cycles/ directory and from touching real data/ paths.
+    Tests that need to inspect specific output paths should use tmp_path
+    directly (as test_status_persisted_to_disk does with its own patch).
+    """
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr("agent.cycle_runner._REPORTS_DIR", str(reports))
+    monkeypatch.setattr("agent.cycle_runner._DATA_DIR", str(data))
+    yield tmp_path
+
+
 class TestCycleLocking:
     def test_duplicate_trigger_raises(self):
         CycleRunner._active = True

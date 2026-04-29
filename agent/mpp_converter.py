@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # COM constants
 _MSP_FORMAT_XML = 22
 _WINPROJ_EXE = r"C:\Program Files\Microsoft Office\Root\Office16\WINPROJ.EXE"
-_LAUNCH_WAIT_SEC = 8
+_LAUNCH_WAIT_SEC = 12
 
 # MPXJ / Java constants
 _JAVA_HOME = r"C:\Users\forbe\.jre21"
@@ -68,6 +68,7 @@ def is_com_available() -> bool:
         import win32com.client, pythoncom
         pythoncom.CoInitialize()
         msp = win32com.client.Dispatch("MSProject.Application")
+        msp.DisplayAlerts = False  # suppress Planning Wizard + all modal dialogs
         msp.Quit()
         _com_ok = True
         logger.info("action=com_available")
@@ -230,7 +231,9 @@ def _get_com_instance():
     import win32com.client, pythoncom
     pythoncom.CoInitialize()
     try:
-        return win32com.client.GetActiveObject("MSProject.Application")
+        msp = win32com.client.GetActiveObject("MSProject.Application")
+        msp.DisplayAlerts = False  # suppress Planning Wizard immediately
+        return msp
     except Exception:
         pass
     proc = subprocess.Popen(
@@ -241,7 +244,9 @@ def _get_com_instance():
     time.sleep(_LAUNCH_WAIT_SEC)
     for _ in range(3):
         try:
-            return win32com.client.GetActiveObject("MSProject.Application")
+            msp = win32com.client.GetActiveObject("MSProject.Application")
+            msp.DisplayAlerts = False  # suppress Planning Wizard immediately
+            return msp
         except Exception:
             time.sleep(2)
     raise RuntimeError("MS Project launched but COM connection timed out.")
@@ -251,26 +256,50 @@ def _com_mpp_to_xml(mpp_abs: str, xml_abs: str) -> None:
     logger.info("action=com_mpp_to_xml src=%s dst=%s", mpp_abs, xml_abs)
     msp = _get_com_instance()
     try:
+        msp.DisplayAlerts = False  # suppress Planning Wizard and all modal dialogs
         msp.FileOpen(mpp_abs, ReadOnly=True)
         msp.FileSaveAs(xml_abs, Format=_MSP_FORMAT_XML)
         msp.FileClose(Save=False)
-        logger.info("action=com_mpp_to_xml_done")
+        # Verify the output was actually written — COM can silently fail to produce output.
+        if not Path(xml_abs).exists() or Path(xml_abs).stat().st_size == 0:
+            raise RuntimeError(
+                f"COM mpp_to_xml produced no output at {xml_abs}. "
+                "Verify MS Project is not blocked by a dialog (run Quick Repair if needed)."
+            )
+        logger.info("action=com_mpp_to_xml_done size=%d", Path(xml_abs).stat().st_size)
     except Exception as exc:
         logger.error("action=com_mpp_to_xml_failed error=%s", exc)
         raise
+    finally:
+        try:
+            msp.DisplayAlerts = True
+        except Exception:
+            pass
 
 
 def _com_xml_to_mpp(xml_abs: str, mpp_abs: str) -> None:
     logger.info("action=com_xml_to_mpp src=%s dst=%s", xml_abs, mpp_abs)
     msp = _get_com_instance()
     try:
+        msp.DisplayAlerts = False  # suppress Planning Wizard and all modal dialogs
         msp.FileOpen(xml_abs)
         msp.FileSaveAs(mpp_abs)
         msp.FileClose(Save=False)
-        logger.info("action=com_xml_to_mpp_done")
+        # Verify the output was actually written — COM can silently fail to produce output.
+        if not Path(mpp_abs).exists() or Path(mpp_abs).stat().st_size == 0:
+            raise RuntimeError(
+                f"COM xml_to_mpp produced no output at {mpp_abs}. "
+                "Verify MS Project is not blocked by a dialog (run Quick Repair if needed)."
+            )
+        logger.info("action=com_xml_to_mpp_done size=%d", Path(mpp_abs).stat().st_size)
     except Exception as exc:
         logger.error("action=com_xml_to_mpp_failed error=%s", exc)
         raise
+    finally:
+        try:
+            msp.DisplayAlerts = True
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

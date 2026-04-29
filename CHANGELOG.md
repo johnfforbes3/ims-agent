@@ -4,6 +4,48 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 5 Sprint 4 — Test Procedure Execution & Bug Fixes (2026-04-29)
+
+**Summary:** Full end-to-end execution of the Phase 5 / Sprint 3 test procedure (12 sections, 242 unit tests). Ten bugs found; all ten resolved in this sprint. Three were fixed during test execution; seven more fixed immediately after. No regressions; 242/242 tests pass.
+
+### Fixed
+
+- **BUG-001 / TD-026** — Unit tests caused Windows fatal COM crash (`0x80010108`): `test_cycle_runner.py::test_lock_released_after_failure` called real COM automation via `find_latest_master`. Fixed by creating `tests/conftest.py` with an autouse fixture patching `find_latest_master` to return `None` for all unit tests.
+- **BUG-002 / TD-027** — MS Project Planning Wizard modal dialog blocked all COM operations after opening `.mpp` files with scheduling conflicts. Fixed by setting `msp.DisplayAlerts = False` immediately after obtaining the COM instance in all four functions in `agent/mpp_converter.py` (`is_com_available`, `_get_com_instance`, `_com_mpp_to_xml`, `_com_xml_to_mpp`). `DisplayAlerts` is restored in every `finally` block.
+- **BUG-003 / TD-028** — `import sys` inside the `elif args.cam_responder:` block in `main()` made `sys` a local variable for the entire function, causing `UnboundLocalError: cannot access local variable 'sys'` in five unrelated branches (`--ims-file`, `--demo-interview`, etc.). Fixed by removing the inner import — the module-level `import sys` was already sufficient.
+- **BUG-004 / TD-029** — `VALIDATION_ALLOW_BACKWARDS` env var was read once at module import time (`_ALLOW_BACKWARDS` module constant). Changing `os.environ` at runtime had no effect. Fixed by replacing the constant with a `_allow_backwards()` function that calls `os.getenv` at each call site. Enables runtime reconfiguration and proper monkeypatching in tests.
+- **BUG-005 / TD-030** — `calculate_critical_path()` returned no `project_float_days` key (missing from result dict; returned `None` via `.get()`). Fixed by computing the scalar as `min(total_float[tid] for tid in critical_path)` and adding `project_float_days` to the return dict and `_empty_result()`.
+- **BUG-006 / TD-031** — Unit tests wrote real `*_status.json` files to `reports/cycles/` on disk on every test run. Fixed by adding an `isolated_data_dirs` autouse fixture in `tests/test_cycle_runner.py` that monkeypatches `_REPORTS_DIR` and `_DATA_DIR` to `tmp_path` for every test.
+- **BUG-007 / TD-032** — COM `mpp_to_xml` / `xml_to_mpp` failed silently: `FileSaveAs` returned without error but no output file was written. Fixed by adding post-call verification in both `_com_mpp_to_xml` and `_com_xml_to_mpp`: if the output file is missing or zero-size after the save call, a `RuntimeError` is raised with a diagnostic message. Also increased `_LAUNCH_WAIT_SEC` from 8 → 12 s to give Click-to-Run MS Project more startup time.
+- **BUG-008** — Test procedure step 7.5 used `/tmp/ims_test.mpp` (Linux path, invalid on Windows). Updated to use `tempfile.gettempdir()`.
+- **BUG-009** — Test procedure step 5.2 expected `<meta http-equiv="refresh">` (not present). Dashboard uses JavaScript countdown. Updated step to verify JS-based auto-refresh.
+- **BUG-010** — Test procedure step 3.4 referenced `TTSEngine()` directly (abstract class, raises `TypeError`). Updated to use the `build_tts_engine()` factory function.
+
+### Test Results (Phase 5 / Sprint 3 Test Procedure)
+
+| Metric | Value |
+|--------|-------|
+| Unit tests | 242 / 242 PASS |
+| Required procedure steps | PASS (all non-optional) |
+| Procedure steps FAIL | 0 |
+| Procedure steps SKIP | 27 (Teams/ACS/Slack/TTS — no credentials) |
+| Bugs found | 10 |
+| Bugs fixed | 10 (all) |
+| Overall verdict | CONDITIONAL PASS |
+
+See `TEST_RESULTS.md` for the full section-by-section results.
+
+### Changed
+- `agent/validation.py` — `_ALLOW_BACKWARDS` constant → `_allow_backwards()` function
+- `agent/critical_path.py` — Added `project_float_days` scalar key to result dict and `_empty_result()`
+- `agent/mpp_converter.py` — Output-file verification in `_com_mpp_to_xml` and `_com_xml_to_mpp`; `_LAUNCH_WAIT_SEC` 8 → 12
+- `main.py` — Removed inner `import sys` from `elif args.cam_responder:` block
+- `tests/conftest.py` — NEW: autouse fixture patching `find_latest_master` to `None`
+- `tests/test_cycle_runner.py` — NEW: `isolated_data_dirs` autouse fixture for I/O isolation
+- `TEST_PROCEDURE.txt` — Steps 3.4, 5.2, 7.5 corrected
+
+---
+
 ## Phase 5 Sprint 3 — Teams Chat Relay Loop, IMS Export, & Bug Fixes (2026-04-28)
 
 **Capability:** The IMS Agent now conducts fully automated Teams Chat status interviews end-to-end without any manual intervention. The Trigger Cycle button sends opening questions to all CAMs via Bot Framework REST, the Graph CAM responder relays each reply to the dashboard server, and the server advances the interview and sends the next question — all in real time. On completion, the updated IMS is exported to a versioned folder (`data/ims_exports/`) that can be opened directly in Microsoft Project.

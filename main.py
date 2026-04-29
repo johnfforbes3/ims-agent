@@ -363,7 +363,6 @@ def main() -> None:
         _run_init_mpp(ims_path)
     elif args.cam_responder:
         from agent.graph_cam_responder import run_cam_responder
-        import sys
         explicit_cam = next((a.split("=")[1] for a in sys.argv if a.startswith("--cam=")), None)
         if explicit_cam is None and "--cam" in sys.argv:
             idx = sys.argv.index("--cam")
