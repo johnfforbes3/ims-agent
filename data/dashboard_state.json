@@ -1,252 +1,149 @@
 {
-  "last_updated": "2026-04-28T23:56:39.433808+00:00",
-  "cycle_id": "20260428T234914Z",
+  "last_updated": "2026-04-29T08:54:18.303273+00:00",
+  "cycle_id": "20260429T084638Z",
   "schedule_health": "RED",
   "critical_path_task_ids": [
     "1",
+    "2",
     "3",
-    "21",
+    "4",
+    "6",
+    "5",
+    "7",
+    "8",
     "22",
     "23",
     "24",
-    "27",
+    "25",
     "28",
     "29",
+    "30",
+    "32",
     "33",
+    "34",
     "35",
-    "36",
-    "37",
-    "40",
+    "39",
+    "42",
+    "43",
+    "44",
+    "49",
+    "50",
+    "52",
+    "53",
+    "55",
     "56",
-    "57"
+    "57",
+    "58",
+    "59",
+    "61",
+    "62",
+    "63",
+    "64",
+    "65",
+    "68",
+    "69",
+    "70",
+    "72",
+    "75",
+    "76",
+    "77",
+    "79",
+    "83",
+    "84",
+    "93",
+    "94",
+    "95",
+    "97",
+    "98",
+    "99",
+    "100"
   ],
   "milestones": [
     {
-      "task_id": "51",
-      "milestone_name": "MS-01 System Requirements Review (SRR) Complete",
-      "baseline_date": "2026-02-13",
-      "p50_date": "2026-02-13",
-      "p80_date": "2026-02-13",
-      "p95_date": "2026-02-13",
+      "task_id": "8",
+      "milestone_name": "MILESTONE: Project Kickoff",
+      "baseline_date": "2026-01-16",
+      "p50_date": "2026-01-16",
+      "p80_date": "2026-01-16",
+      "p95_date": "2026-01-16",
       "prob_on_baseline": 1.0,
       "risk_level": "LOW"
     },
     {
-      "task_id": "52",
-      "milestone_name": "MS-02 Preliminary Design Review (PDR) Complete",
-      "baseline_date": "2026-05-29",
-      "p50_date": "2026-05-30",
-      "p80_date": "2026-05-31",
-      "p95_date": "2026-06-01",
-      "prob_on_baseline": 0.3558,
-      "risk_level": "HIGH"
+      "task_id": "21",
+      "milestone_name": "MILESTONE: Procurement Complete",
+      "baseline_date": "2026-01-29",
+      "p50_date": "2026-01-29",
+      "p80_date": "2026-01-29",
+      "p95_date": "2026-01-29",
+      "prob_on_baseline": 1.0,
+      "risk_level": "LOW"
     },
     {
-      "task_id": "53",
-      "milestone_name": "MS-03 Critical Design Review (CDR) Complete",
-      "baseline_date": "2026-08-14",
-      "p50_date": "2026-08-15",
-      "p80_date": "2026-08-16",
-      "p95_date": "2026-08-18",
-      "prob_on_baseline": 0.3168,
-      "risk_level": "HIGH"
+      "task_id": "28",
+      "milestone_name": "MILESTONE: Facility Ready",
+      "baseline_date": "2026-01-30",
+      "p50_date": "2026-01-30",
+      "p80_date": "2026-01-30",
+      "p95_date": "2026-01-30",
+      "prob_on_baseline": 1.0,
+      "risk_level": "LOW"
     },
     {
-      "task_id": "54",
-      "milestone_name": "MS-04 Test Readiness Review (TRR) Complete",
-      "baseline_date": "2026-09-25",
-      "p50_date": "2026-09-27",
-      "p80_date": "2026-09-28",
-      "p95_date": "2026-09-29",
-      "prob_on_baseline": 0.0761,
-      "risk_level": "HIGH"
+      "task_id": "42",
+      "milestone_name": "MILESTONE: Hardware Installed",
+      "baseline_date": "2026-02-16",
+      "p50_date": "2026-02-16",
+      "p80_date": "2026-02-16",
+      "p95_date": "2026-02-16",
+      "prob_on_baseline": 1.0,
+      "risk_level": "LOW"
     },
     {
       "task_id": "55",
-      "milestone_name": "MS-05 Hardware-Software Integration Complete",
-      "baseline_date": "2026-11-06",
-      "p50_date": "2026-11-10",
-      "p80_date": "2026-11-12",
-      "p95_date": "2026-11-13",
-      "prob_on_baseline": 0.03,
+      "milestone_name": "MILESTONE: OS and Base Stack Live",
+      "baseline_date": "2026-03-18",
+      "p50_date": "2026-03-18",
+      "p80_date": "2026-03-18",
+      "p95_date": "2026-03-18",
+      "prob_on_baseline": 1.0,
+      "risk_level": "LOW"
+    },
+    {
+      "task_id": "68",
+      "milestone_name": "MILESTONE: AI Stack Deployed",
+      "baseline_date": "2026-04-28",
+      "p50_date": "2026-04-28",
+      "p80_date": "2026-04-28",
+      "p95_date": "2026-04-28",
+      "prob_on_baseline": 0.0377,
       "risk_level": "HIGH"
     },
     {
-      "task_id": "56",
-      "milestone_name": "MS-06 System Acceptance Test (SAT) Complete",
-      "baseline_date": "2026-12-18",
-      "p50_date": "2026-12-22",
-      "p80_date": "2026-12-24",
-      "p95_date": "2026-12-26",
-      "prob_on_baseline": 0.0068,
+      "task_id": "84",
+      "milestone_name": "MILESTONE: Network and Security Hardened",
+      "baseline_date": "2026-06-03",
+      "p50_date": "2026-06-04",
+      "p80_date": "2026-06-04",
+      "p95_date": "2026-06-04",
+      "prob_on_baseline": 0.0081,
       "risk_level": "HIGH"
     },
     {
-      "task_id": "57",
-      "milestone_name": "MS-07 Program Complete / Delivery",
-      "baseline_date": "2026-12-18",
-      "p50_date": "2026-12-22",
-      "p80_date": "2026-12-24",
-      "p95_date": "2026-12-26",
-      "prob_on_baseline": 0.0078,
+      "task_id": "100",
+      "milestone_name": "MILESTONE: System Accepted",
+      "baseline_date": "2026-06-25",
+      "p50_date": "2026-06-26",
+      "p80_date": "2026-06-26",
+      "p95_date": "2026-06-26",
+      "prob_on_baseline": 0.0168,
       "risk_level": "HIGH"
     }
   ],
-  "top_risks": "1. **RF Interface Spec Delivery (HW \u2192 SE dependency):** The single largest schedule driver. Bob Martinez's HW team has not delivered RF specs, blocking SE-02, SE-03, SE-04, SE-05, and SE-06 \u2014 five tasks on or feeding the critical path. Alice Nguyen explicitly identifies this as the constraint requiring a firm HW commitment this week.\n\n2. **MS-04 TRR at 8% on-time probability:** TRR is the gateway to all system-level testing. At 8% confidence against its baseline date of 2026-09-25, test readiness is nearly certain to slip, and no recovery path is visible given the upstream blockage in SW requirements and SE closure tasks.\n\n3. **HW-03 Power Supply Design at 0% vs. expected ~100% (Bob Martinez):** Zero progress on a task that should be complete is a critical execution gap independent of the RF spec issue. This threatens hardware readiness for IT-03 (Hardware-Software Integration), which is on the critical path.\n\n4. **MS-05 Hardware-Software Integration Complete at 3% on-time probability:** With HW tasks HW-01, HW-02, and HW-03 all significantly behind and SW tasks gated on SE closure, convergence of hardware and software for integration by 2026-11-06 is effectively not credible under the current trajectory.\n\n5. **MS-06 System Acceptance Test at 1% on-time probability:** The terminal program milestone has a near-zero probability of being met on its 2026-12-18 baseline date. This represents a potential contract delivery risk and should be escalated beyond the PM level if not already flagged to the customer.",
-  "recommended_actions": "1. **Obtain a firm RF spec delivery commitment from Bob Martinez's HW team by end of this week.** Per Alice Nguyen's direct input, a commitment to \"end of next week\" is insufficient \u2014 each additional day of slip compresses her turnaround window before the PDR gate closes. The PM should convene a direct conversation between Alice Nguyen and Bob Martinez, set a hard date, and document it as a program-level action item with daily tracking.\n\n2. **Conduct an immediate recovery review with Bob Martinez on HW-01, HW-02, and HW-03.** HW-02 at 55% and HW-03 at 0% against expected completion of 100% are not explainable by the RF spec issue alone. The PM needs to understand the root cause of HW underperformance, whether additional resources or schedule relief are required, and what the realistic completion date is for each task.\n\n3. **Assess whether PDR (MS-02, 36% on-time) should be formally re-baselined or restructured.** Given the upstream blockages, the PM should determine with the SE lead and customer whether PDR can be held in a partial or phased manner, or whether the baseline date must be revised now to avoid a chaotic last-minute deferral that further compresses CDR and TRR windows.\n\n4. **Initiate a critical path recovery plan for SW-01 (Software Requirements Specification).** SW-01 is on the critical path and cannot begin substantively until SE-layer documents (SDD, ICDs) close. The PM should work with the SW lead to identify any pre-work that can proceed in parallel and establish a pull-forward plan that is ready to execute the moment RF specs and ICD direction are locked.\n\n5. **Escalate MS-06 SAT schedule risk to program leadership and the customer.** A 1% on-time probability on the final delivery milestone is a program-level risk that warrants immediate upward visibility. The PM should prepare a concise risk notification \u2014 grounded in the SRA outputs above \u2014 and brief leadership this week to ensure corrective action authority is available if recovery options require contract or resource intervention.",
-  "narrative": "The program is exhibiting a systemic cascade failure originating from a single unresolved hardware dependency: RF interface specifications owed by Bob Martinez's HW team. This single blocker is propagating across five of Alice Nguyen's tasks (SE-02 through SE-06), all of which are behind schedule and directly or indirectly gating the PDR package. With PDR on-time probability at only 36%, and every downstream milestone compressing further \u2014 CDR at 32%, TRR at 8%, HW-SW Integration at 3%, and SAT at 1% \u2014 the schedule has virtually no recovery margin remaining.\n\nThe critical path runs directly through the software stack (SW-01 through SW-09) and into hardware-software integration (IT-03), meaning any further slip in SE-layer closure delays software requirements, which in turn delays all downstream software development and testing activities. Alice Nguyen's pre-staging of SDD and ICD sections demonstrates proactive execution on her part, but her turnaround time is being consumed daily while the RF specs remain uncommitted. Bob Martinez's HW tasks are themselves significantly behind: RF Front End Design (HW-01) is at 75% against an expected 100%, Signal Processing Board Design (HW-02) at 55%, and Power Supply Design (HW-03) has not started against an expected 100% completion \u2014 suggesting the HW team has broader execution problems beyond the RF spec issue alone.\n\nWith 25 of 57 tasks behind schedule and 25 CAMs reporting blockers, the schedule stress is not isolated to one work package. However, the RF spec dependency represents the highest-leverage intervention point available to the PM this week: resolving it unlocks multiple blocked tasks simultaneously and stops the compounding slip into PDR and all subsequent gates.",
-  "tasks_behind": [
-    {
-      "task_id": "2",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 85,
-      "blocker": "The remaining 15% depends on HW delivering RF interface specs before the CAM can complete the RF interface sections."
-    },
-    {
-      "task_id": "3",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 60,
-      "blocker": "Sections 4 through 6 of the ICD are gated on RF specs that have been previously identified as a blocker."
-    },
-    {
-      "task_id": "4",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 0,
-      "blocker": "CAM is intentionally sequencing CONOPS after RF specs and ICD direction are locked to ensure consistency with interface "
-    },
-    {
-      "task_id": "5",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 40,
-      "blocker": "RTM progress is blocked by unfinalized RF interface definitions (ICD not yet closed), preventing traceability of RF-rela"
-    },
-    {
-      "task_id": "6",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 10,
-      "blocker": "Substantive PDR package content is blocked on SDD and ICD closure, which are themselves held up by an unresolved RF spec"
-    },
-    {
-      "task_id": "7",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 5,
-      "blocker": "ICD approval is pending due to an unresolved RF spec issue, preventing finalization of the hazard analysis that requires"
-    },
-    {
-      "task_id": "8",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 0,
-      "blocker": "Reliability Analysis cannot start until the ICDs are approved due to an RF spec dependency."
-    },
-    {
-      "task_id": "9",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 0,
-      "blocker": "CDR package is blocked by an RF spec dependency cascading through upstream deliverables, and will not progress until the"
-    },
-    {
-      "task_id": "10",
-      "cam_name": "Alice Nguyen",
-      "percent_complete": 0,
-      "blocker": "V&V Plan is blocked by an upstream RF spec dependency cascading through the RTM and ICDs, which must close out before V&"
-    },
-    {
-      "task_id": "11",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 75,
-      "blocker": "Tool license contention on the lab cluster is backing up simulation runs, threatening an early May deadline that would c"
-    },
-    {
-      "task_id": "12",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 55,
-      "blocker": "A key engineer is on medical leave for approximately three weeks, with only partial coverage that is insufficient to mai"
-    },
-    {
-      "task_id": "13",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Power Supply Design is blocked upstream by delays on HW-01 and HW-02, which must deliver finalized RF and signal process"
-    },
-    {
-      "task_id": "14",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 45,
-      "blocker": "CAM is waiting on updated antenna aperture requirements from Alice's ICD update before the design can be finalized."
-    },
-    {
-      "task_id": "15",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Task is blocked by an unresolved simulation issue in upstream task HW-01, which must clear before fabrication can start."
-    },
-    {
-      "task_id": "16",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Task has not started because it is downstream of HW-02, which is delayed due to a medical leave coverage issue affecting"
-    },
-    {
-      "task_id": "17",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Antenna Array Fabrication cannot start because it is downstream of HW-04 and blocked by an unresolved ICD issue that has"
-    },
-    {
-      "task_id": "18",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Hardware Unit Testing is blocked by three unresolved upstream issues \u2014 a simulation problem, a medical leave staffing ga"
-    },
-    {
-      "task_id": "19",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Three upstream blockers cascading from unit testing are preventing Environmental Stress Screening from starting."
-    },
-    {
-      "task_id": "20",
-      "cam_name": "Bob Martinez",
-      "percent_complete": 0,
-      "blocker": "Three unresolved blockers are holding up Hardware Acceptance Test and will cause the date to slip if any one of them is "
-    },
-    {
-      "task_id": "24",
-      "cam_name": "Carol Smith",
-      "percent_complete": 20,
-      "blocker": "Task is waiting on interface definitions from SW-02, expected to close out next week, which is gating further accelerati"
-    },
-    {
-      "task_id": "25",
-      "cam_name": "Carol Smith",
-      "percent_complete": 0,
-      "blocker": "UI Development cannot start until SW-02 closes out due to an interface dependency."
-    },
-    {
-      "task_id": "26",
-      "cam_name": "Carol Smith",
-      "percent_complete": 15,
-      "blocker": "SW-02 dependency exists but has less impact on this task than on the algorithm work due to greater independence from ful"
-    },
-    {
-      "task_id": "27",
-      "cam_name": "Carol Smith",
-      "percent_complete": 0,
-      "blocker": "Software Unit Testing cannot begin until predecessor coding tasks SW-03, SW-04, SW-05, and SW-06 reach sufficient maturi"
-    },
-    {
-      "task_id": "44",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 28,
-      "blocker": "EVM reporting is blocked by a subcontractor data issue affecting its inputs."
-    },
-    {
-      "task_id": "46",
-      "cam_name": "Eva Johnson",
-      "percent_complete": 25,
-      "blocker": "Slow subcontractor data delivery is dragging down percent complete on this task."
-    }
-  ],
+  "top_risks": "1. **AI Stack Deployed milestone failure (4% on-time probability):** All seven tasks feeding this milestone are behind schedule, with five at 0% complete against an expected ~100%. Recovery within the current baseline appears extremely unlikely without immediate intervention.\n\n2. **Sequential dependency collapse across AI-06 \u2192 AI-12:** AI-06 (85% complete) and AI-07 (60% complete) are prerequisite to downstream tasks. Their incomplete status has already zeroed out AI-08, AI-09, AI-10, and AI-12, creating a cascading block across the entire AI stack integration work stream.\n\n3. **Cascading impact to Network and Security Hardened (1% on-time) and System Accepted (2% on-time):** Both downstream milestones are on the critical path and inherit the full schedule risk from the AI Stack Deployed slip. A late AI Stack delivery has near-certain program-level consequences.\n\n4. **CAM reporting silence despite active slippage:** Zero blockers and zero risks have been reported by CAMs despite 8 tasks behind schedule. This reporting gap means root causes are undiagnosed and the PM is operating without ground-truth visibility into what is actually driving the delays.\n\n5. **MILESTONE: AI Stack Deployed is unassigned:** The milestone itself carries no owner, which creates accountability ambiguity at the most critical integration point in the schedule. Without a designated responsible party, recovery planning and escalation have no clear focal point.",
+  "recommended_actions": "1. **Convene an emergency CAM standup with Alice Nguyen and Eva Johnson this week.** With six of the eight behind-schedule tasks owned by these two individuals, the PM must obtain direct, candid status on AI-06 and AI-07 \u2014 including specific blockers, revised completion estimates, and what is needed to unblock AI-08 through AI-12. Do not accept percent-complete estimates without a supporting basis.\n\n2. **Assign an owner to the AI Stack Deployed milestone immediately.** An unassigned critical milestone has no accountable party driving recovery. Designate a responsible CAM or lead engineer and make them the single point of contact for milestone status reporting.\n\n3. **Assess whether a baseline revision or recovery schedule is required.** Given the 4% on-time probability and the current state of the task cluster, the PM should determine within this week whether a formal re-baseline is warranted or whether a credible recovery plan can close the gap \u2014 and document that decision for stakeholders.\n\n4. **Validate the SRA model inputs for the three high-risk milestones.** The P50/P80/P95 compression to a single date for all three milestones is analytically unusual and may indicate stale or incorrect duration risk inputs. Rerun the SRA with current actuals and realistic remaining duration ranges to ensure leadership is making decisions on sound probabilistic data.\n\n5. **Establish daily written status updates from Alice Nguyen and Eva Johnson until AI Stack Deployed is recovered.** The current weekly or ad-hoc cadence has allowed significant slippage to go unreported. A brief daily written update (task, % complete, blocker/no blocker, next 24-hour action) will surface issues in real time and create an audit trail for any future re-baseline justification.",
+  "narrative": "The program is in a critical condition centered entirely on the AI stack integration work stream. Of 100 total tasks, 8 are behind schedule \u2014 and all 8 are concentrated in the AI-06 through AI-12 task block, plus the AI Stack Deployed milestone itself. This clustering is not coincidental; these tasks are sequentially dependent, meaning slippage in AI-06 and AI-07 is directly starving downstream tasks (AI-08 through AI-12) of the prerequisites needed to begin or advance. The result is that five of the eight behind-schedule tasks are sitting at 0% actual versus an expected ~100% completion.\n\nThe SRA data reinforces the severity: the AI Stack Deployed milestone has only a 4% probability of on-time delivery against its 2026-04-28 baseline. Critically, the P50, P80, and P95 dates all compress to a single date (2026-04-28), which is atypical and warrants scrutiny of the SRA model inputs \u2014 but regardless of model fidelity, a 4% on-time probability is an unambiguous red signal. The downstream milestones \u2014 Network and Security Hardened (1% on-time) and System Accepted (2% on-time) \u2014 inherit this risk directly, suggesting the schedule has insufficient float to absorb the current slippage before contract completion.\n\nOne notable data gap is the complete absence of CAM-reported blockers or flagged risks despite widespread task slippage. This disconnect between schedule performance data and CAM reporting suggests either a CAM reporting process failure or that root causes have not yet been escalated. The PM cannot manage what has not been surfaced. Immediate CAM engagement is essential to understand whether the delays stem from technical complexity, resource contention, dependency gaps, or other causes \u2014 and to determine whether recovery is feasible within the current baseline.",
+  "tasks_behind": [],
   "cam_response_status": {
     "Alice Nguyen": {
       "responded": true,
@@ -275,39 +172,568 @@
     }
   },
   "completion_report": {
-    "total": 5,
     "responded": 5,
-    "threshold": 0.8,
-    "threshold_met": true,
-    "skipped": [],
-    "failed": []
+    "total": 5,
+    "threshold_met": true
   },
-  "report_path": "reports\\2026-04-28_ims_report.md",
+  "report_path": "reports\\2026-04-29_ims_report.md",
   "validation_holds": [],
-  "validation_warnings": [],
+  "validation_warnings": [
+    {
+      "task_id": "94",
+      "cam_name": "Bob Martinez",
+      "rule": "large_jump",
+      "detail": "Percent jumped 100 points (0% \u2192 100%) in one cycle"
+    },
+    {
+      "task_id": "1",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 1 from Alice Nguyen"
+    },
+    {
+      "task_id": "12",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 12 from Alice Nguyen"
+    },
+    {
+      "task_id": "19",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 19 from Alice Nguyen"
+    },
+    {
+      "task_id": "43",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 43 from Alice Nguyen"
+    },
+    {
+      "task_id": "44",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 44 from Alice Nguyen"
+    },
+    {
+      "task_id": "47",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 47 from Alice Nguyen"
+    },
+    {
+      "task_id": "48",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 48 from Alice Nguyen"
+    },
+    {
+      "task_id": "49",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 49 from Alice Nguyen"
+    },
+    {
+      "task_id": "50",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 50 from Alice Nguyen"
+    },
+    {
+      "task_id": "52",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 52 from Alice Nguyen"
+    },
+    {
+      "task_id": "53",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 53 from Alice Nguyen"
+    },
+    {
+      "task_id": "56",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 56 from Alice Nguyen"
+    },
+    {
+      "task_id": "57",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 57 from Alice Nguyen"
+    },
+    {
+      "task_id": "58",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 58 from Alice Nguyen"
+    },
+    {
+      "task_id": "59",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 59 from Alice Nguyen"
+    },
+    {
+      "task_id": "60",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 60 from Alice Nguyen"
+    },
+    {
+      "task_id": "61",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 61 from Alice Nguyen"
+    },
+    {
+      "task_id": "62",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 62 from Alice Nguyen"
+    },
+    {
+      "task_id": "64",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 64 from Alice Nguyen"
+    },
+    {
+      "task_id": "65",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 65 from Alice Nguyen"
+    },
+    {
+      "task_id": "7",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 7 from Alice Nguyen"
+    },
+    {
+      "task_id": "86",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 86 from Alice Nguyen"
+    },
+    {
+      "task_id": "91",
+      "cam_name": "Alice Nguyen",
+      "rule": "missing_response",
+      "detail": "No response captured for 91 from Alice Nguyen"
+    },
+    {
+      "task_id": "10",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 10 from Bob Martinez"
+    },
+    {
+      "task_id": "11",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 11 from Bob Martinez"
+    },
+    {
+      "task_id": "14",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 14 from Bob Martinez"
+    },
+    {
+      "task_id": "15",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 15 from Bob Martinez"
+    },
+    {
+      "task_id": "17",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 17 from Bob Martinez"
+    },
+    {
+      "task_id": "18",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 18 from Bob Martinez"
+    },
+    {
+      "task_id": "2",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 2 from Bob Martinez"
+    },
+    {
+      "task_id": "29",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 29 from Bob Martinez"
+    },
+    {
+      "task_id": "30",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 30 from Bob Martinez"
+    },
+    {
+      "task_id": "31",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 31 from Bob Martinez"
+    },
+    {
+      "task_id": "32",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 32 from Bob Martinez"
+    },
+    {
+      "task_id": "33",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 33 from Bob Martinez"
+    },
+    {
+      "task_id": "36",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 36 from Bob Martinez"
+    },
+    {
+      "task_id": "37",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 37 from Bob Martinez"
+    },
+    {
+      "task_id": "38",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 38 from Bob Martinez"
+    },
+    {
+      "task_id": "6",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 6 from Bob Martinez"
+    },
+    {
+      "task_id": "87",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 87 from Bob Martinez"
+    },
+    {
+      "task_id": "9",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 9 from Bob Martinez"
+    },
+    {
+      "task_id": "13",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 13 from Carol Smith"
+    },
+    {
+      "task_id": "16",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 16 from Carol Smith"
+    },
+    {
+      "task_id": "20",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 20 from Carol Smith"
+    },
+    {
+      "task_id": "22",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 22 from Carol Smith"
+    },
+    {
+      "task_id": "23",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 23 from Carol Smith"
+    },
+    {
+      "task_id": "24",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 24 from Carol Smith"
+    },
+    {
+      "task_id": "25",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 25 from Carol Smith"
+    },
+    {
+      "task_id": "26",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 26 from Carol Smith"
+    },
+    {
+      "task_id": "3",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 3 from Carol Smith"
+    },
+    {
+      "task_id": "34",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 34 from Carol Smith"
+    },
+    {
+      "task_id": "35",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 35 from Carol Smith"
+    },
+    {
+      "task_id": "39",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 39 from Carol Smith"
+    },
+    {
+      "task_id": "45",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 45 from Carol Smith"
+    },
+    {
+      "task_id": "51",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 51 from Carol Smith"
+    },
+    {
+      "task_id": "69",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 69 from Carol Smith"
+    },
+    {
+      "task_id": "70",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 70 from Carol Smith"
+    },
+    {
+      "task_id": "72",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 72 from Carol Smith"
+    },
+    {
+      "task_id": "75",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 75 from Carol Smith"
+    },
+    {
+      "task_id": "80",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 80 from Carol Smith"
+    },
+    {
+      "task_id": "81",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 81 from Carol Smith"
+    },
+    {
+      "task_id": "96",
+      "cam_name": "Carol Smith",
+      "rule": "missing_response",
+      "detail": "No response captured for 96 from Carol Smith"
+    },
+    {
+      "task_id": "27",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 27 from Eva Johnson"
+    },
+    {
+      "task_id": "4",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 4 from Eva Johnson"
+    },
+    {
+      "task_id": "46",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 46 from Eva Johnson"
+    },
+    {
+      "task_id": "63",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 63 from Eva Johnson"
+    },
+    {
+      "task_id": "67",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 67 from Eva Johnson"
+    },
+    {
+      "task_id": "71",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 71 from Eva Johnson"
+    },
+    {
+      "task_id": "73",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 73 from Eva Johnson"
+    },
+    {
+      "task_id": "74",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 74 from Eva Johnson"
+    },
+    {
+      "task_id": "76",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 76 from Eva Johnson"
+    },
+    {
+      "task_id": "77",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 77 from Eva Johnson"
+    },
+    {
+      "task_id": "78",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 78 from Eva Johnson"
+    },
+    {
+      "task_id": "79",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 79 from Eva Johnson"
+    },
+    {
+      "task_id": "83",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 83 from Eva Johnson"
+    },
+    {
+      "task_id": "93",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 93 from Eva Johnson"
+    },
+    {
+      "task_id": "95",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 95 from Eva Johnson"
+    },
+    {
+      "task_id": "97",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 97 from Eva Johnson"
+    },
+    {
+      "task_id": "98",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 98 from Eva Johnson"
+    },
+    {
+      "task_id": "99",
+      "cam_name": "Eva Johnson",
+      "rule": "missing_response",
+      "detail": "No response captured for 99 from Eva Johnson"
+    },
+    {
+      "task_id": "40",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 40 from David Lee"
+    },
+    {
+      "task_id": "41",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 41 from David Lee"
+    },
+    {
+      "task_id": "5",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 5 from David Lee"
+    },
+    {
+      "task_id": "54",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 54 from David Lee"
+    },
+    {
+      "task_id": "66",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 66 from David Lee"
+    },
+    {
+      "task_id": "82",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 82 from David Lee"
+    },
+    {
+      "task_id": "85",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 85 from David Lee"
+    },
+    {
+      "task_id": "88",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 88 from David Lee"
+    },
+    {
+      "task_id": "89",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 89 from David Lee"
+    },
+    {
+      "task_id": "90",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 90 from David Lee"
+    },
+    {
+      "task_id": "92",
+      "cam_name": "David Lee",
+      "rule": "missing_response",
+      "detail": "No response captured for 92 from David Lee"
+    }
+  ],
   "approval_required": false,
   "ims_master_dir": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_master",
   "ims_exports_dir": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_exports",
-  "latest_ims_path": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_exports\\latest_ims.xml",
-  "current_cycle": {
-    "cycle_id": "20260429T012023Z",
-    "phase": "interviewing",
-    "started_at": "2026-04-29T01:20:23.342222+00:00",
-    "completed_at": null,
-    "cams_total": 5,
-    "cams_responded": 1,
-    "tasks_captured": 0,
-    "report_path": "",
-    "schedule_health": "",
-    "error": "",
-    "validation_holds": [],
-    "approval_required": false,
-    "cam_status_live": {
-      "Alice Nguyen": "complete",
-      "Bob Martinez": "pending",
-      "Carol Smith": "pending",
-      "David Lee": "pending",
-      "Eva Johnson": "pending"
-    }
-  }
+  "latest_ims_path": "C:\\Users\\forbe\\OneDrive\\Documents\\AI Projects\\04 - IMS AGENT\\ims-agent\\data\\ims_exports\\latest_ims.xml"
 }

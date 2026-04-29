@@ -19,10 +19,10 @@ import pytest
 # Point at the sample file relative to this test file
 _SAMPLE = Path(__file__).parent.parent / "data" / "sample_ims.xml"
 
-# Expected counts from sample_ims.xml
-_EXPECTED_TASK_COUNT = 57   # UIDs 1-57 (UID 0 is project summary, excluded)
+# Expected counts from sample_ims.xml (AI Agent Server Rack IMS, 100 tasks)
+_EXPECTED_TASK_COUNT = 100  # UIDs 1-100 (UID 0 is project summary, excluded)
 _EXPECTED_CAM_COUNT = 5
-_EXPECTED_MILESTONE_COUNT = 7
+_EXPECTED_MILESTONE_COUNT = 8
 
 
 def _load_handler(path: str | Path = _SAMPLE):
@@ -36,7 +36,7 @@ def _load_handler(path: str | Path = _SAMPLE):
 
 class TestParsing:
     def test_task_count(self):
-        """Parsed task count matches expected (57 work tasks)."""
+        """Parsed task count matches expected (100 tasks: 92 work + 8 milestones)."""
         handler = _load_handler()
         tasks = handler.parse()
         assert len(tasks) == _EXPECTED_TASK_COUNT, (
@@ -67,23 +67,27 @@ class TestParsing:
             )
 
     def test_cam_grouping_every_task_has_exactly_one_cam(self):
-        """Every task is assigned to exactly one CAM (not 'Unassigned' for non-summary tasks)."""
+        """Every non-milestone task is assigned to exactly one CAM.
+        Milestones are team-level gates and may be unassigned.
+        """
         handler = _load_handler()
         tasks = handler.parse()
         for task in tasks:
+            if task.get("is_milestone"):
+                continue  # milestones are phase gates — no individual CAM required
             assert task["cam"] != "Unassigned", (
-                f"Task {task['task_id']} ({task['name']}) has no CAM assignment"
+                f"Work task {task['task_id']} ({task['name']}) has no CAM assignment"
             )
 
     def test_cam_count(self):
-        """Exactly 5 unique CAMs are present."""
+        """Exactly 5 unique CAMs are present (excluding Unassigned milestones)."""
         handler = _load_handler()
         tasks = handler.parse()
-        cams = {t["cam"] for t in tasks}
+        cams = {t["cam"] for t in tasks if not t.get("is_milestone")}
         assert len(cams) == _EXPECTED_CAM_COUNT, f"Expected 5 CAMs, got {len(cams)}: {cams}"
 
     def test_milestone_count(self):
-        """Exactly 7 milestones are present."""
+        """Expected number of milestones are present."""
         handler = _load_handler()
         tasks = handler.parse()
         milestones = [t for t in tasks if t.get("is_milestone")]
