@@ -514,8 +514,8 @@ async def bot_messages(request: Request):
                     logger.debug("action=session_persist_failed error=%s", _e)
             _bf_reply(
                 service_url, conversation_id, activity_id,
-                "Hi! I'm the ATLAS Scheduler. No interview is currently scheduled. "
-                "You'll receive a message when it's time for your status check.",
+                "Hey! No status check scheduled right now — I'll reach out when it's time. "
+                "You're all set until then!",
             )
             return JSONResponse({"status": "ok"})
 
@@ -549,10 +549,11 @@ async def bot_messages(request: Request):
                     # handle any further messages
                     manager.remove_session(user_id)
                     logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+                    first_name = session.cam_name.split()[0]
                     _bf_reply(
                         service_url, conversation_id, activity_id,
-                        "Hi! I'm the ATLAS Scheduler. No interview is currently scheduled. "
-                        "You'll receive a message when it's time for your status check.",
+                        f"Hey {first_name} — I think we already wrapped up earlier. "
+                        f"You're all set! I'll be in touch for the next cycle.",
                     )
             else:
                 # Normal mid-interview message

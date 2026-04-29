@@ -46,7 +46,9 @@ _CAM_SESSIONS_FILE = Path(os.getenv("DATA_DIR", "data")) / "cam_sessions.json"
 
 # Seconds to keep a completed session alive after the interview finishes
 # so the CAM's final wrap-up messages are received and acknowledged gracefully.
-_GRACE_SECONDS = int(os.getenv("INTERVIEW_GRACE_SECONDS", "45"))
+# Default: 8 hours — keeps the session alive through a full workday so the CAM
+# can send follow-up messages without triggering a new interview greeting.
+_GRACE_SECONDS = int(os.getenv("INTERVIEW_GRACE_SECONDS", "28800"))
 
 
 # ---------------------------------------------------------------------------
@@ -288,19 +290,47 @@ class ChatInterviewSession:
         return (time.monotonic() - self._completed_at) < _GRACE_SECONDS
 
     def accept_final_message(self, utterance: str) -> str:
-        """Accept a post-completion message from the CAM and return an acknowledgment.
+        """Accept a post-completion message from the CAM and return a natural acknowledgment.
 
         Called when the session is done but still within the grace period.
-        The message is logged so it's available for review.
+        Uses the LLM to generate a contextual, casual response; falls back to
+        a randomised short reply if the LLM call fails.
         """
         logger.info(
             "action=grace_period_message cam=%s text=%r",
             self.cam_name, utterance[:120],
         )
-        return (
-            "Thank you for that additional detail — I've noted it for the report. "
-            "Your status update is complete, and I appreciate you taking the time!"
-        )
+        first_name = self.cam_name.split()[0]
+        try:
+            from agent.llm_interface import LLMInterface
+            llm = LLMInterface()
+            prompt = (
+                f"You are ATLAS, a casual bot that runs quick schedule check-ins over Teams chat. "
+                f"You just finished a status update with {first_name} and wrapped up cleanly. "
+                f"They just sent a follow-up message:\n"
+                f'"{utterance}"\n\n'
+                f"Reply in 1 short sentence. Sound like a real person texting a coworker — "
+                f"casual, friendly, direct. Under 12 words. "
+                f"Do NOT say 'Thank you for that additional detail', 'status update is complete', "
+                f"or anything formal or corporate. Just a natural sign-off."
+            )
+            response = llm.ask(prompt, context="").strip().strip('"\'')
+            if response and 5 < len(response) < 200:
+                return response
+        except Exception as exc:
+            logger.warning("action=grace_period_llm_failed cam=%s error=%s", self.cam_name, exc)
+
+        # Fallback: varied casual one-liners
+        import random
+        options = [
+            f"Got it — you're all set, {first_name}!",
+            f"Sounds good — catch you next week!",
+            f"Got that, thanks {first_name}!",
+            f"Perfect — I'll make sure that's in there.",
+            f"Good to know, {first_name}. We're all good!",
+            f"Noted — all squared away on my end.",
+        ]
+        return random.choice(options)
 
     def get_cam_inputs(self) -> list[dict]:
         """
@@ -342,6 +372,10 @@ class ChatInterviewManager:
         self._active: dict[str, ChatInterviewSession] = {}
         self._pending: dict[str, ChatInterviewSession] = {}
         self._by_email: dict[str, ChatInterviewSession] = {}
+        # Tracks when each CAM (by email) last completed an interview.
+        # Used to prevent re-greetings when a new cycle fires before the
+        # previous interview's results have been written.
+        self._completed_cams: dict[str, float] = {}
         self._lock = threading.Lock()
 
     @classmethod
@@ -351,6 +385,32 @@ class ChatInterviewManager:
                 if cls._instance is None:
                     cls._instance = ChatInterviewManager()
         return cls._instance
+
+    def mark_cam_completed(self, email: str) -> None:
+        """Record that a CAM finished their interview.
+
+        Called by CycleRunner after a Teams session completes so that if another
+        cycle fires later in the same day the bot won't re-greet the CAM.
+        """
+        if not email:
+            return
+        with self._lock:
+            self._completed_cams[email.lower()] = time.monotonic()
+        logger.info("action=cam_completion_recorded email=%s", email)
+
+    def is_recently_completed(self, email: str, within_hours: float = 23.0) -> bool:
+        """True if this CAM completed an interview within the last `within_hours` hours.
+
+        Used by CycleRunner to skip re-sending a greeting when the CAM already
+        provided status data in the same working day.
+        """
+        if not email:
+            return False
+        with self._lock:
+            ts = self._completed_cams.get(email.lower())
+        if ts is None:
+            return False
+        return (time.monotonic() - ts) < (within_hours * 3600)
 
     def register(self, user_id: str, session: ChatInterviewSession) -> None:
         with self._lock:

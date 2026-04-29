@@ -540,6 +540,25 @@ class CycleRunner:
                     cams_no_session.append(cam_name)
                     continue
 
+                # Skip CAMs who already completed an interview in the last 23 hours.
+                # This prevents re-greeting Alice when a second cycle fires while
+                # her previous session's results are still fresh.
+                if manager.is_recently_completed(cam_email):
+                    logger.info(
+                        "action=teams_chat_skip cam=%s reason=completed_recently — "
+                        "CAM already provided status this cycle window",
+                        cam_name,
+                    )
+                    # Count as responded using the still-active session's data
+                    existing = manager.get_session_by_email(cam_email)
+                    if existing:
+                        inputs = existing.get_cam_inputs()
+                        if inputs:
+                            all_cam_inputs.extend(inputs)
+                            responded_set.add(cam_name)
+                            cam_live[cam_name] = "complete"
+                    continue
+
                 # Create session pre-started so relay endpoint can drive it
                 session = ChatInterviewSession(cam_name, cam_tasks, all_tasks=tasks, email=cam_email)
                 session.service_url = service_url
@@ -589,6 +608,9 @@ class CycleRunner:
                 responded_set.add(session.cam_name)
                 cam_live[session.cam_name] = "complete"
                 directory.record_attempt(session.cam_name, "completed")
+                # Record completion so the next cycle won't re-greet this CAM
+                if session.email:
+                    manager.mark_cam_completed(session.email)
                 logger.info("action=teams_session_complete cam=%s inputs=%d", session.cam_name, len(inputs))
             else:
                 cam_live[session.cam_name] = "no_answer"

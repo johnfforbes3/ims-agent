@@ -34,6 +34,14 @@ _UNKNOWN_PHRASES = {
     "not available", "tbd", "to be determined",
 }
 
+# Words / phrases indicating the CAM believes they already completed this interview
+_ALREADY_DONE_PHRASES = {
+    "already did", "already done", "already answered", "just answered",
+    "just did this", "we already", "did this already", "done this already",
+    "already went through", "just went through", "already completed",
+    "we covered this", "we did this", "did this last",
+}
+
 # Words / phrases that map to affirmative
 _YES_PHRASES = {"yes", "yeah", "yep", "yup", "sure", "correct",
                 "affirmative", "absolutely", "definitely", "that's right",
@@ -171,13 +179,16 @@ class InterviewAgent:
 
     def start(self) -> AgentTurn:
         """Generate the opening greeting turn."""
+        import random
         n = len(self._tasks)
         first_name = self._cam_name.split()[0]
-        text = (
-            f"Hey {first_name}, it's the ATLAS program scheduler. "
-            f"Quick status check — I've got {n} items to run through. "
-            f"Got a few minutes?"
-        )
+        item_word = "thing" if n == 1 else "things"
+        greetings = [
+            f"Hey {first_name}, it's ATLAS — quick schedule check-in. Got {n} {item_word} to run through with you. Free for a few?",
+            f"Hey {first_name}! ATLAS here — doing a quick status check. {n} {item_word} on my list. Good time?",
+            f"Hey {first_name} — ATLAS scheduler. Just need to run through {n} {item_word} real quick. Got a minute?",
+        ]
+        text = random.choice(greetings)
         self._state = InterviewState.GREETING
         return self._agent_turn(text, InterviewState.GREETING)
 
@@ -214,10 +225,18 @@ class InterviewAgent:
     # ------------------------------------------------------------------
 
     def _handle_greeting(self, norm: str, raw: str) -> AgentTurn:
+        # Detect "we already did this" — handle gracefully rather than re-running
+        if any(phrase in norm for phrase in _ALREADY_DONE_PHRASES):
+            first_name = self._cam_name.split()[0]
+            return self._agent_turn(
+                f"Oh got it, {first_name} — looks like we may have crossed wires on my end. "
+                f"I'll check my notes. If anything changes just shoot me a message!",
+                InterviewState.ABORTED,
+            )
         # Only abort on unambiguous refusal — "no problem, I'm ready" should proceed
         if _is_negative(norm) and not _is_affirmative(norm):
             return self._agent_turn(
-                "No problem — I'll try again later. Have a good day.",
+                "No worries — I'll check back later. Have a good one!",
                 InterviewState.ABORTED,
             )
         return self._introduce_current_task()
@@ -247,13 +266,14 @@ class InterviewAgent:
             self._retry_count += 1
             if self._retry_count >= _MAX_RETRIES:
                 return self._flag_no_response_and_advance(
-                    "I'm having trouble capturing that — I'll flag the task for follow-up."
+                    "No worries — I'll flag that one for follow-up and keep moving."
                 )
-            return self._agent_turn(
-                f"Sorry, I didn't catch a number on that. "
-                f"What percent would you say {_spoken_task_name(task['name'])} is at?",
-                InterviewState.AWAITING_PCT,
-            )
+            import random
+            retries = [
+                f"Hmm, didn't catch a number there — what percent would you put {_spoken_task_name(task['name'])} at?",
+                f"Sorry, missed the percentage on that one. Where's {_spoken_task_name(task['name'])} at, roughly?",
+            ]
+            return self._agent_turn(random.choice(retries), InterviewState.AWAITING_PCT)
 
         self._retry_count = 0
         self._current_pct = pct
@@ -354,8 +374,7 @@ class InterviewAgent:
         if self._confirm_retry_count < 2:
             self._confirm_retry_count += 1
             return self._agent_turn(
-                "My apologies — can you tell me which task needs correcting "
-                "and what the right value is?",
+                "Sure — which task needs fixing and what should the number be?",
                 InterviewState.CONFIRM,
             )
 
@@ -365,7 +384,7 @@ class InterviewAgent:
 
     def _handle_closing(self, norm: str, raw: str) -> AgentTurn:
         return self._agent_turn(
-            "Thank you for your time. Have a great rest of your day.",
+            "Sounds good — talk soon!",
             InterviewState.COMPLETE,
         )
 
@@ -373,7 +392,7 @@ class InterviewAgent:
     # Transition helpers
     # ------------------------------------------------------------------
 
-    def _introduce_current_task(self) -> AgentTurn:
+    def _introduce_current_task(self, prev_pct: int | None = None) -> AgentTurn:
         if self._task_index >= len(self._tasks):
             return self._close_interview()
         task = self._current_task
@@ -390,7 +409,12 @@ class InterviewAgent:
         else:
             opener = f"Next up, {spoken_name}."
 
-        text = f"{opener} You're showing {last_pct}% on that — where does it stand now?"
+        # Prepend a brief natural ack when transitioning from a completed task
+        ack_prefix = ""
+        if prev_pct is not None:
+            ack_prefix = _pct_ack(prev_pct) + " "
+
+        text = f"{ack_prefix}{opener} You're showing {last_pct}% on that — where does it stand now?"
         return self._agent_turn(text, InterviewState.AWAITING_PCT)
 
     def _ask_pct(self) -> AgentTurn:
@@ -417,7 +441,8 @@ class InterviewAgent:
         self._task_index += 1
         if self._task_index >= len(self._tasks):
             return self._request_confirmation()
-        return self._introduce_current_task()
+        # Pass prev_pct so _introduce_current_task can prepend a brief natural ack
+        return self._introduce_current_task(prev_pct=pct)
 
     def _flag_no_response_and_advance(self, text: str) -> AgentTurn:
         result = TaskResult(
@@ -472,11 +497,15 @@ class InterviewAgent:
         return result.percent_complete < expected - 15
 
     def _close_interview(self) -> AgentTurn:
+        import random
         first_name = self._cam_name.split()[0]
-        return self._agent_turn(
-            f"Perfect. Thanks {first_name}, I'll get those updates in. Have a good one!",
-            InterviewState.COMPLETE,
-        )
+        closes = [
+            f"Perfect — thanks {first_name}, I'll get those in. Have a good one!",
+            f"Got it, {first_name} — I'll update the schedule. Appreciate it!",
+            f"Great, {first_name} — all set on my end. Talk soon!",
+            f"Thanks {first_name}, that's everything I need. Have a good rest of your day!",
+        ]
+        return self._agent_turn(random.choice(closes), InterviewState.COMPLETE)
 
     # ------------------------------------------------------------------
     # Utility helpers
@@ -642,6 +671,24 @@ def _natural_list(items: list[str]) -> str:
     if len(items) == 2:
         return f"{items[0]} and {items[1]}"
     return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def _pct_ack(pct: int) -> str:
+    """Return a brief, varied natural acknowledgment for an on-track percent capture.
+
+    Used to bridge the gap between capturing a task's percent and introducing
+    the next task — avoids the abrupt jump that makes the bot feel robotic.
+    """
+    import random
+    if pct == 100:
+        options = ["Done —", "Complete —", "Nice, wrapped up —"]
+    elif pct >= 85:
+        options = ["Almost there —", "Nearly done —", "Good progress —"]
+    elif pct >= 60:
+        options = ["Good —", "Alright —", "Solid —"]
+    else:
+        options = ["Got it —", "Okay —", "Copy that —"]
+    return random.choice(options)
 
 
 def _calc_expected_pct(task: dict[str, Any]) -> int:
