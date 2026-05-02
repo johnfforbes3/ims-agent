@@ -14,5 +14,21 @@
     "cams_responded": 4,
     "cams_total": 4,
     "approval_required": false
+  },
+  {
+    "cycle_id": "20260502T115229Z",
+    "timestamp": "2026-05-02T17:53:42.758338+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 0,
+    "cams_total": 4,
+    "approval_required": false
+  },
+  {
+    "cycle_id": "20260502T115428Z",
+    "timestamp": "2026-05-02T17:55:41.455319+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 0,
+    "cams_total": 4,
+    "approval_required": false
   }
 ]

@@ -1,12 +1,23 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 5 / Sprint 3  
+**Test Procedure Version:** Phase 5 / Sprint 3 + Section 13 (Conversational Flow Health)  
 **Executed:** 2026-05-02  
 **Tester:** Claude (automated end-to-end execution)  
 **Environment:** Windows 11, Python 3.13.3, MS Project Professional C2R, OpenJDK 21 (MPXJ)  
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
 **CALL_TRANSPORT:** teams_chat (production — live Teams relay with MSAL-cached tokens)  
 **Overall Result:** **CONDITIONAL PASS**
+
+---
+
+> **2026-05-02 (Re-run after dialogue management re-architecture)**  
+> Commit `af822c8` — root cause: InterviewAgent LLM calls received no conversation history,
+> causing the bot to lose context mid-interview, close on correction without applying it,
+> and generate "No schedule data was shared" on post-interview follow-ups.
+> Fixed by: passing full conversation transcript to every LLM call; new
+> `_extract_and_apply_correction()` + `_re_request_confirmation()` for proper CONFIRM handling;
+> `accept_final_message()` now includes interview transcript.
+> New Section 13 added to TEST_PROCEDURE.txt. Unit test count: **254/254 passed**.
 
 ---
 
@@ -28,7 +39,7 @@
 
 | Step | Test File | Result | Count |
 |------|-----------|--------|-------|
-| 1.1 | Full suite | **PASS** | **242/242 passed, 0 failures** |
+| 1.1 | Full suite | **PASS** | **254/254 passed, 0 failures** (up from 242; +12 TestConversationalContext tests) |
 | 1.2 | Coverage | SKIP | 39% measured (test-infra not counted) |
 | 1.3 | test_file_handler | **PASS** | 12 passed |
 | 1.4 | test_critical_path | **PASS** | 10 passed |
@@ -41,7 +52,7 @@
 | 1.11 | test_qa_engine | **PASS** | 26 passed |
 | 1.12 | test_cycle_runner | **PASS** | 7 passed |
 | 1.13 | test_phase5 | **PASS** | 37 passed |
-| 1.14 | test_interview_agent | **PASS** | 43 passed (107s — LLM-intensive) |
+| 1.14 | test_interview_agent | **PASS** | 55 passed (170s — LLM-intensive; includes 12 TestConversationalContext) |
 | 1.15 | test_ims_tools | **PASS** | 41 passed |
 | 1.16 | test_tts_engine | **PASS** | 7 passed (ELEVENLABS_API_KEY configured) |
 | 1.17 | test_stt_engine | **PASS** | 6 passed |
@@ -264,6 +275,42 @@
 
 ---
 
+## SECTION 13: Conversational Flow Health
+
+### 13A: Unit Tests
+
+| Step | Description | Result | Actual |
+|------|-------------|--------|--------|
+| 13.1 | TestConversationalContext suite | **PASS** | 12/12 passed (77s — LLM-intensive) |
+| 13.2 | Full interview_agent suite | **PASS** | 55/55 passed (no regressions) |
+
+### 13B: Programmatic Checks
+
+| Step | Description | Result | Actual |
+|------|-------------|--------|--------|
+| 13.3 | Transcript accumulation | **PASS** | total=11 agent=6 cam=5 — PASS |
+| 13.4 | _last_confirmation_text saved | **PASS** | "Alright, I think I've got all 1 of your tasks. Does all that..." |
+| 13.5 | Correction → re-confirm or close gracefully | **PASS** | State=confirm; response="Got it — updated. Does that look right now?" |
+
+### 13C: Live Teams Conversational Quality
+
+| Step | Description | Result | Notes |
+|------|-------------|--------|-------|
+| 13.6 | Context retention across tasks | SKIP | Requires live Teams interview run |
+| 13.7 | Correction handling — risk flag swap | SKIP | Requires live Teams interview run |
+| 13.8 | Correction handling — percent update | SKIP | Requires live Teams interview run |
+| 13.9 | Grace period follow-up with context | SKIP | Requires completed live interview |
+| 13.10 | Bot does not contradict itself | SKIP | Requires live Teams review |
+
+### 13D: Regression Checks
+
+| Step | Bug | Result | Notes |
+|------|-----|--------|-------|
+| 13.11 | TD-CX-001 — "No schedule data" bug | **FIXED** | `accept_final_message()` now includes full transcript; LLM responds in context |
+| 13.12 | TD-CX-002 — Immediate close on correction | **FIXED** | `_handle_confirm()` now calls `_extract_and_apply_correction()` and re-confirms |
+
+---
+
 ## Failure Summary
 
 | # | Steps | Description | Severity |
@@ -285,9 +332,17 @@
 
 ## Final Sign-Off
 
-**Overall result:** CONDITIONAL PASS — all required tests passed; 2 failures (1 pre-existing high-severity bug in master folder management; 1 low-severity cosmetic issue in corrupt-file error handling); 35 non-critical steps skipped.
+**Overall result:** CONDITIONAL PASS — all required tests passed; 2 pre-existing failures (ims_master empty after cycle; corrupt XML raw traceback); 2 conversational quality bugs fixed (TD-CX-001, TD-CX-002); 35+ non-critical steps skipped.
+
+**Unit test count:** 254/254 passed (includes 12 new TestConversationalContext tests)
 
 **Verified cycle:** `20260502T114528Z` — health=RED, report=14,999 bytes, 4/5 CAMs responded via live Teams relay (10 minutes 29 seconds end-to-end)
+
+**Architecture changes (commit af822c8):**
+- Conversation history now passed to every LLM classifier call (context retention)
+- `_handle_confirm()` extracts and applies corrections before re-confirming (fixes TD-CX-002)
+- `accept_final_message()` includes interview transcript for contextual follow-up responses (fixes TD-CX-001)
+- 12 new unit tests in `TestConversationalContext` + new Section 13 in TEST_PROCEDURE.txt
 
 **Tester:** Claude (automated)  
 **Date/Time:** 2026-05-02
