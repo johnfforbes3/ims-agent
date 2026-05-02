@@ -1,6 +1,6 @@
 {
-  "last_updated": "2026-04-29T08:54:18.303273+00:00",
-  "cycle_id": "20260429T084638Z",
+  "last_updated": "2026-05-02T11:55:57.735863+00:00",
+  "cycle_id": "20260502T114528Z",
   "schedule_health": "RED",
   "critical_path_task_ids": [
     "1",
@@ -116,7 +116,7 @@
       "p50_date": "2026-04-28",
       "p80_date": "2026-04-28",
       "p95_date": "2026-04-28",
-      "prob_on_baseline": 0.0377,
+      "prob_on_baseline": 0.0398,
       "risk_level": "HIGH"
     },
     {
@@ -126,7 +126,7 @@
       "p50_date": "2026-06-04",
       "p80_date": "2026-06-04",
       "p95_date": "2026-06-04",
-      "prob_on_baseline": 0.0081,
+      "prob_on_baseline": 0.0087,
       "risk_level": "HIGH"
     },
     {
@@ -140,10 +140,209 @@
       "risk_level": "HIGH"
     }
   ],
-  "top_risks": "1. **AI Stack Deployed milestone failure (4% on-time probability):** All seven tasks feeding this milestone are behind schedule, with five at 0% complete against an expected ~100%. Recovery within the current baseline appears extremely unlikely without immediate intervention.\n\n2. **Sequential dependency collapse across AI-06 \u2192 AI-12:** AI-06 (85% complete) and AI-07 (60% complete) are prerequisite to downstream tasks. Their incomplete status has already zeroed out AI-08, AI-09, AI-10, and AI-12, creating a cascading block across the entire AI stack integration work stream.\n\n3. **Cascading impact to Network and Security Hardened (1% on-time) and System Accepted (2% on-time):** Both downstream milestones are on the critical path and inherit the full schedule risk from the AI Stack Deployed slip. A late AI Stack delivery has near-certain program-level consequences.\n\n4. **CAM reporting silence despite active slippage:** Zero blockers and zero risks have been reported by CAMs despite 8 tasks behind schedule. This reporting gap means root causes are undiagnosed and the PM is operating without ground-truth visibility into what is actually driving the delays.\n\n5. **MILESTONE: AI Stack Deployed is unassigned:** The milestone itself carries no owner, which creates accountability ambiguity at the most critical integration point in the schedule. Without a designated responsible party, recovery planning and escalation have no clear focal point.",
-  "recommended_actions": "1. **Convene an emergency CAM standup with Alice Nguyen and Eva Johnson this week.** With six of the eight behind-schedule tasks owned by these two individuals, the PM must obtain direct, candid status on AI-06 and AI-07 \u2014 including specific blockers, revised completion estimates, and what is needed to unblock AI-08 through AI-12. Do not accept percent-complete estimates without a supporting basis.\n\n2. **Assign an owner to the AI Stack Deployed milestone immediately.** An unassigned critical milestone has no accountable party driving recovery. Designate a responsible CAM or lead engineer and make them the single point of contact for milestone status reporting.\n\n3. **Assess whether a baseline revision or recovery schedule is required.** Given the 4% on-time probability and the current state of the task cluster, the PM should determine within this week whether a formal re-baseline is warranted or whether a credible recovery plan can close the gap \u2014 and document that decision for stakeholders.\n\n4. **Validate the SRA model inputs for the three high-risk milestones.** The P50/P80/P95 compression to a single date for all three milestones is analytically unusual and may indicate stale or incorrect duration risk inputs. Rerun the SRA with current actuals and realistic remaining duration ranges to ensure leadership is making decisions on sound probabilistic data.\n\n5. **Establish daily written status updates from Alice Nguyen and Eva Johnson until AI Stack Deployed is recovered.** The current weekly or ad-hoc cadence has allowed significant slippage to go unreported. A brief daily written update (task, % complete, blocker/no blocker, next 24-hour action) will surface issues in real time and create an audit trail for any future re-baseline justification.",
-  "narrative": "The program is in a critical condition centered entirely on the AI stack integration work stream. Of 100 total tasks, 8 are behind schedule \u2014 and all 8 are concentrated in the AI-06 through AI-12 task block, plus the AI Stack Deployed milestone itself. This clustering is not coincidental; these tasks are sequentially dependent, meaning slippage in AI-06 and AI-07 is directly starving downstream tasks (AI-08 through AI-12) of the prerequisites needed to begin or advance. The result is that five of the eight behind-schedule tasks are sitting at 0% actual versus an expected ~100% completion.\n\nThe SRA data reinforces the severity: the AI Stack Deployed milestone has only a 4% probability of on-time delivery against its 2026-04-28 baseline. Critically, the P50, P80, and P95 dates all compress to a single date (2026-04-28), which is atypical and warrants scrutiny of the SRA model inputs \u2014 but regardless of model fidelity, a 4% on-time probability is an unambiguous red signal. The downstream milestones \u2014 Network and Security Hardened (1% on-time) and System Accepted (2% on-time) \u2014 inherit this risk directly, suggesting the schedule has insufficient float to absorb the current slippage before contract completion.\n\nOne notable data gap is the complete absence of CAM-reported blockers or flagged risks despite widespread task slippage. This disconnect between schedule performance data and CAM reporting suggests either a CAM reporting process failure or that root causes have not yet been escalated. The PM cannot manage what has not been surfaced. Immediate CAM engagement is essential to understand whether the delays stem from technical complexity, resource contention, dependency gaps, or other causes \u2014 and to determine whether recovery is feasible within the current baseline.",
-  "tasks_behind": [],
+  "top_risks": "1. **AI-07 Gateway Stabilization (Alice Nguyen, Task 62):** At 60% complete against an expected 100%, AI-07 is the single highest-leverage blocker on the schedule. Its instability is directly preventing AI-06, AI-09, AI-10, and DOC-02 from progressing, and it is the root cause of the AI Stack Deployed milestone's 4% on-time probability.\n\n2. **AI Stack Deployed Milestone (Unassigned, Milestone):** This milestone is at 0% actual against an expected 100% and has a 4% probability of on-time delivery per SRA. It sits on the critical path and gates both the Network and Security Hardened and System Accepted milestones downstream.\n\n3. **NET-06 Vault Deployment \u2014 No Owner Identified (Eva Johnson, Task 63):** Eva Johnson has explicitly identified NET-06 as the foundation for the entire security hardening sequence and flagged that someone needs to own it and start it this week. An unowned critical-path security task is an immediate execution risk.\n\n4. **FAC Completion Gating NET-01 (Carol Smith, Task 69):** NET-01 is at 0% complete and cannot start until FAC tasks reach 80\u201390% completion. FAC-01 is at 70% and FAC-02/FAC-03 are the stated bottlenecks. Any further slip in facility work will delay the entire network configuration sequence.\n\n5. **AI-08 and AI-12 at Zero Percent (Eva Johnson):** Both the end-to-end inference pipeline integration test (AI-08) and the Trivy security scan of all AI container images (AI-12) are at 0% against an expected 100%. These tasks cannot begin until upstream AI stack work stabilizes, and their continued dormancy directly threatens the Network and Security Hardened milestone (1% on-time probability).",
+  "recommended_actions": "1. **Convene an AI-07 recovery standup today.** Pull Alice Nguyen and any API gateway integration support resources into a same-day working session. Determine the specific remaining work to stabilize AI-07, assign a completion target date, and assess whether additional engineering support can compress the remaining 40%. Every day AI-07 remains unstable extends the block on AI-06, AI-09, AI-10, AI-12, and DOC-02 simultaneously.\n\n2. **Assign an owner to NET-06 Vault deployment by end of day.** Eva Johnson explicitly flagged this as unowned and identified it as the critical-path foundation for the security hardening sequence. The PM must identify and assign a responsible individual today and confirm a start date this week. Delay in starting NET-06 will slip the Network and Security Hardened milestone further below its current 1% on-time probability.\n\n3. **Get a current status and projected completion date for FAC-02 and FAC-03 from Carol Smith.** NET-01 is fully blocked until facility power and cabling work reaches 80\u201390%. The PM needs a committed completion date for FAC-02 and FAC-03 this week to determine whether the NET-01 start date is recoverable or requires a formal schedule re-baseline.\n\n4. **Conduct a 30-minute blocker triage with all four CAMs (Alice Nguyen, Carol Smith, Eva Johnson, David Lee).** With 33 of 100 tasks reporting blockers, the PM needs to determine how many of those blockers are derivatives of the AI-07 chain versus independent issues. Prioritizing blocker resolution by criticality \u2014 AI stack first, then network, then documentation \u2014 will prevent the team from working around symptoms rather than root causes.\n\n5. **Brief the customer or stakeholder on schedule risk at the three high-risk milestones.** With AI Stack Deployed at 4%, Network and Security Hardened at 1%, and System Accepted at 2% on-time probability, the program is carrying risk that likely exceeds contractual or stakeholder tolerance. The PM should proactively communicate the current risk posture, the recovery actions underway, and a revised schedule outlook before the next formal review.",
+  "narrative": "The schedule is in a critical condition driven by a cascading dependency failure centered on AI-07 (Deploy Claude API gateway proxy with rate limiting), which is only 60% complete against an expected 100%. This single task is the root blocker for at least four downstream tasks \u2014 AI-06, AI-09, AI-10, and DOC-02 \u2014 all of which are reporting zero or near-zero progress as a direct consequence. Alice Nguyen, who owns all five of these blocked tasks, has explicitly called out the AI-07 dependency chain as the unifying blocker across her portfolio. Until AI-07 stabilizes, the AI Stack Deployed milestone cannot close, and the SRA confirms this: it shows a 4% probability of on-time delivery with P50/P80/P95 dates all landing on the same day, indicating virtually no schedule recovery buffer exists.\n\nThe downstream effect extends well beyond the AI stack. The Network and Security Hardened milestone (1% on-time probability) and System Accepted milestone (2% on-time probability) both sit downstream of the AI stack, meaning the AI-07 slip is effectively propagating schedule risk across all three high-risk milestones. Eva Johnson has separately identified NET-06 Vault deployment as the foundation for the security hardening sequence and flagged that no one currently owns it \u2014 a resourcing gap on a critical-path security task. Carol Smith has noted that FAC-01, FAC-02, and FAC-03 must reach 80\u201390% completion before network configuration can meaningfully begin, and FAC-01 is currently at only 70%.\n\nCompounding the technical blockers, 33 CAMs have reported blockers program-wide against a total of 100 tasks \u2014 a 33% blocker rate that is abnormally high and suggests systemic schedule execution problems beyond the AI stack alone. With three high-risk milestones all carrying single-digit on-time probabilities, the program cannot recover without immediate, targeted intervention this week.",
+  "tasks_behind": [
+    {
+      "task_id": "61",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 85,
+      "blocker": "AI-06 cannot close until downstream dependency AI-07 (API gateway integration, currently 60% complete) stabilizes."
+    },
+    {
+      "task_id": "62",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 60,
+      "blocker": "Mid-integration with the authentication layer may delay completion, with auth service delays cited as a specific risk."
+    },
+    {
+      "task_id": "64",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "AI-09 is sequenced after AI-07 stabilizes and cannot start until that dependency is met."
+    },
+    {
+      "task_id": "65",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by the AI-07 dependency chain, the same blocker affecting AI-10."
+    },
+    {
+      "task_id": "86",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "DOC-02 cannot proceed because the AI stack (AI-07 dependency chain) has not stabilized, making it impossible to write op"
+    },
+    {
+      "task_id": "91",
+      "cam_name": "Alice Nguyen",
+      "percent_complete": 0,
+      "blocker": "DOC-07 is blocked on AI stack stabilization via the AI-07 dependency chain, the same blocker affecting DOC-02."
+    },
+    {
+      "task_id": "69",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "NET-01 cannot begin until facility physical infrastructure tasks (FAC) are complete, which are still in progress."
+    },
+    {
+      "task_id": "70",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "Firewall configuration is blocked pending completion of physical network infrastructure dependencies FAC-02 and FAC-03."
+    },
+    {
+      "task_id": "72",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by a FAC (Facilities/Infrastructure) dependency that has not yet been resolved."
+    },
+    {
+      "task_id": "75",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by a FAC (Facilities/Infrastructure) dependency, preventing any progress."
+    },
+    {
+      "task_id": "80",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "A FAC (Facilities/Access/Configuration) dependency is preventing any progress on this task."
+    },
+    {
+      "task_id": "81",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "A FAC dependency is blocking any progress on this task."
+    },
+    {
+      "task_id": "96",
+      "cam_name": "Carol Smith",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by a FAC (Facility/Facility Access Condition) dependency that has not been resolved."
+    },
+    {
+      "task_id": "66",
+      "cam_name": "David Lee",
+      "percent_complete": 40,
+      "blocker": "The ML team has not finalized their model versioning approach, preventing the CAM from completing and locking down the a"
+    },
+    {
+      "task_id": "82",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "The task cannot start until finalized network diagrams are received from the infrastructure team."
+    },
+    {
+      "task_id": "85",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "The runbook cannot progress until NET-14's infrastructure setup is finalized, as the runbook content depends on that com"
+    },
+    {
+      "task_id": "88",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "The task is blocked by an unresolved infrastructure finalization dependency previously flagged by the CAM."
+    },
+    {
+      "task_id": "90",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "An infrastructure dependency is blocking all progress on this task."
+    },
+    {
+      "task_id": "92",
+      "cam_name": "David Lee",
+      "percent_complete": 0,
+      "blocker": "DOC-08 cannot start until all predecessor tasks are complete, and NET-14, DOC-01, DOC-04, and DOC-05 are still outstandi"
+    },
+    {
+      "task_id": "63",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "NET-06 Vault deployment has not started, and secrets management must be in place before the end-to-end inference pipelin"
+    },
+    {
+      "task_id": "67",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Container finalization is blocked until the pipeline environment is operational, which is dependent on NET-06 being reso"
+    },
+    {
+      "task_id": "71",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by NET-06 dependency; no environment is available to deploy into until Vault is operational."
+    },
+    {
+      "task_id": "73",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by the NET-06 issue, with no progress made."
+    },
+    {
+      "task_id": "74",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "No one has been assigned ownership of this task, leaving it unstarted despite being identified as the root cause of a kn"
+    },
+    {
+      "task_id": "76",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by the NET-06 dependency and cannot progress until Vault is deployed."
+    },
+    {
+      "task_id": "77",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Remediation cannot begin because the required vulnerability scanning (NET-08, which depends on NET-06) has not been comp"
+    },
+    {
+      "task_id": "78",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by the NET-06 dependency with no progress made."
+    },
+    {
+      "task_id": "79",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by both NET-06 and NET-09 dependencies, as penetration testing cannot proceed until network findings hav"
+    },
+    {
+      "task_id": "83",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "The NET-06 blocker is preventing any progress on this task, as it is last in the dependent chain."
+    },
+    {
+      "task_id": "95",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "The inference load testing cannot proceed until the NET-06 environment is operational."
+    },
+    {
+      "task_id": "97",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "Task is blocked by the same NET-06 dependency that has prevented any progress."
+    },
+    {
+      "task_id": "98",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "The NET-06 blocker is preventing any progress on this task."
+    },
+    {
+      "task_id": "99",
+      "cam_name": "Eva Johnson",
+      "percent_complete": 0,
+      "blocker": "The same NET-06 blocker that was previously mentioned is preventing any progress on this task."
+    }
+  ],
   "cam_response_status": {
     "Alice Nguyen": {
       "responded": true,
@@ -151,9 +350,9 @@
       "last_outcome": "completed"
     },
     "Bob Martinez": {
-      "responded": true,
-      "attempts": 1,
-      "last_outcome": "completed"
+      "responded": false,
+      "attempts": 0,
+      "last_outcome": "not_contacted"
     },
     "Carol Smith": {
       "responded": true,
@@ -172,19 +371,13 @@
     }
   },
   "completion_report": {
-    "responded": 5,
-    "total": 5,
+    "responded": 4,
+    "total": 4,
     "threshold_met": true
   },
-  "report_path": "reports\\2026-04-29_ims_report.md",
+  "report_path": "reports\\2026-05-02_ims_report.md",
   "validation_holds": [],
   "validation_warnings": [
-    {
-      "task_id": "94",
-      "cam_name": "Bob Martinez",
-      "rule": "large_jump",
-      "detail": "Percent jumped 100 points (0% \u2192 100%) in one cycle"
-    },
     {
       "task_id": "1",
       "cam_name": "Alice Nguyen",
@@ -282,46 +475,10 @@
       "detail": "No response captured for 60 from Alice Nguyen"
     },
     {
-      "task_id": "61",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 61 from Alice Nguyen"
-    },
-    {
-      "task_id": "62",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 62 from Alice Nguyen"
-    },
-    {
-      "task_id": "64",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 64 from Alice Nguyen"
-    },
-    {
-      "task_id": "65",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 65 from Alice Nguyen"
-    },
-    {
       "task_id": "7",
       "cam_name": "Alice Nguyen",
       "rule": "missing_response",
       "detail": "No response captured for 7 from Alice Nguyen"
-    },
-    {
-      "task_id": "86",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 86 from Alice Nguyen"
-    },
-    {
-      "task_id": "91",
-      "cam_name": "Alice Nguyen",
-      "rule": "missing_response",
-      "detail": "No response captured for 91 from Alice Nguyen"
     },
     {
       "task_id": "10",
@@ -432,6 +589,12 @@
       "detail": "No response captured for 9 from Bob Martinez"
     },
     {
+      "task_id": "94",
+      "cam_name": "Bob Martinez",
+      "rule": "missing_response",
+      "detail": "No response captured for 94 from Bob Martinez"
+    },
+    {
       "task_id": "13",
       "cam_name": "Carol Smith",
       "rule": "missing_response",
@@ -516,48 +679,6 @@
       "detail": "No response captured for 51 from Carol Smith"
     },
     {
-      "task_id": "69",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 69 from Carol Smith"
-    },
-    {
-      "task_id": "70",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 70 from Carol Smith"
-    },
-    {
-      "task_id": "72",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 72 from Carol Smith"
-    },
-    {
-      "task_id": "75",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 75 from Carol Smith"
-    },
-    {
-      "task_id": "80",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 80 from Carol Smith"
-    },
-    {
-      "task_id": "81",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 81 from Carol Smith"
-    },
-    {
-      "task_id": "96",
-      "cam_name": "Carol Smith",
-      "rule": "missing_response",
-      "detail": "No response captured for 96 from Carol Smith"
-    },
-    {
       "task_id": "27",
       "cam_name": "Eva Johnson",
       "rule": "missing_response",
@@ -574,96 +695,6 @@
       "cam_name": "Eva Johnson",
       "rule": "missing_response",
       "detail": "No response captured for 46 from Eva Johnson"
-    },
-    {
-      "task_id": "63",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 63 from Eva Johnson"
-    },
-    {
-      "task_id": "67",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 67 from Eva Johnson"
-    },
-    {
-      "task_id": "71",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 71 from Eva Johnson"
-    },
-    {
-      "task_id": "73",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 73 from Eva Johnson"
-    },
-    {
-      "task_id": "74",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 74 from Eva Johnson"
-    },
-    {
-      "task_id": "76",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 76 from Eva Johnson"
-    },
-    {
-      "task_id": "77",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 77 from Eva Johnson"
-    },
-    {
-      "task_id": "78",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 78 from Eva Johnson"
-    },
-    {
-      "task_id": "79",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 79 from Eva Johnson"
-    },
-    {
-      "task_id": "83",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 83 from Eva Johnson"
-    },
-    {
-      "task_id": "93",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 93 from Eva Johnson"
-    },
-    {
-      "task_id": "95",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 95 from Eva Johnson"
-    },
-    {
-      "task_id": "97",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 97 from Eva Johnson"
-    },
-    {
-      "task_id": "98",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 98 from Eva Johnson"
-    },
-    {
-      "task_id": "99",
-      "cam_name": "Eva Johnson",
-      "rule": "missing_response",
-      "detail": "No response captured for 99 from Eva Johnson"
     },
     {
       "task_id": "40",
@@ -688,48 +719,6 @@
       "cam_name": "David Lee",
       "rule": "missing_response",
       "detail": "No response captured for 54 from David Lee"
-    },
-    {
-      "task_id": "66",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 66 from David Lee"
-    },
-    {
-      "task_id": "82",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 82 from David Lee"
-    },
-    {
-      "task_id": "85",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 85 from David Lee"
-    },
-    {
-      "task_id": "88",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 88 from David Lee"
-    },
-    {
-      "task_id": "89",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 89 from David Lee"
-    },
-    {
-      "task_id": "90",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 90 from David Lee"
-    },
-    {
-      "task_id": "92",
-      "cam_name": "David Lee",
-      "rule": "missing_response",
-      "detail": "No response captured for 92 from David Lee"
     }
   ],
   "approval_required": false,

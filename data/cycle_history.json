@@ -6,5 +6,13 @@
     "cams_responded": 5,
     "cams_total": 5,
     "approval_required": false
+  },
+  {
+    "cycle_id": "20260502T114528Z",
+    "timestamp": "2026-05-02T11:55:57.735863+00:00",
+    "schedule_health": "RED",
+    "cams_responded": 4,
+    "cams_total": 4,
+    "approval_required": false
   }
 ]

@@ -3020,7 +3020,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Agent supervisor graph 85% complete — the multi-agent handoff logic works for the two-agent case but breaks under 3+ concurrent sub-agents. Investigating LangGraph async edge routing. Expect resolution this week.</Notes>
+            <Notes>BLOCKER: AI-06 cannot close until downstream dependency AI-07 (API gateway integration, currently 60% complete) stabilizes.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3072,7 +3072,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>Gateway proxy deployed. Rate limiting logic in place. Still working on the response caching layer — semantic cache using Qdrant is 60% wired up.</Notes>
+            <Notes>BLOCKER: Mid-integration with the authentication layer may delay completion, with auth service delays cited as a specific risk. | RISK: </Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3127,7 +3127,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: NET-06 Vault deployment has not started, and secrets management must be in place before the end-to-end inference pipeline integration test can run. | RISK: We need to sequence this properly. NET-06 Vault deployment goes first — that's the foundation. Once that's done, NET-08 and NET-09 can run in parallel with NET-10. NET-11 penetration test follows remediation, and NET-15 sign-off is last. Someone needs to own NET-06 and start it this week. That's the critical path.</Notes></Task>
         <Task>
             <UID>64</UID>
             <ID>64</ID>
@@ -3171,7 +3171,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: AI-09 is sequenced after AI-07 stabilizes and cannot start until that dependency is met. | RISK: </Notes></Task>
         <Task>
             <UID>65</UID>
             <ID>65</ID>
@@ -3215,7 +3215,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by the AI-07 dependency chain, the same blocker affecting AI-10. | RISK: </Notes></Task>
         <Task>
             <UID>66</UID>
             <ID>66</ID>
@@ -3249,7 +3249,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>Architecture diagram and high-level design complete. API contract (OpenAPI spec) drafted for LangGraph and Claude gateway. Model registry docs 40% done — waiting for final model list to stabilize.</Notes>
+            <Notes>BLOCKER: The ML team has not finalized their model versioning approach, preventing the CAM from completing and locking down the architecture documentation.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3304,7 +3304,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Container finalization is blocked until the pipeline environment is operational, which is dependent on NET-06 being resolved. | RISK: </Notes></Task>
         <Task>
             <UID>68</UID>
             <ID>68</ID>
@@ -3413,7 +3413,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: NET-01 cannot begin until facility physical infrastructure tasks (FAC) are complete, which are still in progress. | RISK: FAC tasks need to hit at least 80–90% before we can meaningfully start NET-01. FAC-01 is closest at 70%, so that's the near-term unlock — once rack location is confirmed, we can start VLAN planning in parallel. The bottleneck is really FAC-02 and FAC-03 (power and cabling) — those need to be substantially done before any live network config makes sense.</Notes></Task>
         <Task>
             <UID>70</UID>
             <ID>70</ID>
@@ -3457,7 +3457,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Firewall configuration is blocked pending completion of physical network infrastructure dependencies FAC-02 and FAC-03.</Notes></Task>
         <Task>
             <UID>71</UID>
             <ID>71</ID>
@@ -3501,7 +3501,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by NET-06 dependency; no environment is available to deploy into until Vault is operational.</Notes></Task>
         <Task>
             <UID>72</UID>
             <ID>72</ID>
@@ -3545,7 +3545,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by a FAC (Facilities/Infrastructure) dependency that has not yet been resolved.</Notes></Task>
         <Task>
             <UID>73</UID>
             <ID>73</ID>
@@ -3589,7 +3589,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by the NET-06 issue, with no progress made.</Notes></Task>
         <Task>
             <UID>74</UID>
             <ID>74</ID>
@@ -3633,7 +3633,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: No one has been assigned ownership of this task, leaving it unstarted despite being identified as the root cause of a known network issue (NET-06).</Notes></Task>
         <Task>
             <UID>75</UID>
             <ID>75</ID>
@@ -3684,7 +3684,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by a FAC (Facilities/Infrastructure) dependency, preventing any progress.</Notes></Task>
         <Task>
             <UID>76</UID>
             <ID>76</ID>
@@ -3728,7 +3728,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by the NET-06 dependency and cannot progress until Vault is deployed.</Notes></Task>
         <Task>
             <UID>77</UID>
             <ID>77</ID>
@@ -3772,7 +3772,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Remediation cannot begin because the required vulnerability scanning (NET-08, which depends on NET-06) has not been completed, leaving NET-09 with no inputs.</Notes></Task>
         <Task>
             <UID>78</UID>
             <ID>78</ID>
@@ -3816,7 +3816,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by the NET-06 dependency with no progress made.</Notes></Task>
         <Task>
             <UID>79</UID>
             <ID>79</ID>
@@ -3867,7 +3867,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by both NET-06 and NET-09 dependencies, as penetration testing cannot proceed until network findings have been remediated.</Notes></Task>
         <Task>
             <UID>80</UID>
             <ID>80</ID>
@@ -3911,7 +3911,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: A FAC (Facilities/Access/Configuration) dependency is preventing any progress on this task.</Notes></Task>
         <Task>
             <UID>81</UID>
             <ID>81</ID>
@@ -3955,7 +3955,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: A FAC dependency is blocking any progress on this task.</Notes></Task>
         <Task>
             <UID>82</UID>
             <ID>82</ID>
@@ -3999,7 +3999,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The task cannot start until finalized network diagrams are received from the infrastructure team.</Notes></Task>
         <Task>
             <UID>83</UID>
             <ID>83</ID>
@@ -4050,7 +4050,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The NET-06 blocker is preventing any progress on this task, as it is last in the dependent chain.</Notes></Task>
         <Task>
             <UID>84</UID>
             <ID>84</ID>
@@ -4152,7 +4152,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The runbook cannot progress until NET-14's infrastructure setup is finalized, as the runbook content depends on that completed configuration.</Notes></Task>
         <Task>
             <UID>86</UID>
             <ID>86</ID>
@@ -4196,7 +4196,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: DOC-02 cannot proceed because the AI stack (AI-07 dependency chain) has not stabilized, making it impossible to write operations documentation against a moving target.</Notes></Task>
         <Task>
             <UID>87</UID>
             <ID>87</ID>
@@ -4285,7 +4285,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The task is blocked by an unresolved infrastructure finalization dependency previously flagged by the CAM.</Notes></Task>
         <Task>
             <UID>89</UID>
             <ID>89</ID>
@@ -4373,7 +4373,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: An infrastructure dependency is blocking all progress on this task.</Notes></Task>
         <Task>
             <UID>91</UID>
             <ID>91</ID>
@@ -4417,7 +4417,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: DOC-07 is blocked on AI stack stabilization via the AI-07 dependency chain, the same blocker affecting DOC-02.</Notes></Task>
         <Task>
             <UID>92</UID>
             <ID>92</ID>
@@ -4496,7 +4496,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: DOC-08 cannot start until all predecessor tasks are complete, and NET-14, DOC-01, DOC-04, and DOC-05 are still outstanding.</Notes></Task>
         <Task>
             <UID>93</UID>
             <ID>93</ID>
@@ -4628,7 +4628,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The inference load testing cannot proceed until the NET-06 environment is operational.</Notes></Task>
         <Task>
             <UID>96</UID>
             <ID>96</ID>
@@ -4672,7 +4672,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by a FAC (Facility/Facility Access Condition) dependency that has not been resolved.</Notes></Task>
         <Task>
             <UID>97</UID>
             <ID>97</ID>
@@ -4730,7 +4730,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked by the same NET-06 dependency that has prevented any progress.</Notes></Task>
         <Task>
             <UID>98</UID>
             <ID>98</ID>
@@ -4774,7 +4774,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The NET-06 blocker is preventing any progress on this task.</Notes></Task>
         <Task>
             <UID>99</UID>
             <ID>99</ID>
@@ -4825,7 +4825,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: The same NET-06 blocker that was previously mentioned is preventing any progress on this task.</Notes></Task>
         <Task>
             <UID>100</UID>
             <ID>100</ID>
