@@ -138,6 +138,7 @@ SPECIFIC TEST FILES — confirm each passes individually if suite shows failures
 1.14 test_interview_agent.py
      Command:   pytest tests/test_interview_agent.py -v
      Result:    _____________________________________________  [ ] P [ ] F
+     Note: includes TestConversationalContext suite (context retention + correction handling)
 
 1.15 test_ims_tools.py
      Command:   pytest tests/test_ims_tools.py -v
@@ -1150,6 +1151,182 @@ assert all(0 <= p <= 1 for p in probs), 'FAIL: probability out of range'"
 
 
 SECTION 12 SIGN-OFF
+Tester: ________________________________  Date/Time: _________________________
+
+
+================================================================================
+  SECTION 13: CONVERSATIONAL FLOW HEALTH
+================================================================================
+
+TESTER: ____________________  DATE: ____________
+
+Validates the ATLAS bot's conversational quality: context retention, correction
+handling, and appropriate responses to off-script input.  These tests are
+critical because CAMs interact with real humans and poor dialogue quality
+directly undermines data quality and trust.
+
+Prerequisites:
+  - Server running:  python main.py --serve
+  - cam-responder running for at least Alice Nguyen
+  - Unit test suite passing (Section 1) — especially test_interview_agent.py
+
+--- 13A: UNIT TESTS FOR CONVERSATIONAL CONTEXT ---
+
+13.1 Conversational context unit tests
+     Command:   pytest tests/test_interview_agent.py::TestConversationalContext -v
+     Expected:  All TestConversationalContext tests PASS
+     Tests run: ___________  Passed: ___________  Failed: ___________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+13.2 Full interview agent test suite
+     Command:   pytest tests/test_interview_agent.py -v
+     Expected:  All tests PASS — no regressions from conversational context changes
+     Tests run: ___________  Passed: ___________  Failed: ___________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 13B: TRANSCRIPT INTEGRITY (programmatic) ---
+
+13.3 Transcript accumulates through full interview
+     Command:   python -c "
+from datetime import datetime, timedelta
+from agent.voice.interview_agent import InterviewAgent
+BASE = datetime(2026, 1, 5, 8, 0, 0)
+task = {'task_id':'T1','name':'Design Task','start':BASE,'finish':BASE+timedelta(days=20),
+        'percent_complete':30,'predecessors':[],'cam':'Alice','is_milestone':False,
+        'duration_days':20,'baseline_start':BASE,'baseline_finish':BASE+timedelta(days=20),'notes':''}
+agent = InterviewAgent('Alice Nguyen', [task], expected_pcts={'T1': 80})
+agent.start()
+agent.process('yes')
+agent.process('30')
+agent.process('vendor delay')
+agent.process('no')
+if agent.state.value == 'confirm':
+    agent.process('yes')
+t = agent.transcript
+agents = [x for x in t if x.speaker=='agent']
+cams = [x for x in t if x.speaker=='cam']
+print(f'total={len(t)} agent={len(agents)} cam={len(cams)}')
+assert len(cams) >= 4, 'CAM turns missing from transcript'
+assert len(agents) >= 3, 'Agent turns missing from transcript'
+print('PASS')"
+     Expected:  total >= 7, agent >= 3, cam >= 4, PASS
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+13.4 _last_confirmation_text is populated before confirmation exchange
+     Command:   python -c "
+from datetime import datetime, timedelta
+from agent.voice.interview_agent import InterviewAgent
+BASE = datetime(2026, 1, 5, 8, 0, 0)
+task = {'task_id':'T1','name':'Task','start':BASE,'finish':BASE+timedelta(days=20),
+        'percent_complete':30,'predecessors':[],'cam':'Alice','is_milestone':False,
+        'duration_days':20,'baseline_start':BASE,'baseline_finish':BASE+timedelta(days=20),'notes':''}
+agent = InterviewAgent('Alice', [task], expected_pcts={'T1': 80})
+agent.start(); agent.process('yes'); agent.process('30')
+agent.process('vendor hold'); agent.process('no')
+from agent.voice.interview_agent import InterviewState
+assert agent.state == InterviewState.CONFIRM, f'Expected CONFIRM, got {agent.state}'
+assert agent._last_confirmation_text, 'Confirmation text not saved'
+assert 'sound right' in agent._last_confirmation_text.lower(), 'Missing confirmation phrase'
+print('last_confirmation_text OK:', agent._last_confirmation_text[:60])
+print('PASS')"
+     Expected:  PASS — confirmation text contains "sound right"
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+13.5 Correction with task ID closes gracefully when LLM unavailable
+     Command:   python -c "
+from datetime import datetime, timedelta
+from agent.voice.interview_agent import InterviewAgent
+BASE = datetime(2026, 1, 5, 8, 0, 0)
+task = {'task_id':'AI-07','name':'AI-07 Platform','start':BASE,'finish':BASE+timedelta(days=20),
+        'percent_complete':30,'predecessors':[],'cam':'Alice','is_milestone':False,
+        'duration_days':20,'baseline_start':BASE,'baseline_finish':BASE+timedelta(days=20),'notes':''}
+agent = InterviewAgent('Alice', [task], expected_pcts={'AI-07': 80})
+agent.start(); agent.process('yes'); agent.process('30')
+agent.process('GPU allocation hold'); agent.process('no')
+from agent.voice.interview_agent import InterviewState
+assert agent.state == InterviewState.CONFIRM
+# Give a correction referencing a task ID — LLM will fail in non-Teams env
+# Bot must close gracefully (not crash or loop forever)
+turn = agent.process('Actually AI-07 should be at 45%, not 30%')
+assert agent.state in (InterviewState.CONFIRM, InterviewState.COMPLETE), f'Bad state: {agent.state}'
+assert turn.text, 'No response generated'
+print('State after correction:', agent.state.value)
+print('Response:', turn.text[:80])
+print('PASS')"
+     Expected:  PASS — state is CONFIRM or COMPLETE, response is non-empty
+     Actual:    _____________________________________________
+     Result:    _____________________________________________  [ ] P [ ] F
+
+--- 13C: LIVE TEAMS CONVERSATIONAL QUALITY ---
+
+13.6 Context retention across tasks (live Teams)
+     Run a full teams_chat cycle (Section 8.8).
+     During the interview, observe or log the conversation in Teams.
+     Check:
+       [ ] Bot transitions smoothly between tasks without repeating itself
+       [ ] Bot does not ask about a task it already covered
+       [ ] Bot references prior answers when appropriate (e.g. "Got it — 75%")
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+13.7 Correction handling — risk flag swap (live Teams)
+     During a live interview, when the bot shows the confirmation summary,
+     have the CAM say something like:
+       "Actually, it's AI-07 that's the primary risk, not AI-09"
+     Expected:
+       [ ] Bot does NOT immediately say "all set, talk soon" and close
+       [ ] Bot acknowledges the correction ("Got it — updated.")
+       [ ] Bot re-confirms with corrected risk flag task ID
+       [ ] CAM can then confirm the re-confirmation ("yes, that's right")
+       [ ] Bot closes after receiving the 'yes'
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+13.8 Correction handling — percent update (live Teams)
+     During a live interview confirmation, have the CAM say:
+       "No, Task X is actually at 65%, not 50%"
+     Expected:
+       [ ] Bot acknowledges the correction
+       [ ] If LLM extraction succeeds: bot re-confirms with corrected value
+       [ ] If LLM extraction fails: bot closes gracefully (no crash, no "no data shared" error)
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+13.9 Grace period follow-up with context (live Teams)
+     After a completed interview, have the CAM send a follow-up message such as:
+       "Hey ATLAS — did you get the note about AI-07 being the root cause?"
+     Expected:
+       [ ] Bot responds with a contextually relevant, casual reply
+       [ ] Bot does NOT say "No schedule data was shared" or similar
+       [ ] Bot references the completed interview implicitly
+     Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+13.10 Bot does not contradict itself mid-interview (live Teams)
+      During a live interview, the bot must not:
+        [ ] Ask for the same task's percent twice
+        [ ] Claim a task was not discussed when it was
+        [ ] Give a confirmation summary that contradicts what was said earlier
+      Manual review of Teams chat transcript:
+      Contradictions found?  [ ] YES (describe below)  [ ] NO
+      Notes: ___________________________________________________
+      Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+--- 13D: REGRESSION CHECKS ---
+
+13.11 TD-CX-001 — Context loss regression (the "No schedule data was shared" bug)
+      During a teams_chat cycle, after the CAM provides a correction in the CONFIRM state:
+      Expected:  Bot does NOT reply "No schedule data was shared, so I can't confirm..."
+      Evidence:  [ ] Teams chat transcript reviewed  [ ] No such message found
+      Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+13.12 TD-CX-002 — Immediate close on correction regression
+      When CAM says "Actually, flag AI-07 not AI-09" during CONFIRM state:
+      Expected:  Bot does NOT immediately say "Great, all set on my end. Talk soon!"
+                 without attempting to apply the correction first
+      Evidence:  [ ] Teams chat transcript reviewed  [ ] Bot re-confirmed after correction
+      Result:    _____________________________________________  [ ] P [ ] F [ ] SKIP
+
+
+SECTION 13 SIGN-OFF
 Tester: ________________________________  Date/Time: _________________________
 
 

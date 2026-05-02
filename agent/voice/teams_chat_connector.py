@@ -293,8 +293,8 @@ class ChatInterviewSession:
         """Accept a post-completion message from the CAM and return a natural acknowledgment.
 
         Called when the session is done but still within the grace period.
-        Uses the LLM to generate a contextual, casual response; falls back to
-        a randomised short reply if the LLM call fails.
+        Uses the LLM with full conversation history for a contextually grounded response;
+        falls back to a randomised short reply if the LLM call fails.
         """
         logger.info(
             "action=grace_period_message cam=%s text=%r",
@@ -303,16 +303,25 @@ class ChatInterviewSession:
         first_name = self.cam_name.split()[0]
         try:
             from agent.llm_interface import LLMInterface
+            from agent.voice.interview_agent import _format_transcript_for_llm
             llm = LLMInterface()
+
+            # Include recent conversation context so the LLM can respond in-character
+            transcript = getattr(self.agent, "_transcript", [])
+            history_text = _format_transcript_for_llm(transcript, max_turns=10)
+
             prompt = (
-                f"You are ATLAS, a casual bot that runs quick schedule check-ins over Teams chat. "
-                f"You just finished a status update with {first_name} and wrapped up cleanly. "
-                f"They just sent a follow-up message:\n"
+                f"You are ATLAS, a casual bot that runs quick schedule check-ins over Teams chat.\n\n"
+                f"Here is the recent conversation with {first_name}:\n"
+                f"{history_text}\n\n"
+                f"The interview is now complete. {first_name} sent this follow-up message:\n"
                 f'"{utterance}"\n\n'
                 f"Reply in 1 short sentence. Sound like a real person texting a coworker — "
-                f"casual, friendly, direct. Under 12 words. "
+                f"casual, friendly, direct. Under 15 words. "
+                f"If they are asking about something you updated, confirm it was noted. "
                 f"Do NOT say 'Thank you for that additional detail', 'status update is complete', "
-                f"or anything formal or corporate. Just a natural sign-off."
+                f"or anything formal or corporate. Do NOT claim no data was shared — "
+                f"reference the conversation above if relevant."
             )
             response = llm.ask(prompt, context="").strip().strip('"\'')
             if response and 5 < len(response) < 200:

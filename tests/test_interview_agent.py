@@ -322,9 +322,10 @@ class TestEdgeCases:
         agent.process("no")          # flat denial #3 → cap hit, close
         assert agent.state == InterviewState.COMPLETE
 
-    def test_confirm_inline_correction_closes_immediately(self):
-        # TD-004: if CAM provides an inline correction (percent present), close
-        # immediately rather than looping on the "no"
+    def test_confirm_inline_correction_does_not_loop(self):
+        # TD-004 (updated): if CAM provides an inline correction (percent or task ID),
+        # the bot should either re-confirm after applying it (if LLM extraction works)
+        # OR close gracefully (if LLM extraction fails) — it must NOT stay in a loop.
         task = _make_task("T1", "Task One", pct=50)
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
@@ -332,7 +333,8 @@ class TestEdgeCases:
         agent.process("50")
         assert agent.state == InterviewState.CONFIRM
         agent.process("No, T1 is 75%, not 50%")
-        assert agent.state == InterviewState.COMPLETE
+        # LLM may succeed (→ CONFIRM for re-confirmation) or fail (→ COMPLETE gracefully)
+        assert agent.state in (InterviewState.CONFIRM, InterviewState.COMPLETE)
 
     def test_confirm_no_problem_closes(self):
         # "no problem" is affirmative → should close, not re-ask
@@ -360,3 +362,210 @@ class TestEdgeCases:
         assert d["percent_complete"] == 75
         assert d["risk_flag"] is True
         assert "timestamp" in d
+
+
+# ---------------------------------------------------------------------------
+# Conversational context — context retention, correction handling, transcript
+# ---------------------------------------------------------------------------
+
+class TestConversationalContext:
+    """
+    Verify that conversational context is retained and corrections are handled
+    correctly.  LLM calls are not made in these tests (no API key in CI) so
+    we rely on the graceful fallback paths.
+    """
+
+    def test_transcript_accumulates_through_all_states(self):
+        """Every agent + CAM turn should be recorded in the transcript."""
+        task = _make_task("T1", "Behind Task", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 80})
+        agent.start()
+        agent.process("yes")           # greeting response
+        agent.process("30")            # pct — behind schedule
+        agent.process("vendor delay")  # blocker
+        agent.process("yes")           # risk flag
+        agent.process("need 3 more weeks")  # risk description
+
+        transcript = agent.transcript
+        agents = [t for t in transcript if t.speaker == "agent"]
+        cams = [t for t in transcript if t.speaker == "cam"]
+        assert len(cams) == 5, f"Expected 5 CAM turns, got {len(cams)}"
+        assert len(agents) >= 4, f"Expected ≥4 agent turns, got {len(agents)}"
+
+    def test_transcript_records_cam_corrections(self):
+        """CAM corrections in the CONFIRM state must appear in the transcript."""
+        task = _make_task("T1", "Task", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+
+        pre_count = len(agent.transcript)
+        agent.process("No, T1 is actually 60%, not 50%")
+
+        post_count = len(agent.transcript)
+        cam_turns = [t for t in agent.transcript if t.speaker == "cam"]
+        # At minimum the correction utterance and agent reply were added
+        assert post_count > pre_count
+        assert any("60" in t.text or "50" in t.text for t in cam_turns)
+
+    def test_last_confirmation_text_saved(self):
+        """_last_confirmation_text should be set when request_confirmation runs."""
+        task = _make_task("T1", "Behind Task", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 80})
+        agent.start()
+        agent.process("yes")
+        agent.process("30")
+        agent.process("vendor delay")
+        agent.process("no")   # no risk flag — will jump to confirm
+
+        assert agent.state == InterviewState.CONFIRM
+        assert hasattr(agent, "_last_confirmation_text")
+        assert len(agent._last_confirmation_text) > 10
+        assert "sound right" in agent._last_confirmation_text.lower()
+
+    def test_correction_with_failed_llm_closes_gracefully(self):
+        """When LLM correction extraction fails (mocked to return False), bot closes gracefully."""
+        from unittest.mock import patch
+        task = _make_task("AI-07", "AI Platform", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
+        agent.start()
+        agent.process("yes")
+        agent.process("30")
+        agent.process("waiting on GPU allocation")
+        agent.process("no")   # no risk flag → confirm
+        assert agent.state == InterviewState.CONFIRM
+
+        # Force the correction extraction to fail (simulates LLM unavailable / parse error)
+        with patch.object(agent, "_extract_and_apply_correction", return_value=False):
+            turn = agent.process(
+                "Actually, AI-07 is wrong — it should be at 45%, not 30%"
+            )
+        # When extraction fails, bot must close gracefully rather than crash or loop
+        assert agent.state == InterviewState.COMPLETE
+        assert turn.text  # must produce a response
+
+    def test_correction_applied_stays_in_confirm(self):
+        """When _extract_and_apply_correction succeeds (mocked), bot re-confirms."""
+        from unittest.mock import patch
+        task = _make_task("AI-07", "AI Platform", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
+        agent.start()
+        agent.process("yes")
+        agent.process("30")
+        agent.process("waiting on GPU allocation")
+        agent.process("no")   # no risk flag
+        assert agent.state == InterviewState.CONFIRM
+
+        with patch.object(agent, "_extract_and_apply_correction", return_value=True):
+            turn = agent.process("AI-07 should be risk-flagged, not AI-09")
+
+        # Correction was applied → bot stays in CONFIRM to re-confirm
+        assert agent.state == InterviewState.CONFIRM
+        assert turn.text  # must produce a re-confirmation message
+
+    def test_after_correction_affirmative_closes(self):
+        """After correction is applied and re-confirmed, 'yes' closes properly."""
+        from unittest.mock import patch
+        task = _make_task("AI-07", "AI Platform", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
+        agent.start()
+        agent.process("yes")
+        agent.process("30")
+        agent.process("waiting on GPU allocation")
+        agent.process("no")
+        assert agent.state == InterviewState.CONFIRM
+
+        with patch.object(agent, "_extract_and_apply_correction", return_value=True):
+            agent.process("AI-07 should be risk-flagged, not AI-09")
+
+        assert agent.state == InterviewState.CONFIRM
+        # Now CAM confirms the re-confirmation
+        agent.process("yes, that's right")
+        assert agent.state == InterviewState.COMPLETE
+
+    def test_re_request_confirmation_produces_message(self):
+        """_re_request_confirmation must return an AgentTurn with non-empty text."""
+        task = _make_task("AI-07", "AI Platform", pct=30)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
+        # Manually add a risk-flagged result to see it reflected
+        from agent.voice.interview_agent import TaskResult
+        agent._results = [TaskResult(
+            task_id="AI-07",
+            cam_name="Alice",
+            percent_complete=30,
+            blocker="GPU allocation",
+            risk_flag=True,
+            risk_description="delays PDR",
+            status="captured",
+        )]
+        agent._state = InterviewState.CONFIRM
+        turn = agent._re_request_confirmation()
+
+        assert turn.text
+        assert agent.state == InterviewState.CONFIRM
+        # Should mention the risk-flagged task ID or ask for confirmation
+        assert any(kw in turn.text.lower() for kw in ["ai-07", "right", "risk", "flagged"])
+
+    def test_format_transcript_for_llm(self):
+        """_format_transcript_for_llm should format recent turns correctly."""
+        from agent.voice.interview_agent import _format_transcript_for_llm, ConversationTurn
+        turns = [
+            ConversationTurn(speaker="agent", text="Hey Alice, quick check-in."),
+            ConversationTurn(speaker="cam", text="Hi, ready to go."),
+            ConversationTurn(speaker="agent", text="What's the pct on Task A?"),
+            ConversationTurn(speaker="cam", text="About 60%."),
+        ]
+        result = _format_transcript_for_llm(turns, max_turns=4)
+        assert "ATLAS:" in result
+        assert "CAM:" in result
+        assert "Hey Alice" in result
+        assert "60%" in result
+
+    def test_format_transcript_for_llm_empty(self):
+        """_format_transcript_for_llm handles empty transcript gracefully."""
+        from agent.voice.interview_agent import _format_transcript_for_llm
+        result = _format_transcript_for_llm([], max_turns=10)
+        assert "(no prior conversation)" in result
+
+    def test_format_transcript_for_llm_truncates(self):
+        """_format_transcript_for_llm should only include the last max_turns turns."""
+        from agent.voice.interview_agent import _format_transcript_for_llm, ConversationTurn
+        turns = [ConversationTurn(speaker="cam", text=f"Turn {i}") for i in range(20)]
+        result = _format_transcript_for_llm(turns, max_turns=5)
+        assert "Turn 15" in result   # last 5
+        assert "Turn 0" not in result  # first 15 truncated
+
+    def test_format_task_results(self):
+        """_format_task_results should include task IDs, pct, and risk status."""
+        from agent.voice.interview_agent import _format_task_results, TaskResult
+        results = [
+            TaskResult("AI-07", "Alice", 30, "GPU blocker", True, "PDR at risk", "captured"),
+            TaskResult("AI-09", "Alice", 80, "", False, "", "captured"),
+        ]
+        tasks = [
+            _make_task("AI-07", "AI-07 AI Platform"),
+            _make_task("AI-09", "AI-09 Model Training"),
+        ]
+        out = _format_task_results(results, tasks)
+        assert "AI-07" in out
+        assert "RISK FLAGGED" in out
+        assert "AI-09" in out
+        assert "no risk" in out
+
+    def test_flat_denial_retry_limit_still_works(self):
+        """Plain 'no' without task ID or percent should still exhaust retries and close."""
+        task = _make_task("T1", "Task", pct=50)
+        agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
+        agent.start()
+        agent.process("yes")
+        agent.process("50")
+        assert agent.state == InterviewState.CONFIRM
+
+        agent.process("no")   # flat denial #1 → re-ask
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no")   # flat denial #2 → re-ask
+        assert agent.state == InterviewState.CONFIRM
+        agent.process("no")   # flat denial #3 → cap reached, close
+        assert agent.state == InterviewState.COMPLETE

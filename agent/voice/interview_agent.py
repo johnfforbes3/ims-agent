@@ -159,6 +159,8 @@ class InterviewAgent:
         self._current_risk_desc: str = ""
         # Track milestones already flagged — don't ask the same risk question twice
         self._flagged_milestones: set[str] = set()
+        # Last confirmation message text — stored so correction prompts have full context
+        self._last_confirmation_text: str = ""
         logger.info("action=interview_init cam=%s tasks=%d", cam_name, len(self._tasks))
 
     # ------------------------------------------------------------------
@@ -254,6 +256,7 @@ class InterviewAgent:
             response=raw,
             task_name=_spoken_task_name(task["name"]),
             expected_pct=expected,
+            conversation_history=self._transcript,
         )
 
         if classification.get("unknown"):
@@ -311,6 +314,7 @@ class InterviewAgent:
             response=raw,
             task_name=_spoken_task_name(self._current_task["name"]),
             expected_pct=self._get_expected_pct(),
+            conversation_history=self._transcript,
         )
         self._current_blocker = classification.get("blocker_text") or raw.strip()
         milestone_hint = self._nearest_milestone_name()
@@ -333,6 +337,7 @@ class InterviewAgent:
             response=raw,
             task_name=_spoken_task_name(self._current_task["name"]),
             expected_pct=self._get_expected_pct(),
+            conversation_history=self._transcript,
         )
 
         if classification["sentiment"] == "affirmative":
@@ -355,18 +360,27 @@ class InterviewAgent:
             response=raw,
             task_name="",
             expected_pct=0,
+            conversation_history=self._transcript,
         )
         sentiment = classification["sentiment"]
 
         if sentiment in ("affirmative", "unclear"):
             return self._close_interview()
 
-        # Negative — check for an inline correction
+        # Negative — check for an inline correction (percent value or task ID mentioned)
         has_correction = (
             classification.get("percent") is not None
-            or bool(re.search(r"\b[A-Za-z]{2}-\d{2}\b", raw))
+            or bool(re.search(r"\b[A-Za-z]{2,4}-\d{2}\b", raw))
         )
         if has_correction:
+            # Attempt to extract, apply, and re-confirm the correction with full context
+            corrections_applied = self._extract_and_apply_correction(raw)
+            if corrections_applied and self._confirm_retry_count < 2:
+                self._confirm_retry_count += 1
+                logger.info("action=confirm_correction_applied cam=%s retry=%d",
+                            self._cam_name, self._confirm_retry_count)
+                return self._re_request_confirmation()
+            # Couldn't extract specific correction or retry cap hit — close gracefully
             logger.info("action=confirm_correction_noted cam=%s correction=%r closing",
                         self._cam_name, raw[:120])
             return self._close_interview()
@@ -387,6 +401,96 @@ class InterviewAgent:
             "Sounds good — talk soon!",
             InterviewState.COMPLETE,
         )
+
+    # ------------------------------------------------------------------
+    # Correction helpers
+    # ------------------------------------------------------------------
+
+    def _extract_and_apply_correction(self, raw: str) -> bool:
+        """Use LLM with full conversation context to extract and apply a CAM correction.
+
+        Returns True if at least one correction was successfully applied to results.
+        Falls back gracefully (returns False) if the LLM call fails — the caller
+        will then close the interview gracefully rather than re-confirming.
+        """
+        task_summary = _format_task_results(self._results, self._tasks)
+        history = _format_transcript_for_llm(self._transcript, max_turns=24)
+        confirmation = self._last_confirmation_text or "Does all that sound right?"
+
+        try:
+            from agent.llm_interface import LLMInterface
+            llm = LLMInterface()
+            prompt = _CONFIRM_CORRECTION_PROMPT.format(
+                history=history,
+                task_summary=task_summary,
+                confirmation=confirmation,
+                response=raw,
+            )
+            raw_resp = llm.ask(prompt, context="").strip()
+            if raw_resp.startswith("```"):
+                raw_resp = re.sub(r"^```[a-z]*\n?", "", raw_resp)
+                raw_resp = re.sub(r"\n?```$", "", raw_resp)
+            result = json.loads(raw_resp)
+
+            corrections = result.get("corrections", [])
+            if not corrections:
+                return False
+
+            applied = 0
+            for correction in corrections:
+                task_id = str(correction.get("task_id", "")).upper().strip()
+                field = str(correction.get("field", ""))
+                new_value = correction.get("new_value")
+
+                for res in self._results:
+                    if res.task_id.upper() == task_id:
+                        if field == "percent_complete" and isinstance(new_value, (int, float)):
+                            old_val = res.percent_complete
+                            res.percent_complete = int(new_value)
+                            logger.info("action=correction_applied task=%s field=pct %s→%s",
+                                        task_id, old_val, int(new_value))
+                            applied += 1
+                        elif field == "risk_flag" and isinstance(new_value, bool):
+                            old_val = res.risk_flag
+                            res.risk_flag = new_value
+                            logger.info("action=correction_applied task=%s field=risk_flag %s→%s",
+                                        task_id, old_val, new_value)
+                            applied += 1
+                        elif field == "risk_description" and isinstance(new_value, str):
+                            res.risk_description = new_value
+                            logger.info("action=correction_applied task=%s field=risk_desc updated", task_id)
+                            applied += 1
+                        elif field == "blocker" and isinstance(new_value, str):
+                            res.blocker = new_value
+                            logger.info("action=correction_applied task=%s field=blocker updated", task_id)
+                            applied += 1
+                        break
+
+            if applied > 0:
+                logger.info("action=corrections_total cam=%s applied=%d", self._cam_name, applied)
+            return applied > 0
+
+        except Exception as exc:
+            logger.warning("action=correction_extract_failed cam=%s error=%s", self._cam_name, exc)
+            return False
+
+    def _re_request_confirmation(self) -> AgentTurn:
+        """Re-render the confirmation summary after corrections have been applied."""
+        all_risks = [r for r in self._results if r.risk_flag]
+        material_risks = [r for r in all_risks if self._is_material_risk(r)]
+
+        parts: list[str] = ["Got it — updated."]
+        if material_risks:
+            risk_ids = _natural_list([r.task_id for r in material_risks[:2]])
+            parts.append(f"I now have {risk_ids} flagged as the schedule risk.")
+        elif all_risks:
+            count = len(all_risks)
+            parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''}.")
+        parts.append("Does that look right now?")
+
+        text = " ".join(parts)
+        self._last_confirmation_text = text
+        return self._agent_turn(text, InterviewState.CONFIRM)
 
     # ------------------------------------------------------------------
     # Transition helpers
@@ -484,7 +588,9 @@ class InterviewAgent:
             parts.append(f"I'll mark {len(no_resp)} item{'s' if len(no_resp) != 1 else ''} for follow-up.")
 
         parts.append("Does all that sound right?")
-        return self._agent_turn(" ".join(parts), InterviewState.CONFIRM)
+        text = " ".join(parts)
+        self._last_confirmation_text = text
+        return self._agent_turn(text, InterviewState.CONFIRM)
 
     def _is_material_risk(self, result: TaskResult) -> bool:
         """True only if the task is both risk-flagged AND materially behind schedule (>10 pts gap)."""
@@ -707,14 +813,52 @@ def _calc_expected_pct(task: dict[str, Any]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Conversation history helpers
+# ---------------------------------------------------------------------------
+
+def _format_transcript_for_llm(
+    transcript: list[ConversationTurn], max_turns: int = 16
+) -> str:
+    """Format recent transcript turns as a readable conversation string for LLM context."""
+    if not transcript:
+        return "(no prior conversation)"
+    recent = transcript[-max_turns:]
+    lines = []
+    for turn in recent:
+        prefix = "ATLAS:" if turn.speaker == "agent" else "CAM:"
+        lines.append(f"{prefix} {turn.text}")
+    return "\n".join(lines)
+
+
+def _format_task_results(results: list[TaskResult], tasks: list[dict]) -> str:
+    """Format captured task results as a readable summary for LLM correction prompts."""
+    if not results:
+        return "(no tasks captured yet)"
+    name_map = {t["task_id"]: t["name"] for t in tasks}
+    lines = []
+    for r in results:
+        name = name_map.get(r.task_id, r.task_id)
+        risk_str = "RISK FLAGGED" if r.risk_flag else "no risk"
+        line = f"  {r.task_id} ({name}): {r.percent_complete}% complete, {risk_str}"
+        if r.blocker:
+            line += f", blocker: {r.blocker[:80]}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # LLM-based classifier — replaces keyword matching for NLU
 # ---------------------------------------------------------------------------
 
 _CLASSIFY_PROMPT = """\
-You are the NLU layer for an automated program schedule interview agent.
+You are the NLU layer for ATLAS, an automated program schedule interview agent.
 The agent just asked a question and received this response from a program engineer (CAM).
 Extract the key facts and return them as a JSON object — nothing else.
 
+RECENT CONVERSATION (for context):
+{history}
+
+CURRENT TURN:
 State: {state}
 Task being discussed: {task_name}
 Expected progress: ~{expected_pct}%
@@ -738,7 +882,51 @@ Important rules:
   If the CAM gave a nuanced answer that leans yes, use "affirmative".
   If they pushed back or said no, use "negative". If truly ambiguous, "unclear".
 - For "blocker_mentioned": true if the CAM mentioned anything that is preventing, delaying,
-  blocking, or holding up progress — even if phrased indirectly."""
+  blocking, or holding up progress — even if phrased indirectly.
+- Use the conversation history to understand references to prior context (e.g. "that task"
+  or corrections referencing previously discussed items)."""
+
+
+_CONFIRM_CORRECTION_PROMPT = """\
+You are ATLAS, reviewing a CAM's response to a schedule status confirmation.
+
+FULL CONVERSATION (most recent turns):
+{history}
+
+TASKS CAPTURED SO FAR:
+{task_summary}
+
+CONFIRMATION MESSAGE ATLAS SENT:
+{confirmation}
+
+CAM'S RESPONSE:
+{response}
+
+The CAM appears to be correcting or disputing something. Analyze what they want changed.
+Return ONLY a JSON object:
+{{
+  "sentiment": "affirmative" | "negative" | "unclear",
+  "has_correction": <true if the CAM is correcting specific captured data>,
+  "corrections": [
+    {{
+      "task_id": "<task ID exactly as it appears in the conversation, e.g. AI-07, SE-03>",
+      "field": "percent_complete" | "risk_flag" | "risk_description" | "blocker",
+      "new_value": <corrected value — integer for percent_complete, boolean for risk_flag, string for others>,
+      "note": "<one sentence description of what changed>"
+    }}
+  ]
+}}
+
+Rules:
+- If the CAM affirms (yes, looks good, correct, that's right), sentiment="affirmative", has_correction=false, corrections=[]
+- If the CAM says "no" or "wrong" without specifying what to fix, sentiment="negative", has_correction=false, corrections=[]
+- If the CAM corrects a specific task's data, set has_correction=true and list each change
+- If the CAM says task X should be flagged INSTEAD of task Y, add TWO corrections:
+    {{"task_id": "X", "field": "risk_flag", "new_value": true, "note": "CAM says X is the primary risk"}},
+    {{"task_id": "Y", "field": "risk_flag", "new_value": false, "note": "CAM says Y is not the primary risk"}}
+- Only include corrections for tasks actually mentioned by the CAM in their response
+- Use the exact task ID format from the conversation (e.g. "AI-07", not "AI7" or "ai-07")
+- Do not invent corrections — only extract what the CAM explicitly stated"""
 
 
 def _classify_cam_response(
@@ -747,17 +935,24 @@ def _classify_cam_response(
     response: str,
     task_name: str,
     expected_pct: int,
+    conversation_history: list[ConversationTurn] | None = None,
 ) -> dict[str, Any]:
     """Use an LLM to classify a CAM's natural-language response.
 
     Returns a dict with keys: percent, blocker_mentioned, blocker_text,
     sentiment, unknown, key_insight.
     Falls back to safe defaults if the LLM call fails.
+
+    Args:
+        conversation_history: Full transcript so far. Passed to the LLM so it
+            can understand references to prior context and corrections.
     """
     try:
         from agent.llm_interface import LLMInterface
         llm = LLMInterface()
+        history_str = _format_transcript_for_llm(conversation_history or [], max_turns=12)
         prompt = _CLASSIFY_PROMPT.format(
+            history=history_str,
             state=state,
             task_name=task_name or "(not specified)",
             expected_pct=expected_pct,
