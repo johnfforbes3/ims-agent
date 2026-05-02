@@ -50,6 +50,12 @@ _CAM_SESSIONS_FILE = Path(os.getenv("DATA_DIR", "data")) / "cam_sessions.json"
 # can send follow-up messages without triggering a new interview greeting.
 _GRACE_SECONDS = int(os.getenv("INTERVIEW_GRACE_SECONDS", "28800"))
 
+# Maximum number of grace-period replies ATLAS will send per completed session.
+# Prevents the cam_responder simulator from creating a feedback loop where each
+# ATLAS grace-period message triggers another CAM reply which triggers another
+# ATLAS reply, ad infinitum.  After this many turns the session stops responding.
+_GRACE_MAX_TURNS = int(os.getenv("INTERVIEW_GRACE_MAX_TURNS", "2"))
+
 
 # ---------------------------------------------------------------------------
 # Bot Framework token helper
@@ -262,6 +268,9 @@ class ChatInterviewSession:
         self.user_id: str = ""
         # Tracks when the interview completed (for grace-period window)
         self._completed_at: float | None = None
+        # Counts how many grace-period replies have been sent; capped at _GRACE_MAX_TURNS
+        # to prevent a cam_responder feedback loop (ATLAS reply → sim response → ATLAS reply …)
+        self._grace_period_turns: int = 0
 
     def start(self) -> str:
         """Return the opening greeting text."""
@@ -280,12 +289,17 @@ class ChatInterviewSession:
         return turn.text if turn.text else None
 
     def is_in_grace_period(self) -> bool:
-        """True if the interview is done but still within the post-completion grace window.
+        """True if the interview is done, within the post-completion grace window, and
+        still has remaining reply budget (_GRACE_MAX_TURNS).
 
-        During this window the CAM may send a final wrap-up message.  We accept
-        and acknowledge it rather than dropping it silently.
+        The turn budget prevents the cam_responder simulator from creating an
+        infinite feedback loop: each ATLAS grace-period message triggers a new
+        CAM sim reply, which would trigger another ATLAS reply indefinitely.
+        After _GRACE_MAX_TURNS responses the session silently stops replying.
         """
         if not self.is_done or self._completed_at is None:
+            return False
+        if self._grace_period_turns >= _GRACE_MAX_TURNS:
             return False
         return (time.monotonic() - self._completed_at) < _GRACE_SECONDS
 
@@ -296,9 +310,10 @@ class ChatInterviewSession:
         Uses the LLM with full conversation history for a contextually grounded response;
         falls back to a randomised short reply if the LLM call fails.
         """
+        self._grace_period_turns += 1
         logger.info(
-            "action=grace_period_message cam=%s text=%r",
-            self.cam_name, utterance[:120],
+            "action=grace_period_message cam=%s turn=%d/%d text=%r",
+            self.cam_name, self._grace_period_turns, _GRACE_MAX_TURNS, utterance[:120],
         )
         first_name = self.cam_name.split()[0]
         try:
@@ -310,15 +325,35 @@ class ChatInterviewSession:
             transcript = getattr(self.agent, "_transcript", [])
             history_text = _format_transcript_for_llm(transcript, max_turns=10)
 
+            # Inject captured risk flags so ATLAS can reference them accurately
+            results = getattr(self.agent, "results", [])
+            tasks = getattr(self.agent, "_tasks", [])
+            risk_results = [r for r in results if r.risk_flag]
+            if risk_results:
+                # Build name map from task_id → task name prefix for readable output
+                id_to_name = {
+                    str(t.get("task_id", "")): t.get("name", "").split(" ", 1)[0]
+                    for t in tasks
+                }
+                flagged_list = ", ".join(
+                    id_to_name.get(str(r.task_id), str(r.task_id))
+                    for r in risk_results
+                )
+                risks_context = f"Tasks flagged as schedule risks: {flagged_list}.\n"
+            else:
+                risks_context = "No tasks were flagged as schedule risks.\n"
+
             prompt = (
                 f"You are ATLAS, a casual bot that runs quick schedule check-ins over Teams chat.\n\n"
+                f"Interview summary: {risks_context}"
                 f"Here is the recent conversation with {first_name}:\n"
                 f"{history_text}\n\n"
                 f"The interview is now complete. {first_name} sent this follow-up message:\n"
                 f'"{utterance}"\n\n'
                 f"Reply in 1 short sentence. Sound like a real person texting a coworker — "
-                f"casual, friendly, direct. Under 15 words. "
-                f"If they are asking about something you updated, confirm it was noted. "
+                f"casual, friendly, direct. Under 20 words. "
+                f"If {first_name} asks which tasks are flagged, name them from the interview summary above. "
+                f"If they are asking about something you updated or noted, confirm it. "
                 f"Do NOT say 'Thank you for that additional detail', 'status update is complete', "
                 f"or anything formal or corporate. Do NOT claim no data was shared — "
                 f"reference the conversation above if relevant."

@@ -161,6 +161,9 @@ class InterviewAgent:
         self._flagged_milestones: set[str] = set()
         # Last confirmation message text — stored so correction prompts have full context
         self._last_confirmation_text: str = ""
+        # Pending one-liner to prepend to the next task intro when the CAM asks a question
+        # that ATLAS can't answer mid-interview (e.g. schedule dates, CPM detail).
+        self._cam_question_note: str = ""
         logger.info("action=interview_init cam=%s tasks=%d", cam_name, len(self._tasks))
 
     # ------------------------------------------------------------------
@@ -297,9 +300,11 @@ class InterviewAgent:
                     self._current_risk_flag = True
                     return self._finalise_task_and_advance(pct)
                 return self._agent_turn(
-                    f"Got it, {pct}%. Could that put {milestone_hint} at risk?",
+                    f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
                     InterviewState.AWAITING_RISK_FLAG,
                 )
+            if classification.get("cam_question"):
+                self._cam_question_note = _cam_question_ack()
             return self._agent_turn(
                 f"Got it, {pct}%. What's the main thing holding that up?",
                 InterviewState.AWAITING_BLOCKER,
@@ -317,6 +322,8 @@ class InterviewAgent:
             conversation_history=self._transcript,
         )
         self._current_blocker = classification.get("blocker_text") or raw.strip()
+        if classification.get("cam_question"):
+            self._cam_question_note = _cam_question_ack()
         milestone_hint = self._nearest_milestone_name()
         if milestone_hint in self._flagged_milestones:
             self._current_risk_flag = True
@@ -339,6 +346,9 @@ class InterviewAgent:
             expected_pct=self._get_expected_pct(),
             conversation_history=self._transcript,
         )
+
+        if classification.get("cam_question"):
+            self._cam_question_note = _cam_question_ack()
 
         if classification["sentiment"] == "affirmative":
             self._current_risk_flag = True
@@ -436,9 +446,20 @@ class InterviewAgent:
             if not corrections:
                 return False
 
+            # Build a lookup from name-prefix (e.g. "AI-07") to numeric task ID
+            # so corrections referencing "AI-07" can match result with task_id="62"
+            name_prefix_to_id: dict[str, str] = {}
+            for t in self._tasks:
+                name = t.get("name", "")
+                m = re.match(r'^([A-Za-z]{2,4}-\d{2,3})\b', name)
+                if m:
+                    name_prefix_to_id[m.group(1).upper()] = str(t["task_id"]).upper()
+
             applied = 0
             for correction in corrections:
-                task_id = str(correction.get("task_id", "")).upper().strip()
+                raw_id = str(correction.get("task_id", "")).strip()
+                # Resolve name-prefix aliases (e.g. "AI-07" → "62")
+                task_id = name_prefix_to_id.get(raw_id.upper(), raw_id.upper())
                 field = str(correction.get("field", ""))
                 new_value = correction.get("new_value")
 
@@ -479,13 +500,26 @@ class InterviewAgent:
         all_risks = [r for r in self._results if r.risk_flag]
         material_risks = [r for r in all_risks if self._is_material_risk(r)]
 
+        # Build name map: numeric task_id → spoken short name (e.g. "AI-07 Deploy…" → "AI-07")
+        def _short_name(task_id: str) -> str:
+            for t in self._tasks:
+                if str(t["task_id"]) == str(task_id):
+                    return _spoken_task_name(t["name"])
+            return str(task_id)
+
         parts: list[str] = ["Got it — updated."]
         if material_risks:
-            risk_ids = _natural_list([r.task_id for r in material_risks[:2]])
-            parts.append(f"I now have {risk_ids} flagged as the schedule risk.")
+            risk_names = _natural_list([_short_name(r.task_id) for r in material_risks])
+            parts.append(f"I now have {risk_names} flagged as schedule risks.")
         elif all_risks:
             count = len(all_risks)
-            parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''}.")
+            risk_names = _natural_list([_short_name(r.task_id) for r in all_risks[:3]])
+            if count > 3:
+                parts.append(f"I'm noting {count} schedule risks ({risk_names} and {count - 3} more).")
+            else:
+                parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''} ({risk_names}).")
+        else:
+            parts.append("Clean — no risk flags.")
         parts.append("Does that look right now?")
 
         text = " ".join(parts)
@@ -513,12 +547,35 @@ class InterviewAgent:
         else:
             opener = f"Next up, {spoken_name}."
 
-        # Prepend a brief natural ack when transitioning from a completed task
-        ack_prefix = ""
-        if prev_pct is not None:
+        # Pending acknowledgment of a CAM question takes priority over pct ack
+        if self._cam_question_note:
+            ack_prefix = self._cam_question_note
+            self._cam_question_note = ""
+        elif prev_pct is not None:
             ack_prefix = _pct_ack(prev_pct) + " "
+        else:
+            ack_prefix = ""
 
-        text = f"{ack_prefix}{opener} You're showing {last_pct}% on that — where does it stand now?"
+        # Vary "You're showing X% on that" so it doesn't feel like a rote template
+        import random as _random
+        if last_pct == 0:
+            pct_phrase = _random.choice([
+                "That one's at zero in the schedule — where does it stand?",
+                "Schedule's showing zero on that — what's the status?",
+                "Zero in the plan — any movement on that?",
+                "That one's at zero in the IMS — what's the situation?",
+                "Still showing zero — where does it stand?",
+            ])
+        elif last_pct == 100:
+            pct_phrase = _random.choice([
+                "You're showing 100% — is that wrapped up?",
+                "Schedule shows that one complete — still good?",
+                "That's at 100 in the IMS — confirmed done?",
+            ])
+        else:
+            pct_phrase = f"You're showing {last_pct}% — where does it stand now?"
+
+        text = f"{ack_prefix}{opener} {pct_phrase}"
         return self._agent_turn(text, InterviewState.AWAITING_PCT)
 
     def _ask_pct(self) -> AgentTurn:
@@ -579,11 +636,29 @@ class InterviewAgent:
 
         parts: list[str] = [f"Alright, I think I've got all {n} of your tasks."]
         if material_risks:
-            risk_names = _natural_list([task_name_map.get(r.task_id, r.task_id) for r in material_risks[:2]])
-            parts.append(f"I'm flagging {risk_names} as a schedule risk.")
+            total_material = len(material_risks)
+            if total_material >= n:
+                # Every task is a schedule risk — common shared-blocker scenario
+                parts.append(f"All {n} are flagged — same blocker chain running through everything.")
+            elif total_material > 2:
+                # Many risks — use count rather than naming them all
+                parts.append(f"I'm flagging {total_material} tasks as schedule risks.")
+            else:
+                risk_names = _natural_list(
+                    [task_name_map.get(r.task_id, r.task_id) for r in material_risks]
+                )
+                parts.append(f"I'm flagging {risk_names} as a schedule risk.")
         elif all_risks:
             count = len(all_risks)
             parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''} for your review.")
+        else:
+            # No risk flags — call it out so the CAM can push back if they disagree
+            # Mention any tasks with active blockers even if not flagged as risks
+            blocked = [r for r in self._results if r.blocker and r.status == "captured"]
+            if blocked:
+                parts.append("No schedule risks flagged — though I've noted a couple of blockers.")
+            else:
+                parts.append("Clean — no risk flags today.")
         if no_resp:
             parts.append(f"I'll mark {len(no_resp)} item{'s' if len(no_resp) != 1 else ''} for follow-up.")
 
@@ -635,7 +710,12 @@ class InterviewAgent:
         return _calc_expected_pct(self._current_task)
 
     def _nearest_milestone_name(self) -> str:
-        """Return the next upcoming milestone name, or a generic fallback."""
+        """Return the next upcoming milestone name, or a generic fallback.
+
+        Strips IMS prefixes ("MILESTONE: ", "MILESTONE - ") and parenthetical
+        abbreviations so the name reads naturally in chat ("AI Stack Deployed"
+        rather than "MILESTONE: AI Stack Deployed").
+        """
         from datetime import datetime
         now = datetime.now()
         upcoming = [
@@ -645,8 +725,12 @@ class InterviewAgent:
         if upcoming:
             nearest = min(upcoming, key=lambda t: t["finish"])
             name = nearest.get("name", "")
+            # Strip "MILESTONE: " / "MILESTONE - " IMS prefix
+            name = re.sub(r'^MILESTONE[:\s\-]+\s*', '', name, flags=re.IGNORECASE).strip()
             # Shorten "PDR - Preliminary Design Review" → "PDR"
             short = name.split(" - ")[0].split(" – ")[0].strip()
+            # Strip trailing parenthetical abbreviations like " (PDR)"
+            short = re.sub(r'\s*\([A-Z][A-Za-z0-9& /,\-]+\)\s*$', '', short).strip()
             return short or "the next milestone"
         return "the next milestone"
 
@@ -787,13 +871,34 @@ def _pct_ack(pct: int) -> str:
     """
     import random
     if pct == 100:
-        options = ["Done —", "Complete —", "Nice, wrapped up —"]
+        options = ["Done —", "Complete —", "Nice, wrapped up —", "Got it, done —"]
     elif pct >= 85:
-        options = ["Almost there —", "Nearly done —", "Good progress —"]
+        options = ["Almost there —", "Nearly done —", "Good progress —", "Solid —"]
     elif pct >= 60:
-        options = ["Good —", "Alright —", "Solid —"]
+        options = ["Good —", "Alright —", "Solid —", "Good progress —"]
+    elif pct > 0:
+        options = ["Got it —", "Okay —", "Copy that —", "Noted —", "Got that —"]
     else:
-        options = ["Got it —", "Okay —", "Copy that —"]
+        # 0% — more variety since many tasks may be at zero
+        options = ["Got it —", "Okay —", "Copy that —", "Noted —",
+                   "Got that —", "Understood —", "Roger that —", "Copy —"]
+    return random.choice(options)
+
+
+def _cam_question_ack() -> str:
+    """Return a brief, natural one-liner acknowledging that the CAM asked a question
+    ATLAS can't answer mid-interview (e.g. planned finish dates, CPM detail).
+
+    Used as a prefix on the next task intro so the CAM doesn't feel ignored.
+    """
+    import random
+    options = [
+        "Good question — I'll flag that for follow-up. ",
+        "I don't have the schedule detail queued up here — I'll note that. ",
+        "I'll flag that for the PM to loop back on. ",
+        "Noted — I'll make sure that gets followed up on. ",
+        "Good point — I'll make a note of that. ",
+    ]
     return random.choice(options)
 
 
@@ -872,7 +977,8 @@ Return ONLY a JSON object with these fields:
   "blocker_text": <one-sentence summary of the blocker, or "" if none>,
   "sentiment": "affirmative" | "negative" | "unclear" — whether the CAM said yes/no to the question asked,
   "unknown": <true if the CAM said they don't know or can't answer>,
-  "key_insight": <one sentence capturing the most important thing the CAM said>
+  "key_insight": <one sentence capturing the most important thing the CAM said>,
+  "cam_question": <true if the CAM is asking ATLAS a question about schedule, dates, dependencies, data, or anything ATLAS would need to look up — i.e. they expect an answer back>
 }}
 
 Important rules:
@@ -884,7 +990,11 @@ Important rules:
 - For "blocker_mentioned": true if the CAM mentioned anything that is preventing, delaying,
   blocking, or holding up progress — even if phrased indirectly.
 - Use the conversation history to understand references to prior context (e.g. "that task"
-  or corrections referencing previously discussed items)."""
+  or corrections referencing previously discussed items).
+- For "cam_question": set true only when the CAM is directly asking ATLAS something that
+  requires a schedule-data lookup to answer (e.g. "what's the planned finish date?",
+  "who owns SE-04?", "why is that task behind?"). Do NOT set true when the CAM is just
+  providing information, expressing uncertainty, or making a statement."""
 
 
 _CONFIRM_CORRECTION_PROMPT = """\
@@ -986,4 +1096,5 @@ def _classify_cam_response(
             "sentiment": sentiment,
             "unknown": _is_unknown(response.lower()),
             "key_insight": "",
+            "cam_question": False,
         }

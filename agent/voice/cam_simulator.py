@@ -64,80 +64,118 @@ def build_atlas_personas(tasks: list[dict[str, Any]]) -> dict[str, CAMPersona]:
     if "Alice Nguyen" in by_cam:
         personas["Alice Nguyen"] = CAMPersona(
             cam_name="Alice Nguyen",
-            role="Systems Engineering lead",
+            role="AI Stack lead",
             communication_style="Precise and technical. Reports clearly but tends to "
                                 "mention upstream dependencies unprompted.",
             task_context=by_cam["Alice Nguyen"],
             seeded_blockers={
-                "3": "Still waiting on the final RF specs from HW before I can close "
-                     "out ICD sections 4 through 6.",
-                "8": "Can't start until the ICDs are approved — that's the input I need.",
+                # AI-07: Claude API gateway proxy (ID=62)
+                "62": "The auth layer for the LLM gateway isn't settled yet — "
+                      "security wants mutual TLS but that depends on the cert "
+                      "infrastructure Carol is still standing up.",
+                # AI-10: Model versioning tooling (ID=65)
+                "65": "We're still debating between MLflow and a custom S3-backed "
+                      "scheme — can't start implementation until that architecture "
+                      "decision is signed off.",
             },
             seeded_risks={
-                "3": "If we don't get the RF specs by end of next week, PDR slips at "
-                     "least two weeks.",
+                # AI-07 gateway is on the critical path to inference pipeline test
+                "62": "If the API gateway isn't done by mid-May, Eva's end-to-end "
+                      "inference test can't start — and that's on the acceptance "
+                      "critical path.",
             },
-            seeded_pcts={"3": 60, "8": 0, "5": 40},
+            # AI-06=85%, AI-07=60%, AI-09=10%, AI-10=5%
+            seeded_pcts={"61": 85, "62": 60, "64": 10, "65": 5},
         )
 
     if "Bob Martinez" in by_cam:
+        # Bob's tasks are all complete — no in-progress work to seed
         personas["Bob Martinez"] = CAMPersona(
             cam_name="Bob Martinez",
             role="Hardware Development lead",
             communication_style="Straightforward. Gets to the point. Mentions resource "
                                 "issues when directly asked about blockers.",
-            task_context=by_cam["Bob Martinez"],
-            seeded_blockers={
-                "11": "Our simulation runs are taking longer than planned — we've got a "
-                      "tool license contention issue on the lab cluster.",
-                "12": "One of my key engineers is out on medical leave for about three "
-                      "weeks. I've got partial coverage but we're moving slower.",
-                "14": "I need the updated antenna aperture requirements from Alice's ICD "
-                      "before I can finalize the design.",
-            },
-            seeded_risks={
-                "11": "If I can't get the simulation done by early May, HW-05 fab start "
-                      "slips and that pushes the whole hardware acceptance chain.",
-                "14": "The antenna design is on the longest hardware path. If it slips "
-                      "three weeks, we won't hit the hardware acceptance date.",
-            },
-            seeded_pcts={"11": 75, "12": 55, "14": 45},
-        )
-
-    if "Carol Smith" in by_cam:
-        personas["Carol Smith"] = CAMPersona(
-            cam_name="Carol Smith",
-            role="Software Development lead",
-            communication_style="Upbeat and concise. Tends to report status efficiently. "
-                                "SW is generally ahead of plan.",
-            task_context=by_cam["Carol Smith"],
-            seeded_blockers={},
-            seeded_risks={},
-            seeded_pcts={"22": 70, "23": 30, "24": 20, "26": 15},
-        )
-
-    if "David Lee" in by_cam:
-        personas["David Lee"] = CAMPersona(
-            cam_name="David Lee",
-            role="Integration and Test lead",
-            communication_style="Methodical. Focused on readiness. Asks clarifying "
-                                "questions back if he doesn't understand the context.",
-            task_context=by_cam["David Lee"],
+            task_context=by_cam.get("Bob Martinez", []),
             seeded_blockers={},
             seeded_risks={},
             seeded_pcts={},
         )
 
+    if "Carol Smith" in by_cam:
+        personas["Carol Smith"] = CAMPersona(
+            cam_name="Carol Smith",
+            role="Networking and Facilities lead",
+            communication_style="Upbeat and concise. Tends to report status efficiently "
+                                "but flags dependencies clearly.",
+            task_context=by_cam["Carol Smith"],
+            seeded_blockers={
+                # NET-01: VLANs (ID=69)
+                "69": "I'm waiting on David to finish the network topology doc — "
+                      "I need those VLAN assignments locked before I can push config "
+                      "to the switch.",
+                # NET-04: WireGuard VPN (ID=72)
+                "72": "VPN gateway setup depends on the TLS cert infrastructure, "
+                      "and that's still at zero — so NET-04 is blocked behind NET-07.",
+            },
+            seeded_risks={
+                # NET-01 is the upstream dependency for everything downstream
+                "69": "VLANs are the foundation — firewall rules, VPN, load balancing "
+                      "all stack behind it. If this slips more than a week we're "
+                      "compressing the whole network config chain.",
+            },
+            # NET-01=20%, NET-02=5%, rest still at 0
+            seeded_pcts={"69": 20, "70": 5},
+        )
+
+    if "David Lee" in by_cam:
+        personas["David Lee"] = CAMPersona(
+            cam_name="David Lee",
+            role="Documentation and Integration lead",
+            communication_style="Methodical. Focused on completeness. Asks clarifying "
+                                "questions if context is unclear.",
+            task_context=by_cam["David Lee"],
+            seeded_blockers={
+                # AI-11: Architecture doc (ID=66)
+                "66": "I'm waiting on Alice to finalize the API contracts for the "
+                      "orchestration layer before I can call the architecture doc done.",
+            },
+            seeded_risks={
+                # DOC-08: Final review is the last gate (ID=92)
+                "92": "Final documentation review is the acceptance gate. If the "
+                      "individual docs aren't wrapped up two weeks out, this "
+                      "compresses and we risk slipping sign-off.",
+            },
+            # AI-11=40%, DOC-01=15%, rest at 0
+            seeded_pcts={"66": 40, "85": 15},
+        )
+
     if "Eva Johnson" in by_cam:
         personas["Eva Johnson"] = CAMPersona(
             cam_name="Eva Johnson",
-            role="Program Management",
-            communication_style="Professional and efficient. Short answers. Always "
-                                "confirms before hanging up.",
+            role="Security and Test lead",
+            communication_style="Professional and direct. Short, crisp answers. "
+                                "Always confirms before wrapping up.",
             task_context=by_cam["Eva Johnson"],
-            seeded_blockers={},
-            seeded_risks={},
-            seeded_pcts={"43": 28, "44": 28, "46": 25},
+            seeded_blockers={
+                # NET-11: External pen test (ID=79)
+                "79": "External red team isn't scheduled yet — vendor coordination "
+                      "is taking longer than expected. We've got two firms in scope "
+                      "but neither has confirmed dates.",
+                # NET-09: Remediate findings (ID=77)
+                "77": "Can't start remediation until the Nessus scan report is in "
+                      "hand — NET-08 has to come first.",
+            },
+            seeded_risks={
+                # Pen test is on the critical path to security sign-off
+                "79": "If the pen test isn't done by end of May, NET-15 security "
+                      "sign-off slips, and that holds up the entire program delivery.",
+                # Security review is the final gate
+                "83": "NET-15 is the final security gate. Any slip here blocks "
+                      "acceptance — it's the last item before we can call the "
+                      "program complete.",
+            },
+            # AI-08=10%, AI-12=25%, rest at 0
+            seeded_pcts={"63": 10, "67": 25},
         )
 
     return personas
