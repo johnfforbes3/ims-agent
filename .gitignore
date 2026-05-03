@@ -43,6 +43,19 @@ data/cam_tokens/
 data/snapshots/
 data/ims_exports/
 data/pending_approvals/
+data/interview_kicks/
+
+# Runtime state files — regenerated on every cycle; not source-controlled
+data/cycle_history.json
+data/dashboard_state.json
+data/cam_sessions.json
+
+# SQLite database — runtime artifact
+data/ims.db
+
+# Test coverage artifacts
+.coverage
+htmlcov/
 
 # OS
 .DS_Store
