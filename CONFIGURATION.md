@@ -155,3 +155,42 @@ Runs auto-responding simulated CAM accounts via Microsoft Graph API. Requires M3
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `VOICE_BRIEFING_ENABLED` | `false` | No | Set to `true` to generate a 60–90 second MP3 briefing after each cycle. Requires `ELEVENLABS_API_KEY`. |
+
+---
+
+## JWT Authentication (Phase 7.2 — CMMC AC.1.001, IA.3.083, IA.3.084)
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `AUTH_SECRET_KEY` | *(empty)* | **Yes (JWT auth)** | HS256 signing secret. Minimum 32 characters. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`. When empty, JWT auth is disabled (static key only). |
+| `AUTH_CLIENT_ID` | *(empty)* | **Yes (JWT auth)** | Client identifier accepted by `POST /api/auth/token`. |
+| `AUTH_CLIENT_SECRET` | *(empty)* | **Yes (JWT auth)** | Client secret accepted by `POST /api/auth/token`. Generate with: `python -c "import secrets; print(secrets.token_urlsafe(24))"`. |
+| `JWT_EXPIRY_SECONDS` | `3600` | No | Token lifetime in seconds (default: 1 hour). |
+
+---
+
+## SIEM Integration (Phase 7.2 — CMMC AU.3.045)
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `SIEM_SYSLOG_HOST` | *(empty)* | No | Hostname or IP of your syslog/SIEM endpoint. When set, all `WARNING+` log events (including all `action=audit_*`) are forwarded to this endpoint via UDP syslog. |
+| `SIEM_SYSLOG_PORT` | `514` | No | UDP port for syslog (default: 514). Use a high port like `60514` in dev to avoid privilege requirements. |
+
+---
+
+## Key Age Tracking (Phase 7.2 — CMMC SC.3.187)
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `KEY_CREATED_AT` | *(empty)* | No | ISO date (`YYYY-MM-DD`) when the current `AUTH_SECRET_KEY` (or `ANTHROPIC_API_KEY`) was created. When set, `GET /health` returns `key_age_days` and `key_age_warning: true` when older than 90 days. Update this after every credential rotation. |
+
+---
+
+## Platform Enhancements (Phase 7.4)
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `BASELINE_CYCLE_ID` | *(empty)* | No | Cycle ID to use as the baseline for drift calculation in `GET /api/baseline-drift`. When empty, baseline drift is not computed. Example: `20260503T060000Z`. |
+| `BASELINE_DRIFT_ALERT_DAYS` | `30` | No | Alert threshold (calendar days since baseline cycle). `GET /api/baseline-drift` returns `alert: true` when exceeded. |
+| `SIMULATOR_CALL_DELAY_MS` | `0` | No | Milliseconds to sleep between each simulated CAM turn in `CALL_TRANSPORT=simulated` mode. Set to `500`–`2000` to simulate realistic interview pacing. 0 = no delay (default for unit tests). |
+| `DEADMAN_PERIOD_HOURS` | `168` | No | Hours without a completed cycle before `GET /health` returns `deadman_alert: true`. Default: 168 hours (1 week). |

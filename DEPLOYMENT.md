@@ -45,7 +45,12 @@ Edit `.env` and set the following **required** variables:
 |---|---|
 | `ANTHROPIC_API_KEY` | Anthropic API key (obtain from console.anthropic.com) |
 | `IMS_FILE_PATH` | Path to IMS XML file inside the container (e.g., `data/sample_ims.xml`) |
-| `DASHBOARD_API_KEY` | Random secret for API auth — generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `DASHBOARD_API_KEY` | Random secret for API read auth — generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `DASHBOARD_ADMIN_KEY` | Random secret for admin routes (trigger, purge) — generate same way as read key |
+| `AUTH_SECRET_KEY` | JWT signing secret (min 32 chars) — generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `AUTH_CLIENT_ID` | JWT client ID (e.g., `ims-agent-client`) |
+| `AUTH_CLIENT_SECRET` | JWT client secret — generate with: `python -c "import secrets; print(secrets.token_urlsafe(24))"` |
+| `KEY_CREATED_AT` | ISO date of credential creation (e.g., `2026-05-03`) — used for key age tracking |
 | `SLACK_BOT_TOKEN` | Slack bot token (xoxb-…) for cycle summary posts and /ims slash command |
 | `SLACK_APP_TOKEN` | Slack app-level token (xapp-…) for Socket Mode |
 
@@ -93,7 +98,7 @@ Expected status: `ims-agent   running (healthy)` within 30 seconds.
 ## 7. Verify Health
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:9000/health
 ```
 
 Expected response:
@@ -113,14 +118,14 @@ Expected response:
 
 ## 8. Set Up Reverse Proxy (Recommended for Production)
 
-Never expose port 8080 directly. Put nginx or Caddy in front with TLS:
+Never expose port 9000 directly. Put nginx or Caddy in front with TLS:
 
 **Caddy (simplest):**
 
 ```
 # /etc/caddy/Caddyfile
 ims.yourdomain.com {
-    reverse_proxy localhost:8080
+    reverse_proxy localhost:9000
 }
 ```
 
@@ -136,11 +141,11 @@ Caddy automatically obtains a Let's Encrypt certificate.
 
 ```bash
 # Via API (requires DASHBOARD_API_KEY in X-API-Key header)
-curl -X POST http://localhost:8080/api/trigger \
+curl -X POST http://localhost:9000/api/trigger \
      -H "X-API-Key: YOUR_DASHBOARD_API_KEY"
 ```
 
-Or via the dashboard at `http://localhost:8080` (Trigger Cycle button).
+Or via the dashboard at `http://localhost:9000` (Trigger Cycle button).
 
 Watch logs while the cycle runs:
 
@@ -158,7 +163,7 @@ After the first cycle completes:
 
 ```bash
 # Dashboard state should now be populated
-curl -H "X-API-Key: YOUR_KEY" http://localhost:8080/api/state | python -m json.tool | head -20
+curl -H "X-API-Key: YOUR_KEY" http://localhost:9000/api/state | python -m json.tool | head -20
 
 # Reports directory inside the volume
 docker compose -f docker-compose.prod.yml exec ims-agent ls reports/cycles/
@@ -195,7 +200,7 @@ docker compose -f docker-compose.prod.yml down -v
 | Symptom | Likely Cause | Fix |
 |---|---|---|
 | Container exits immediately | Missing env var or bad API key | `docker compose logs ims-agent` |
-| Health check fails | App not listening on 8080 | Check `DASHBOARD_PORT` in `.env` |
+| Health check fails | App not listening on 9000 | Check `DASHBOARD_PORT` in `.env` |
 | 401 on API calls | `DASHBOARD_API_KEY` mismatch | Verify header: `-H "X-API-Key: VALUE"` |
 | Cycle never starts | Scheduler not configured | Use `--schedule` command or set `CYCLE_CRON` |
 | No Slack messages | Webhook URL or bot token wrong | Check `SLACK_WEBHOOK_URL` in `.env` |

@@ -1,12 +1,59 @@
 # IMS Agent — API Reference
 
-Base URL: `http://localhost:8080` (or your deployment URL)
+Base URL: `http://localhost:9000` (or your deployment URL)
 
-**Read routes** (`GET /api/state`, `GET /api/history`, `GET /api/status`, `GET /metrics`, `POST /api/ask`) require `X-API-Key: YOUR_READ_KEY`.
+## Authentication
 
-**Admin routes** (`POST /api/trigger`, `POST /api/admin/purge`) require `X-Admin-Key: YOUR_ADMIN_KEY`. When `DASHBOARD_ADMIN_KEY` is not set, the read key is accepted on admin routes (single-key fallback).
+The agent supports two authentication schemes, evaluated in priority order:
+
+### 1. Bearer JWT (Phase 7.2 — recommended)
+
+Obtain a token from `POST /api/auth/token`, then pass it as `Authorization: Bearer <token>`.
+
+- **Read routes** accept tokens with `"tier": "read"` or `"tier": "admin"`.
+- **Admin routes** accept tokens with `"tier": "admin"` only. Admin-tier JTI is blocklisted after first use (replay resistance, CMMC IA.3.084).
+- Tokens expire after `JWT_EXPIRY_SECONDS` (default: 3600s). Obtain a new token before expiry.
+
+### 2. Static API Key (legacy / backward compat)
+
+**Read routes** (`GET /api/state`, `GET /api/history`, `GET /api/status`, `GET /metrics`, `POST /api/ask`) accept `X-API-Key: YOUR_READ_KEY`.
+
+**Admin routes** (`POST /api/trigger`, `POST /api/admin/purge`) accept `X-Admin-Key: YOUR_ADMIN_KEY`. When `DASHBOARD_ADMIN_KEY` is not set, the read key is accepted on admin routes (single-key fallback).
+
+---
 
 The `/health` and `/` endpoints are unauthenticated.
+
+---
+
+## POST /api/auth/token
+
+Obtain a signed JWT. Unauthenticated endpoint. Requires `AUTH_SECRET_KEY`, `AUTH_CLIENT_ID`, and `AUTH_CLIENT_SECRET` to be set in `.env`.
+
+**Request:**
+```json
+{
+  "client_id": "your-client-id",
+  "client_secret": "your-client-secret",
+  "tier": "read"
+}
+```
+
+| Field | Values | Description |
+|---|---|---|
+| `tier` | `"read"` or `"admin"` | Requested privilege tier |
+
+**Response 200:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
+```
+
+**Response 401:** Wrong `client_id` or `client_secret`.  
+**Response 400:** Unknown `tier` value.
 
 ---
 
@@ -21,7 +68,12 @@ Health check. Unauthenticated. Safe to poll from load balancers and uptime monit
   "uptime_seconds": 3601,
   "cycle_active": false,
   "state_file_present": true,
-  "auth_enabled": true
+  "auth_enabled": true,
+  "last_cycle_age_seconds": 7200,
+  "ims_last_write_at": "2026-05-03T19:13:37Z",
+  "deadman_alert": false,
+  "key_age_days": 45,
+  "key_age_warning": false
 }
 ```
 
@@ -32,6 +84,11 @@ Health check. Unauthenticated. Safe to poll from load balancers and uptime monit
 | `cycle_active` | boolean | `true` if a cycle is currently running |
 | `state_file_present` | boolean | `false` before the first cycle completes |
 | `auth_enabled` | boolean | `true` if `DASHBOARD_API_KEY` is set |
+| `last_cycle_age_seconds` | integer\|null | Seconds since last cycle completed |
+| `ims_last_write_at` | string\|null | ISO timestamp of last IMS XML write |
+| `deadman_alert` | boolean | `true` if no cycle in `DEADMAN_PERIOD_HOURS` (default 168h) |
+| `key_age_days` | integer\|null | Days since `KEY_CREATED_AT`; null if env var not set |
+| `key_age_warning` | boolean | `true` if `key_age_days > 90` (SC.3.187 rotation reminder) |
 
 ---
 
@@ -121,6 +178,70 @@ Returns whether a cycle is currently running.
   "cycle_active": false
 }
 ```
+
+---
+
+## GET /api/changes
+
+Returns the cumulative IMS change summary for all cycles that have a diff file, merged into a single list sorted by task ID. Requires read API key.
+
+**Response 200:**
+```json
+[
+  {
+    "task_id": "3",
+    "task_name": "SE-03 Interface Control Documents",
+    "field": "percent_complete",
+    "before": 0,
+    "after": 60,
+    "cycle_id": "20260503T191337Z"
+  }
+]
+```
+
+---
+
+## GET /api/baseline-drift
+
+Returns the baseline drift alert for the current cycle. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "baseline_cycle_id": "20260503T060000Z",
+  "drift_days": 12,
+  "alert": true,
+  "alert_threshold_days": 10
+}
+```
+
+| Field | Description |
+|---|---|
+| `baseline_cycle_id` | The cycle ID used as the drift baseline (`BASELINE_CYCLE_ID` env var) |
+| `drift_days` | Calendar days between baseline cycle date and today |
+| `alert` | `true` when `drift_days` exceeds `BASELINE_DRIFT_ALERT_DAYS` |
+| `alert_threshold_days` | The configured threshold (default: 30 days) |
+
+---
+
+## GET /api/diff/{cycle_id}
+
+Returns the IMS change diff for a specific cycle. Requires read API key.
+
+**Response 200:**
+```json
+[
+  {
+    "task_id": "3",
+    "task_name": "SE-03 ICD",
+    "field": "percent_complete",
+    "before": 0,
+    "after": 60
+  }
+]
+```
+
+**Response 404:** `{"detail": "Diff not found for cycle ..."}` — cycle has no diff file.
 
 ---
 
@@ -257,7 +378,8 @@ All error responses follow FastAPI's default format:
 | Status | Meaning |
 |---|---|
 | 400 | Bad request (missing or invalid input) |
-| 401 | Missing or invalid `X-API-Key` / `X-Admin-Key` header |
+| 401 | Missing or invalid `Authorization: Bearer` token, or `X-API-Key` / `X-Admin-Key` header |
+| 403 | Authenticated but insufficient tier (e.g., read-tier JWT on admin route) |
 | 404 | Resource not found (e.g., no cycle data) |
 | 409 | Conflict (cycle already running) |
 | 429 | Rate limit exceeded (Q&A endpoint) |

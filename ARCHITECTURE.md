@@ -114,7 +114,10 @@ agent.py    simulator  interface.py
 | `slack_command.py` | Slack `/ims` slash command via Socket Mode. No public URL required. |
 | `ngrok_updater.py` | On `--demo-chat` startup, reads ngrok local API and PATCHes Azure Bot Service endpoint via ARM REST. |
 | `mpp_converter.py` | MS Project COM automation: `mpp_to_xml()` and `xml_to_mpp()`. Falls back gracefully if COM is unavailable (C2R AppV isolation — see TD-025). |
-| `metrics.py` | Thread-safe in-memory counters. `increment()`, `set_value()`, `snapshot()`. Exposed via `GET /metrics`. |
+| `auth.py` | **Phase 7.2** — JWT token issuance (`create_token()`), verification (`verify_token()`), and JTI blocklist management (`block_jti()`, `is_jti_blocked()`). Issues HS256 tokens with `read`/`admin` tiers. Admin-tier JTI is one-time-use (CMMC IA.3.084 replay resistance). |
+| `siem.py` | **Phase 7.2** — `configure_siem_logging()` attaches a `SysLogHandler` to the root logger when `SIEM_SYSLOG_HOST` is set. Idempotent. Forwards all `WARNING+` events (including all `action=audit_*`) to the configured syslog endpoint (CMMC AU.3.045). |
+| `ims_diff.py` | **Phase 6.5/7.4** — `generate_diff()` compares before/after IMS XML snapshots per cycle. `save_snapshot()` captures IMS state before writes. `merge_diffs()` merges all per-cycle diffs into a cumulative change list. `compute_baseline_drift()` computes days since the baseline cycle. |
+| `metrics.py` | Thread-safe in-memory counters. `increment()`, `set_value()`, `snapshot()`. Prometheus text format via `prometheus_text()`. Exposed via `GET /metrics` and `GET /metrics?format=prometheus`. |
 
 ### `agent/dashboard/`
 
@@ -477,6 +480,29 @@ IMS_FILE_PATH=data/sample_ims.xml
 | `DASHBOARD_API_KEY` | — | No | Read-route auth key (`X-API-Key` header). Unset = no auth. |
 | `DASHBOARD_ADMIN_KEY` | — | No | Admin-route auth key (`X-Admin-Key` header). Gates `/api/trigger` and `/api/admin/purge`. |
 
+#### JWT Authentication (Phase 7.2)
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `AUTH_SECRET_KEY` | — | JWT auth | HS256 signing secret (min 32 chars) |
+| `AUTH_CLIENT_ID` | — | JWT auth | Client ID for `POST /api/auth/token` |
+| `AUTH_CLIENT_SECRET` | — | JWT auth | Client secret for `POST /api/auth/token` |
+| `JWT_EXPIRY_SECONDS` | `3600` | No | Token lifetime in seconds |
+
+#### SIEM / Key Management (Phase 7.2)
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `SIEM_SYSLOG_HOST` | — | No | Syslog/SIEM host. When set, all WARNING+ logs are forwarded. |
+| `SIEM_SYSLOG_PORT` | `514` | No | UDP syslog port |
+| `KEY_CREATED_AT` | — | No | ISO date of last credential rotation. Drives `key_age_warning` in `/health`. |
+
+#### Platform Enhancements (Phase 7.4)
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `BASELINE_CYCLE_ID` | — | No | Cycle ID used as drift baseline |
+| `BASELINE_DRIFT_ALERT_DAYS` | `30` | No | Days before drift alert triggers |
+| `SIMULATOR_CALL_DELAY_MS` | `0` | No | Simulated typing delay between CAM turns |
+| `DEADMAN_PERIOD_HOURS` | `168` | No | Hours without a cycle before `deadman_alert: true` |
+
 #### Scheduler
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
@@ -604,7 +630,7 @@ pytest tests/ -k "interview"  # filter by keyword
 pytest tests/ --tb=short      # short tracebacks on failure
 ```
 
-**Current count:** 255 tests (all passing as of 2026-05-03)
+**Current count:** 375 tests (all passing as of 2026-05-03)
 
 ### Test File Map
 
@@ -618,13 +644,15 @@ pytest tests/ --tb=short      # short tracebacks on failure
 | `test_file_handler.py` | IMS XML parsing and write-back |
 | `test_ims_tools.py` | Q&A tool handlers, dispatcher, agentic loop |
 | `test_qa_engine.py` | Q&A engine — direct path and LLM-routed path |
-| `test_report_generator.py` | Markdown report structure |
+| `test_report_generator.py` | Markdown report structure, IMS diff summary, baseline drift alert |
 | `test_scheduler.py` | APScheduler cron configuration |
 | `test_sra_runner.py` | Monte Carlo SRA correctness |
 | `test_stt_engine.py` | STT engine abstraction (mock path) |
 | `test_tts_engine.py` | TTS engine abstraction (mock path) |
 | `test_validation.py` | Validation rules — backwards, large jump, missing |
-| `test_phase5.py` | RBAC, rate limiting, metrics, purge, health endpoint |
+| `test_phase5.py` | RBAC, rate limiting, metrics (JSON + Prometheus), purge, health endpoint, IMS diff, observability |
+| `test_phase74.py` | Phase 7.4 — per-CAM dashboard pills, cumulative diff, baseline drift, Q&A TTL cache, simulator rate limiting, diff/drift report sections |
+| `test_security.py` | Phase 7.2 — JWT token endpoint, Bearer auth, admin JTI blocklist, key age alert, SIEM handler configuration |
 
 ### Test Fixtures (`tests/conftest.py`)
 
@@ -704,11 +732,11 @@ The system reads from and writes back to `IMS_FILE_PATH` (default: `data/sample_
 
 ### 7. Test count in documentation
 
-The test count appears in several doc files. When adding new tests, update:
+The canonical test count is in `docs/STATUS.md`. When adding new tests, also update:
 - `README.md` (Quick Start → Running Tests section)
-- `STARTUP.md` (Step 4)
+- `docs/STATUS.md` (current state table + history row)
 - `CHANGELOG.md` (new entry)
-- `IMS-AGENT-PROGRAM-PLAN.md` (Phase 5.7 acceptance note)
+- `ARCHITECTURE.md` (Section 9 current count)
 
 ### 8. `_flagged_milestones` True → risk=False (not True)
 

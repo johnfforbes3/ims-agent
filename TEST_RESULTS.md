@@ -1,6 +1,42 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Bug Fixes §4.2a + §11.2 — Full System Test (Dashboard + Teams)  
+**Test Procedure Version:** Phase 7.2 Security & Compliance  
+**Executed:** 2026-05-03  
+**Tester:** Claude (automated — unit tests)  
+**Environment:** Windows 11, Python 3.13.3  
+**IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
+**Overall Result:** **PASS** — 375/375 unit tests passing; JWT auth, JTI blocklist, key age alert, SIEM syslog all verified; **zero open FAILs**
+
+---
+
+> **2026-05-03 (Phase 7.2 — Security & Compliance)**  
+> JWT token endpoint (`POST /api/auth/token`): HS256 tokens issued for `read`/`admin` tiers.  
+> Bearer auth accepted on protected routes; expired/tampered tokens rejected (401).  
+> Admin-tier JTI blocklisted after first admin-route use (replay → 401 on second call).  
+> Read-tier JWT not blocklisted (reusable within TTL). Read JWT rejected on admin routes (403).  
+> Key age alert: `key_age_warning=True` when `KEY_CREATED_AT` > 90 days old; `False` when recent.  
+> SIEM syslog: `SysLogHandler` attached when `SIEM_SYSLOG_HOST` set; idempotent (no duplicate handlers).  
+> 6 CMMC Level 2 gaps REMEDIATED: AC.1.001, IA.3.083, IA.3.084, SC.3.187, IR.2.092, AU.3.045.  
+> Unit test count: **375/375 passed** (+16 from Phase 7.2 `test_security.py`; up from 359).
+
+---
+
+> **2026-05-03 (Phase 7.4 — Platform Enhancements)**  
+> Per-CAM dashboard progress pills; cumulative diff (`GET /api/changes`); baseline drift (`GET /api/baseline-drift`).  
+> Q&A context builder 30s TTL cache (TD-016); `SIMULATOR_CALL_DELAY_MS` rate limiting (TD-009).  
+> Cycle report: IMS Diff Summary and Baseline Drift Alert sections.  
+> Unit test count: **359/359 passed** (+23 from Phase 7.4; up from 336).
+
+---
+
+> **2026-05-03 (Phase 7.1 — Technical Debt Sprint)**  
+> TD-001/002/003/005/007/013/014/015/018/021 resolved. Notifier config lazy-loaded (TD-014).  
+> Cycle lock file cleared on startup (TD-003). SRA seed deterministic (TD-001).  
+> Unit test count: **336/336 passed** (+22 from Phase 7.1; up from 314).
+
+---
+
+**Previous test procedure version:** Bug Fixes §4.2a + §11.2 — Full System Test (Dashboard + Teams)  
 **Executed:** 2026-05-03  
 **Tester:** Claude (automated — unit tests + live Teams cycle + live dashboard + live bot endpoints)  
 **Environment:** Windows 11, Python 3.13.3, MS Project Professional C2R, OpenJDK 21 (MPXJ)  

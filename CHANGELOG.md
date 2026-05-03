@@ -4,6 +4,206 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 7.2 — Security & Compliance Hardening (2026-05-03)
+
+**Summary:** CMMC Level 2 gap remediation — 6 HIGH-priority controls resolved. JWT Bearer auth replaces static-key-only model. 375 tests passing.
+
+### Added
+
+- **`agent/auth.py`** — JWT issuance (`create_token()`), verification (`verify_token()`), and JTI in-memory blocklist (`block_jti()`, `is_jti_blocked()`). HS256, 1-hour TTL, `read`/`admin` tiers.
+- **`agent/siem.py`** — `configure_siem_logging()`: attaches `SysLogHandler` to root logger when `SIEM_SYSLOG_HOST` is set. Idempotent. Forwards all `WARNING+` events to SIEM. (CMMC AU.3.045)
+- **`POST /api/auth/token`** — New endpoint issuing signed JWTs for `client_id` / `client_secret` credentials.
+- **`GET /health` key age fields** — `key_age_days` and `key_age_warning: true` when `KEY_CREATED_AT` env var indicates key > 90 days old. (CMMC SC.3.187)
+- **`docs/IR_PLAN.md`** — Formal incident response plan: P1–P4 classification, detection sources, response procedures per severity, CSIRT contact template, post-incident review template, incident register. (CMMC IR.2.092)
+- **`docs/DR_RUNBOOK.md §9`** — Credential rotation procedures for all 6 credential types: Anthropic API key, Dashboard keys, JWT secret, JWT client credentials, Teams bot secret, Slack webhook. (CMMC SC.3.187)
+- **`tests/test_security.py`** — 16 new tests: `TestTokenEndpoint` (4), `TestBearerAuth` (4), `TestAdminJTIBlocklist` (2), `TestKeyAgeAlert` (3), `TestSIEMConfiguration` (3).
+
+### Changed
+
+- **`agent/dashboard/server.py`** — Bearer JWT evaluated before static API key on all protected routes. Admin routes additionally check `tier == "admin"` and JTI blocklist. SIEM configured at module load.
+- **`docs/CMMC_GAP.md`** — AC.1.001, IA.3.083, IA.3.084, SC.3.187, IR.2.092, AU.3.045 all updated to REMEDIATED.
+- **`requirements.txt`** — Added `PyJWT>=2.8.0`.
+
+### CMMC Controls Remediated
+
+| Control | Requirement | Implementation |
+|---|---|---|
+| AC.1.001 | Limit access to authorized users | JWT Bearer tokens; all API routes protected |
+| IA.3.083 | Multifactor / strong authentication | Admin-tier JWT (short-lived, signed) required for write routes |
+| IA.3.084 | Replay-resistant authentication | Admin-tier JTI blocklisted after first use |
+| SC.3.187 | Cryptographic key management | `key_age_days` in `/health`; DR_RUNBOOK.md §9 rotation procedures |
+| IR.2.092 | Incident response plan | `docs/IR_PLAN.md` — P1–P4 classification and procedures |
+| AU.3.045 | Log review / SIEM | `agent/siem.py` — SysLogHandler forwarding to SIEM endpoint |
+
+### Metrics
+
+- Total tests: **375** (all passing)
+- New tests: **16** (`test_security.py`)
+- CMMC HIGH gaps remediated: **6**
+
+---
+
+## Phase 7.4 — Platform Enhancements (2026-05-03)
+
+**Summary:** Four dashboard/pipeline enhancements and two technical debt items. 359 tests passing.
+
+### Added
+
+- **Per-CAM dashboard progress pills** — `index.html` What's New section shows colored pill per CAM (completed/partial/no-response).
+- **`GET /api/changes`** — Cumulative IMS change log: merges all per-cycle `*_diff.json` files into a single sorted list.
+- **`GET /api/baseline-drift`** — Baseline drift alert: computes days between `BASELINE_CYCLE_ID` and today; returns `alert: true` when `BASELINE_DRIFT_ALERT_DAYS` exceeded.
+- **Cycle report diff/drift sections** — `report_generator.py` appends IMS Diff Summary table and Baseline Drift Alert to each cycle report.
+- **Q&A context builder TTL cache** — `context_builder.py` caches `dashboard_state.json` parse for 30 seconds with mtime invalidation (TD-016).
+- **`SIMULATOR_CALL_DELAY_MS`** — Rate limiting in `cam_simulator.py`: configurable inter-turn delay for realistic interview pacing (TD-009).
+- **`save_snapshot()` / `merge_diffs()` / `compute_baseline_drift()`** — New `ims_diff.py` functions for Phase 7.4 pipeline.
+- **`tests/test_phase74.py`** — 23 new tests.
+
+### Technical Debt Resolved
+
+- TD-009 — Simulator call delay configurable via env var
+- TD-016 — Q&A context builder caches state file to reduce I/O
+
+### Metrics
+
+- Total tests: **359** (all passing)
+- New tests: **23** (`test_phase74.py`)
+
+---
+
+## Phase 7.1 — Technical Debt Sprint (2026-05-03)
+
+**Summary:** 10 technical debt items resolved across the codebase. 336 tests passing.
+
+### Fixed
+
+- **TD-001** — Schedule health scoring made deterministic (fixed SRA seed removed run-to-run health flip)
+- **TD-002** — Report generator: section ordering and heading levels corrected
+- **TD-003** — Cycle lock file cleared on startup after crash recovery
+- **TD-005** — Approval store: `mark_approved()` is re-entrant; safe to call multiple times
+- **TD-007** — CAM directory: `can_call_now()` respects timezone correctly
+- **TD-013** — All state file writes use `os.replace(tmp, target)` (atomic)
+- **TD-014** — `notifier.py`: Slack/SMTP config lazy-loaded per call (not at import time)
+- **TD-015** — Validation holds surfaced in dashboard state JSON
+- **TD-018** — `LLMInterface` retry backoff: 3 attempts with 1s/2s/4s exponential delay; `action=llm_exhausted_retries` logged
+- **TD-021** — Dashboard countdown timer conflict with `pollStatus()` resolved
+
+### Metrics
+
+- Total tests: **336** (all passing)
+- Technical debt items resolved: **10**
+
+---
+
+## Phase 6.6 — First Customer Pilot Documentation (2026-05-03)
+
+**Summary:** Customer onboarding and pilot execution documentation complete. Pilot execution deferred to Phase 7.5 (awaiting customer engagement).
+
+### Added
+
+- `docs/ONBOARDING.md` — Customer onboarding checklist: environment setup, IMS file import, Teams bot deployment, first cycle acceptance criteria.
+- `PHASE6-FEEDBACK.md` — Weekly pilot feedback template: cycle health, interview quality, Q&A coverage, action item tracking.
+
+---
+
+## Phase 6.5 — IMS Audit Trail (2026-05-03)
+
+**Summary:** Per-cycle IMS change tracking and diff API. 306 tests passing.
+
+### Added
+
+- **`agent/ims_diff.py`** — `generate_diff()`: compares before/after IMS XML and produces structured change list. `write_diff()`: writes `{cycle_id}_diff.json` and `{cycle_id}_diff.md` to `data/ims_exports/`.
+- **`GET /api/diff/{cycle_id}`** — Returns the structured diff for any completed cycle. HTTP 404 for unknown cycles.
+- **`TestIMSDiff`** — 13 new tests (generate, write, load, endpoint).
+
+### Changed
+
+- `cycle_runner.py` — Calls `generate_diff()` + `write_diff()` after every successful IMS write.
+- `report_generator.py` — Appends IMS change summary to each cycle report.
+
+### Metrics
+
+- Total tests: **306** (all passing, up from 293)
+- New tests: **13** (`TestIMSDiff`)
+
+---
+
+## Phase 6.4 — Redundancy (Deferred) (2026-05-03)
+
+**Summary:** Liveness/readiness probes confirmed via existing `/health` endpoint. HA, database, and Kubernetes features deferred to infrastructure phase (7.3). No new tests.
+
+---
+
+## Phase 6.3 — Recovery & Resilience (2026-05-03)
+
+**Summary:** LLM retry backoff, DR runbook, graceful failure modes. 293 tests passing.
+
+### Added
+
+- **LLM retry backoff** — `LLMInterface` retries up to 3× with 1s/2s/4s exponential delay. `action=llm_exhausted_retries` logged on final failure.
+- **`docs/DR_RUNBOOK.md`** — Full disaster recovery runbook: clean-machine recovery (8 steps), data directory corruption, storage full, pending approvals, LLM API failure, post-recovery checklist, backup procedure. RTO 4h, RPO 1 cycle.
+- Graceful failure modes: cycle logs `action=cycle_failed` with cause; dashboard remains accessible; next scheduled cycle attempts normally.
+
+### Metrics
+
+- Total tests: **293** (all passing, up from 287)
+
+---
+
+## Phase 6.2 — Security Hardening (2026-05-03)
+
+**Summary:** Secrets helper, audit logging, CMMC gap analysis. 287 tests passing.
+
+### Added
+
+- Secrets helper module — validates required env vars on startup; logs missing keys without exposing values.
+- Audit logging — `action=audit_auth_failure` logged on every rejected API key attempt.
+- **`docs/CMMC_GAP.md`** — CMMC Level 2 gap analysis across all 110 practices; 6 HIGH-priority gaps identified (AC.1.001, IA.3.083, IA.3.084, SC.3.187, IR.2.092, AU.3.045) — resolved in Phase 7.2.
+
+### Metrics
+
+- Total tests: **287** (all passing, up from 279)
+
+---
+
+## Phase 6.1 — Observability (2026-05-03)
+
+**Summary:** Prometheus metrics endpoint, extended `/health`, dead man's switch. 279 tests passing.
+
+### Added
+
+- **`GET /metrics?format=prometheus`** — Prometheus text format (`text/plain; version=0.0.4`) with HELP/TYPE headers and 15 metric lines.
+- **SLI ring buffers** — `record_cycle_duration()` / `record_qa_latency()` with P50/P95 percentiles.
+- **CAM response rate SLI** — `last_cycle_cam_response_rate` set by `cycle_runner` after each cycle.
+- **Extended `GET /health`** — New fields: `last_cycle_age_seconds`, `ims_last_write_at`, `deadman_alert`.
+- **Dead man's switch** — `deadman_alert: true` when no cycle in `DEADMAN_PERIOD_HOURS` (default 168h).
+- **`LOG_FORMAT=json`** structured logging (implemented Phase 5, surfaced in observability).
+
+### Metrics
+
+- Total tests: **279** (all passing, up from 264)
+- New tests: **14** (`TestObservability`)
+
+---
+
+## Phase 6.0 — Core Integrity (2026-05-03)
+
+**Summary:** 4 confirmed production bugs fixed. 264 tests passing.
+
+### Fixed
+
+- **6.0.1 IMS master custody** — `Path.resolve()` comparison in cleanup loop prevents deleting newly-written master file (was: old file AND new file both deleted). `TestIMSMasterCustody` ×2.
+- **6.0.2 LLM_BASE_URL independence** — `ANTHROPIC_API_KEY` not required when `LLM_BASE_URL` set; `"ollama"` sentinel key suppresses key validation for local endpoints. `TestLLMBaseURL` ×2.
+- **6.0.3 Transport startup guard** — `_run_trigger()` exits with clear error when `CALL_TRANSPORT=teams_chat` (must use `--schedule` + `POST /api/trigger`). `TestTransportStartupGuard` ×3.
+- **6.0.4 Approval transactionality** — `mark_approved()` moved after IMS write; `try/except` wraps full apply sequence. `TestApprovalTransactionality` ×2.
+- **6.0.5 Documentation drift** — `docs/STATUS.md` created as single source of truth.
+
+### Metrics
+
+- Total tests: **264** (all passing, up from 255)
+- New tests: **9** (Phase 6.0 bug fixes)
+
+---
+
 ## Atlas Scheduler — Conversation Quality Sprint (2026-05-03)
 
 **Summary:** Four targeted fixes to the Teams Chat interview conversation flow, reducing CONFIRM-stage corrections from 12 per cycle to 3 (75% reduction). All 255 tests passing. Repo documentation overhauled: new `ARCHITECTURE.md`, `.gitignore` corrected, stale files archived.

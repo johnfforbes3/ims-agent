@@ -9,7 +9,7 @@ Day-to-day monitoring, troubleshooting, and maintenance for a running IMS Agent 
 The `/health` endpoint is unauthenticated and safe to poll from any uptime monitor:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:9000/health
 ```
 
 ```json
@@ -60,6 +60,13 @@ JSON format (set `LOG_FORMAT=json` in `.env`):
 | `action=validation_hold` | Input flagged; admin review needed |
 | `action=tool_call` | Q&A tool invoked (float, dependencies, etc.) |
 | `action=llm_call` | Anthropic API called |
+| `action=audit_auth_failure` | JWT or API key rejected — investigate for brute force |
+| `action=audit_token_issued` | JWT issued to client |
+| `action=audit_admin_action` | Admin route used (trigger, purge) |
+| `action=audit_jti_blocked` | Admin token replay attempt blocked |
+| `action=llm_exhausted_retries` | LLM API unreachable after all retries |
+| `deadman_alert: true` in `/health` | No cycle completed in `DEADMAN_PERIOD_HOURS` |
+| `key_age_warning: true` in `/health` | Credentials older than 90 days — rotate |
 | `level=ERROR` | Any error requiring attention |
 
 ---
@@ -69,13 +76,13 @@ JSON format (set `LOG_FORMAT=json` in `.env`):
 ### Check current status
 
 ```bash
-curl -H "X-API-Key: KEY" http://localhost:8080/api/status
+curl -H "X-API-Key: KEY" http://localhost:9000/api/status
 ```
 
 ### Trigger a manual cycle
 
 ```bash
-curl -X POST -H "X-API-Key: KEY" http://localhost:8080/api/trigger
+curl -X POST -H "X-API-Key: KEY" http://localhost:9000/api/trigger
 ```
 
 Returns immediately; cycle runs in the background. Watch with `logs -f`.
@@ -83,7 +90,7 @@ Returns immediately; cycle runs in the background. Watch with `logs -f`.
 ### View cycle history
 
 ```bash
-curl -H "X-API-Key: KEY" http://localhost:8080/api/history | python -m json.tool
+curl -H "X-API-Key: KEY" http://localhost:9000/api/history | python -m json.tool
 ```
 
 ### Cycle status files
@@ -103,12 +110,12 @@ Key fields: `phase`, `cam_responses`, `validation_holds`, `timestamp`.
 
 ### Via dashboard
 
-Open `http://localhost:8080` — chat widget is in the bottom-right of the page.
+Open `http://localhost:9000` — chat widget is in the bottom-right of the page.
 
 ### Via API
 
 ```bash
-curl -X POST http://localhost:8080/api/ask \
+curl -X POST http://localhost:9000/api/ask \
      -H "X-API-Key: KEY" \
      -H "Content-Type: application/json" \
      -d '{"question": "What is the current schedule health?"}'
@@ -167,21 +174,17 @@ docker run --rm -v ims_data:/data -v $(pwd):/backup alpine \
 
 ---
 
-## Rotating the API Key
+## Rotating Credentials
 
-1. Generate a new key: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Update `DASHBOARD_API_KEY` in `.env`
-3. Restart the container: `docker compose -f docker-compose.prod.yml up -d`
-4. Update any scripts or integrations that use the old key
+See `docs/DR_RUNBOOK.md §9` for step-by-step rotation procedures for all credentials: Anthropic API key, Dashboard keys, JWT signing secret, JWT client credentials, Teams bot secret, and Slack webhook URL.
 
----
+**Quick reference — rotate all keys when any of these occur:**
+- A P1/P2 security incident is declared
+- A credential is suspected of exposure
+- `key_age_warning: true` in `GET /health` (> 90 day key)
+- Any team member with credential access departs
 
-## Rotating the Anthropic API Key
-
-1. Revoke the old key at console.anthropic.com
-2. Generate a new key
-3. Update `ANTHROPIC_API_KEY` in `.env`
-4. Restart the container
+After rotation, update `KEY_CREATED_AT` in `.env` to reset the age counter.
 
 ---
 

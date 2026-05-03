@@ -2,7 +2,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Tier 4 complete — Teams Chat Bot interview end-to-end verified. Phase 5 production hardening complete.**
+**Current status: Phase 7.2 COMPLETE — JWT auth, SIEM syslog, IR plan, CMMC gap remediation. 375 tests passing.**
 
 ---
 
@@ -45,7 +45,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 314 tests
+pytest tests/ -v         # all 375 tests
 pytest tests/ -q         # quiet summary only
 ```
 
@@ -75,7 +75,7 @@ ims-agent/
 │   ├── llm_interface.py        — All Anthropic SDK calls (single entry point)
 │   ├── critical_path.py        — CPM calculation and float analysis
 │   ├── sra_runner.py           — Monte Carlo SRA engine (N=1000)
-│   ├── report_generator.py     — Markdown report generation
+│   ├── report_generator.py     — Markdown report + IMS diff/drift sections
 │   ├── cam_directory.py        — CAM registry, scheduling, retry logic
 │   ├── cycle_runner.py         — Full cycle orchestration
 │   ├── cycle_state.py          — Cycle state persistence
@@ -85,17 +85,21 @@ ims-agent/
 │   ├── notifier.py             — Slack and email output
 │   ├── voice_briefing.py       — TTS voice briefing generation
 │   ├── slack_command.py        — Slack /ims slash command (Socket Mode)
+│   ├── auth.py                 — JWT token issuance + Bearer auth + JTI blocklist (Phase 7.2)
+│   ├── siem.py                 — SIEM syslog handler configuration (Phase 7.2)
+│   ├── ims_diff.py             — Per-cycle IMS diff, cumulative merge, baseline drift (Phase 6.5/7.4)
+│   ├── metrics.py              — Thread-safe in-memory counters + Prometheus text format
+│   ├── approval_store.py       — JSON-backed PM approval queue
 │   ├── dashboard/
-│   │   ├── server.py           — FastAPI dashboard server
+│   │   ├── server.py           — FastAPI server (all HTTP endpoints + JWT auth)
 │   │   └── templates/
-│   │       └── index.html      — Live dashboard with Q&A chat widget
+│   │       └── index.html      — Live dashboard with Q&A chat, CAM pills, diff/drift tabs
 │   ├── qa/
-│   │   ├── context_builder.py  — Intent detection + context slicing
+│   │   ├── context_builder.py  — Intent detection + context slicing (30s TTL cache)
 │   │   ├── qa_engine.py        — Q&A engine (direct + LLM-routed)
 │   │   └── ims_tools.py        — Anthropic tool_use handlers for raw IMS queries
-│   ├── metrics.py              — Thread-safe in-memory counters (cycles, Q&A)
 │   └── voice/
-│       ├── interview_agent.py      — Conversation state machine (9 states)
+│       ├── interview_agent.py      — Conversation state machine (11 states)
 │       ├── cam_simulator.py        — Claude-powered CAM simulator (dev/test)
 │       ├── stt_engine.py           — STT abstraction (Whisper / mock)
 │       ├── tts_engine.py           — TTS abstraction (ElevenLabs / Azure / mock)
@@ -103,15 +107,22 @@ ims-agent/
 │       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
 │       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
 ├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
-├── tests/                      — pytest test suite (314 tests)
+├── tests/                      — pytest test suite (375 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 100-task AI Agent Server Rack IMS
+│   ├── ims_master/             — Timestamped .mpp master (source of truth)
+│   ├── ims_exports/            — Versioned XML exports + diff JSON/Markdown per cycle
 │   ├── dashboard_state.json    — Live dashboard state (updated each cycle)
 │   ├── cycle_history.json      — Per-cycle summary history
-│   └── snapshots/              — Timestamped IMS copies before each update
+│   └── snapshots/              — Pre-write IMS snapshots (rollback source)
 ├── reports/
 │   └── cycles/                 — Per-cycle status JSON (gitignored)
 ├── docs/
+│   ├── STATUS.md               — Single source of truth for current system state
+│   ├── CMMC_GAP.md             — CMMC Level 2 gap analysis (6 gaps REMEDIATED)
+│   ├── IR_PLAN.md              — Incident response plan (P1–P4, IR.2.092)
+│   ├── DR_RUNBOOK.md           — Disaster recovery runbook + credential rotation (§9)
+│   ├── ONBOARDING.md           — Customer onboarding checklist
 │   ├── decisions.md            — Architecture Decision Records (ADR-001–003)
 │   └── teams-integration-decision.md — ADR-004–006 (ACS, TTS, STT)
 ├── .env.example                — All environment variables documented
@@ -125,10 +136,10 @@ ims-agent/
 ├── CHANGELOG.md                — Version history by phase
 ├── DEPLOYMENT.md               — Step-by-step production deployment guide
 ├── OPERATIONS.md               — Monitoring, troubleshooting, backup/restore
-├── SECURITY.md                 — Security architecture, RBAC, ITAR posture
-├── API.md                      — All endpoints with request/response examples
-├── CONFIGURATION.md            — All 40+ env vars with defaults and descriptions
-└── TEST-PROCEDURE.md           — 228-case test procedure with run history
+├── SECURITY.md                 — Security architecture, JWT auth, CMMC posture
+├── API.md                      — All endpoints with auth requirements and schemas
+├── CONFIGURATION.md            — All env vars with defaults and descriptions
+└── TEST_RESULTS.md             — Test procedure run history
 ```
 
 ---
@@ -144,12 +155,18 @@ ims-agent/
 | 5 | Production Hardening | ✅ Complete | 2026-04-26 |
 | Tier 3 | Live Teams Voice Demo | ✅ Complete | 2026-04-26 |
 | Tier 4 | Teams Chat Bot Interview | ✅ Complete | 2026-04-27 |
+| 6.0–6.6 | Core Integrity, Observability, Security, IMS Audit Trail, Pilot Docs | ✅ Complete | 2026-05-03 |
+| 7.1 | Technical Debt Sprint | ✅ Complete — 336 tests | 2026-05-03 |
+| 7.4 | Platform Enhancements | ✅ Complete — 359 tests | 2026-05-03 |
+| **7.2** | **Security & Compliance (CMMC Level 2)** | ✅ **Complete — 375 tests** | 2026-05-03 |
+| 7.3 | Infrastructure & Observability (Grafana, log aggregation) | ⏳ Awaiting deployment platform | — |
+| 7.5 | First Customer Pilot Execution | ⏳ Awaiting customer engagement | — |
 
-**Phase 2 note:** Interview agent, data extraction, CAM communication management, and TTS/STT abstractions are fully implemented and tested. Real Teams/ACS voice calls are implemented as a stub pending Azure ACS credentials (tracked as TD-011); the acceptance test used the Claude-powered CAM simulator.
+**Phase 6 note:** 4 Core Integrity bugs fixed; Prometheus metrics + extended `/health`; secrets hardening + CMMC gap analysis; LLM retry backoff + DR runbook; IMS audit trail (`ims_diff.py`, per-cycle diff JSON/Markdown, `GET /api/diff/{cycle_id}`); customer onboarding docs.
 
-**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 314 tests passing.
+**Phase 7.2 note:** JWT auth (`POST /api/auth/token`, HS256, 1-hour expiry), JTI replay blocklist (CMMC IA.3.084), read/admin tier separation, key age alert in `GET /health` (CMMC SC.3.187), SIEM syslog (`agent/siem.py`, CMMC AU.3.045), formal incident response plan (`docs/IR_PLAN.md`), credential rotation procedures (`docs/DR_RUNBOOK.md §9`). 6 HIGH CMMC gaps remediated. 375 tests passing.
 
-**Tier 4 note:** ATLAS Scheduler bot published to M365 org catalog; full end-to-end Teams Chat relay loop verified with all 4 live CAM accounts. Proactive greeting, Graph relay, and trigger-cycle integration complete (TD-019 resolved).
+**Phase 7.4 note:** Per-CAM dashboard progress pills, cumulative diff (`GET /api/changes`), baseline drift alert (`GET /api/baseline-drift`), Q&A 30s TTL cache (TD-016), `SIMULATOR_CALL_DELAY_MS` rate limiting (TD-009), cycle report IMS Diff Summary and Baseline Drift Alert sections.
 
 ---
 
