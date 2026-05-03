@@ -120,8 +120,10 @@ class TestNotifierIntegration:
         assert summary["health"] == "RED"
         assert len(summary["top_risks"]) == 2
 
-        # Mock urlopen so the test never hits the network
-        with patch("agent.notifier._SLACK_WEBHOOK", ""):
+        # Stub load_dotenv + clear webhook so send_slack returns False (no network hit).
+        # _SLACK_WEBHOOK was removed in TD-014; credentials are now read at call time.
+        with patch("agent.notifier.load_dotenv", lambda **kw: None), \
+             patch.dict("os.environ", {"SLACK_WEBHOOK_URL": ""}):
             result = send_slack(summary)
         assert result is False  # empty webhook → graceful skip
 

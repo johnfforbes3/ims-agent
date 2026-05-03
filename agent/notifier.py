@@ -20,14 +20,25 @@ load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
-_SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK_URL", "")
-_EMAIL_HOST = os.getenv("EMAIL_SMTP_HOST", "")
-_EMAIL_PORT = int(os.getenv("EMAIL_SMTP_PORT", "587"))
-_EMAIL_USER = os.getenv("EMAIL_SMTP_USER", "")
-_EMAIL_PASS = os.getenv("EMAIL_SMTP_PASS", "")
-_EMAIL_FROM = os.getenv("EMAIL_FROM", "")
-_EMAIL_TO = os.getenv("EMAIL_TO", "")
-_DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:9000")
+
+def _get_notifier_config() -> dict:
+    """Read notifier credentials at call time — not at import time (TD-014).
+
+    Reading at call time means credential changes (e.g., rotating a webhook URL
+    by updating .env) take effect on the next send without a process restart.
+    ``load_dotenv(override=True)`` refreshes the environment from disk each call.
+    """
+    load_dotenv(override=True)
+    return {
+        "slack_webhook": os.getenv("SLACK_WEBHOOK_URL", ""),
+        "email_host": os.getenv("EMAIL_SMTP_HOST", ""),
+        "email_port": int(os.getenv("EMAIL_SMTP_PORT", "587")),
+        "email_user": os.getenv("EMAIL_SMTP_USER", ""),
+        "email_pass": os.getenv("EMAIL_SMTP_PASS", ""),
+        "email_from": os.getenv("EMAIL_FROM", ""),
+        "email_to": os.getenv("EMAIL_TO", ""),
+        "dashboard_url": os.getenv("DASHBOARD_URL", "http://localhost:9000"),
+    }
 
 
 def build_cycle_summary(
@@ -52,7 +63,8 @@ def build_cycle_summary(
 
 def send_slack(summary: dict[str, Any]) -> bool:
     """Post a structured cycle summary to the configured Slack webhook."""
-    if not _SLACK_WEBHOOK:
+    cfg = _get_notifier_config()
+    if not cfg["slack_webhook"]:
         logger.info("action=slack_skip reason=no_webhook_configured")
         return False
 
@@ -85,7 +97,7 @@ def send_slack(summary: dict[str, Any]) -> bool:
                 {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "View Dashboard"},
-                    "url": _DASHBOARD_URL,
+                    "url": cfg["dashboard_url"],
                     "style": "primary",
                 }
             ],
@@ -94,7 +106,7 @@ def send_slack(summary: dict[str, Any]) -> bool:
 
     payload = json.dumps({"blocks": blocks}).encode("utf-8")
     req = urllib.request.Request(
-        _SLACK_WEBHOOK,
+        cfg["slack_webhook"],
         data=payload,
         headers={"Content-Type": "application/json"},
     )
@@ -112,7 +124,9 @@ def send_slack(summary: dict[str, Any]) -> bool:
 
 def send_email(summary: dict[str, Any]) -> bool:
     """Send a cycle summary email via SMTP to the configured distribution list."""
-    if not all([_EMAIL_HOST, _EMAIL_USER, _EMAIL_PASS, _EMAIL_FROM, _EMAIL_TO]):
+    cfg = _get_notifier_config()
+    if not all([cfg["email_host"], cfg["email_user"], cfg["email_pass"],
+                cfg["email_from"], cfg["email_to"]]):
         logger.info("action=email_skip reason=no_smtp_configured")
         return False
 
@@ -144,7 +158,7 @@ def send_email(summary: dict[str, Any]) -> bool:
   <h3>Top Risks</h3>
   <ul style="line-height:1.6">{risks_html}</ul>
   <p>
-    <a href="{_DASHBOARD_URL}"
+    <a href="{cfg['dashboard_url']}"
        style="background:#1a73e8;color:white;padding:10px 20px;text-decoration:none;border-radius:4px">
       View Live Dashboard
     </a>
@@ -155,16 +169,16 @@ def send_email(summary: dict[str, Any]) -> bool:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = _EMAIL_FROM
-    msg["To"] = _EMAIL_TO
+    msg["From"] = cfg["email_from"]
+    msg["To"] = cfg["email_to"]
     msg.attach(MIMEText(body_html, "html"))
 
-    recipients = [r.strip() for r in _EMAIL_TO.split(",") if r.strip()]
+    recipients = [r.strip() for r in cfg["email_to"].split(",") if r.strip()]
     try:
-        with smtplib.SMTP(_EMAIL_HOST, _EMAIL_PORT) as smtp:
+        with smtplib.SMTP(cfg["email_host"], cfg["email_port"]) as smtp:
             smtp.starttls()
-            smtp.login(_EMAIL_USER, _EMAIL_PASS)
-            smtp.sendmail(_EMAIL_FROM, recipients, msg.as_string())
+            smtp.login(cfg["email_user"], cfg["email_pass"])
+            smtp.sendmail(cfg["email_from"], recipients, msg.as_string())
         logger.info("action=email_sent recipients=%d", len(recipients))
         return True
     except Exception as exc:

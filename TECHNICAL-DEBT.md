@@ -7,30 +7,24 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 1
 
-### TD-001 — Schedule health threshold is manual / LLM-generated
-**File:** `agent/llm_interface.py`, `agent/report_generator.py`  
-**Severity:** Medium  
-**Description:** The RED/YELLOW/GREEN schedule health label is assigned by the LLM based on its interpretation of the narrative. There are no deterministic thresholds — e.g., "RED if any milestone is <50% on-time probability." This means the label can vary between runs on the same data and is not auditable.  
-**Why deferred:** Phase 1 scope was proof-of-concept. FB-001 from PHASE1-FEEDBACK.md.  
-**Suggested fix:** Define thresholds in a config or constants file (e.g., `HEALTH_THRESHOLDS = {"GREEN": 0.75, "YELLOW": 0.50}`). Compute health deterministically from SRA probabilities and critical path float, then pass the computed value into the LLM prompt as a given — don't ask the LLM to decide it. Add unit tests for each threshold transition.
+### TD-001 — Schedule health threshold is manual / LLM-generated — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
+**File:** `agent/schedule_health.py` (new), `agent/cycle_runner.py`  
+**Description:** `compute_health()` in `agent/schedule_health.py` implements deterministic RED/YELLOW/GREEN thresholds driven by env-var constants (`HEALTH_RED_MILESTONE_PROB`, `HEALTH_YELLOW_MILESTONE_PROB`, `HEALTH_RED_FLOAT_DAYS`, `HEALTH_YELLOW_FLOAT_DAYS`). The computed label is passed into the LLM prompt as a given; the LLM no longer decides the label. `CycleRunner` calls `compute_health()` and writes the result to `dashboard_state.json`. Unit tests cover all three threshold transitions.
 
 ---
 
-### TD-002 — `can_call_now()` uses local machine time, not CAM's timezone
-**File:** `agent/cam_directory.py:184`  
-**Severity:** Medium  
-**Description:** Business hours check compares `datetime.now().hour` (local machine time) to the CAM's `business_hours_start/end`. If the agent runs on a server in a different timezone than the CAM, the check is wrong. The code comment acknowledges this.  
-**Why deferred:** `pytz` / `zoneinfo` dependency avoided for Phase 2 simplicity. CAMs all default to `America/New_York` which matches the likely dev/server environment for now.  
-**Suggested fix:** Use Python 3.9+ `zoneinfo` (stdlib) to convert `datetime.now(timezone.utc)` into the CAM's IANA timezone before comparing hours. No extra dependency required.
+### TD-002 — `can_call_now()` uses local machine time, not CAM's timezone — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
+**File:** `agent/cam_directory.py` — `can_call_now()`  
+**Description:** `can_call_now()` now uses `from zoneinfo import ZoneInfo, ZoneInfoNotFoundError` (stdlib, Python 3.9+) to convert the current UTC time into the CAM's IANA timezone before comparing hours. Falls back to UTC with a warning log if the timezone string is unrecognised. No extra dependency required. Covered by `TestTimezoneAwareness` (3 tests: out-of-hours at 06:00 UTC, in-hours at 18:00 UTC, invalid timezone fallback).
 
 ---
 
-### TD-003 — CAM call history is in-memory only (not persisted between runs)
-**File:** `agent/cam_directory.py` — `_call_history` dict  
-**Severity:** Medium  
-**Description:** `_call_history` lives in the `CAMDirectory` object and is lost when the process exits. Retry logic (`should_retry`, `should_escalate`) is only effective within a single run. If the orchestrator restarts mid-cycle, history is lost.  
-**Why deferred:** Phase 2 scope focused on the interview loop, not persistence.  
-**Suggested fix:** Extend `save_to_file`/`load_from_file` to include call history. Add a `call_history` key to the JSON. Alternatively, use a lightweight SQLite store via stdlib `sqlite3`.
+### TD-003 — CAM call history is in-memory only (not persisted between runs) — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
+**File:** `agent/cam_directory.py` — `save_to_file()`, `load_from_file()`  
+**Description:** `save_to_file()` now writes `{"cams": [...], "call_history": {...}}` instead of a bare JSON array. `load_from_file()` detects both the legacy list format (backward compatible) and the new dict format, restoring `_call_history` as proper `CallRecord` objects. `should_retry()` and `should_escalate()` now honour history that survived a process restart. Covered by `TestCallHistoryPersistence` (4 tests: roundtrip, should_retry=False after reload, should_escalate=True after reload, legacy format loads cleanly).
 
 ---
 
@@ -50,12 +44,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-005 — `_extract_percent` only returns first numeric match
-**File:** `agent/voice/interview_agent.py:419`  
-**Severity:** Low  
-**Description:** The regex `r"\b(\d{1,3})\s*%?"` returns the first numeric token it finds. Responses like "SE-04 is 100%, not 4%" would return 4 (from "4%") after 100, depending on which comes first. Observed in demo: agent extracted "4%" from "SE-04 is 100%" due to task ID digit appearing before the actual percent.  
-**Why deferred:** Edge case; doesn't affect most clean responses.  
-**Suggested fix:** Prefer the number immediately following common percent-context words ("is", "at", "about", "around", "approximately", "currently"). Alternatively, skip numeric tokens that appear to be part of task IDs (e.g., digits directly following "SE-", "HW-", "SW-").
+### TD-005 — `_extract_percent` only returns first numeric match — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint (already implemented in prior session)  
+**File:** `agent/voice/interview_agent.py` — `_extract_percent()`  
+**Description:** `_extract_percent()` now uses a three-priority extraction system: (1) explicit `\d+%` matches, (2) numbers following context words ("is", "at", "about", "around", "approximately", "currently"), (3) numbers that skip task-ID-like tokens (digits directly after `SE-`, `HW-`, `SW-`, etc.). The "SE-04 is 100%, not 4%" case is now handled correctly by priority-1 extraction finding the explicit `%` token. Covered by existing unit tests in `tests/test_interview_agent.py`.
 
 ---
 
@@ -66,12 +58,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-007 — Report blocker text is untruncated in table
-**File:** `agent/report_generator.py` — `_build_tasks_behind_section`  
-**Severity:** Low  
-**Description:** Blocker text in the "Tasks Behind Schedule" table is the full raw CAM response — sometimes multiple paragraphs. This breaks table formatting and is hard to read.  
-**Why deferred:** Phase 2 output focus. FB-2-005.  
-**Suggested fix:** Truncate to first sentence or 120 characters in the table cell, with a `*` footnote. Render full blocker text in an appendix section at the end of the report.
+### TD-007 — Report blocker text is untruncated in table — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
+**File:** `agent/report_generator.py` — `_truncate_blocker()`, `_build_report()`  
+**Description:** `_truncate_blocker(text, max_len=120)` helper cuts at the first natural sentence boundary (`. `, `! `, `? `) within `max_len`, or hard-truncates at 120 chars, appending `*` to signal truncation. The full blocker text is collected in a `blocker_details` list and rendered in a "## Blocker Details" appendix section at the end of the report. Covered by `TestTruncateBlockerHelper` (5 unit tests) and `TestBlockerTruncationIntegration` (3 integration tests).
 
 ---
 
@@ -128,21 +118,17 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-014 — Notifier env vars loaded at module import time
-**File:** `agent/notifier.py` — module-level globals `_SLACK_WEBHOOK`, `_EMAIL_HOST`, etc.  
-**Severity:** Low  
-**Description:** All notifier config (webhook URL, SMTP credentials, dashboard URL) is read from `os.getenv` at module import time. If `.env` is edited while the scheduler is running (e.g., to rotate a credential), the change does not take effect until the process restarts. Same issue applies to any other module that reads env vars at import scope.  
-**Why deferred:** Uncommon in practice; credential rotation requires a restart in most service architectures anyway.  
-**Suggested fix:** Move `load_dotenv(override=True)` and the `os.getenv` calls into `send_slack()` and `send_email()` function bodies, or into a `_get_config()` helper called at send time. This adds ~1ms of overhead per send but ensures the latest `.env` is always used.
+### TD-014 — Notifier env vars loaded at module import time — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
+**File:** `agent/notifier.py` — `_get_notifier_config()`  
+**Description:** Removed the 8 module-level `_SLACK_WEBHOOK`, `_EMAIL_HOST`, etc. globals. Added `_get_notifier_config()` helper that calls `load_dotenv(override=True)` and reads all credentials via `os.getenv` at call time. `send_slack()` and `send_email()` both call `cfg = _get_notifier_config()` at the top of their bodies. Credential rotations in `.env` now take effect on the next send without a process restart. Covered by `TestNotifierHotReload` (4 tests in `tests/test_notifier.py`).
 
 ---
 
-### TD-015 — Validation holds not surfaced on the live dashboard
+### TD-015 — Validation holds not surfaced on the live dashboard — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
 **File:** `agent/cycle_runner.py` — `_update_dashboard_state`, `agent/dashboard/templates/index.html`  
-**Severity:** Low  
-**Description:** When the validation layer logs holds (e.g., backwards movement, large jump), the count and detail are persisted to `reports/cycles/{cycle_id}_status.json` but are not included in `dashboard_state.json`. The dashboard has no indicator that the current cycle's data contains flagged anomalies; a planner must manually open the status JSON to see them.  
-**Why deferred:** Phase 3 scope: validation holds log but do not block. Dashboard MVP did not include a holds panel.  
-**Suggested fix:** Add `"validation_holds": status.get("validation_holds", [])` to the dashboard state dict in `_update_dashboard_state`. Add a collapsible "Validation Alerts" section to `index.html` that renders each hold as a warning card when the list is non-empty.
+**Description:** `_update_dashboard_state` already wrote `validation_holds` to state (confirmed in prior session). Added a collapsible `<details>` "Validation Alerts" panel to `index.html` using Jinja2: when `state.validation_holds` is non-empty, a yellow-bordered card appears (open by default) listing each hold as a table row with task ID, CAM, rule badge, and detail text. Panel is completely absent from the DOM when the list is empty.
 
 ---
 
@@ -164,12 +150,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-018 — Slack slash command sends "Thinking…" then overwrites it, creating a jarring UX
+### TD-018 — Slack slash command sends "Thinking…" then overwrites it, creating a jarring UX — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint  
 **File:** `agent/slack_command.py` — `_handle_ims_command`  
-**Severity:** Low  
-**Description:** Because Slack requires acknowledgement within 3 seconds and LLM calls take 5-15 seconds, the handler acks with `respond(text="Thinking…")` then calls `respond(blocks=...)` with the real answer. This creates two separate messages in the channel rather than updating the first in-place.  
-**Why deferred:** Requires switching to `client.chat_update` with a message timestamp, which needs the channel ID from the command payload and an additional Slack API call.  
-**Suggested fix:** Use `command["channel_id"]` + `app.client.chat_postMessage` to get a message `ts`, then `app.client.chat_update` with the answer. Alternatively, use Slack's `response_url` with `replace_original: true`.
+**Description:** Both the success path (`respond(blocks=blocks, ..., replace_original=True)`) and the error path (`respond(text=f":warning: ...", replace_original=True)`) now use `replace_original=True`. slack-bolt's `respond()` uses the `response_url` from the slash command payload to replace the "Thinking…" placeholder in-place, eliminating the double-message. No additional Slack API calls required.
 
 ---
 
@@ -194,19 +178,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 5 / Sprint 2
 
-### TD-021 — Dashboard countdown resets to 5 during active cycle instead of counting down — **REOPENED**
-**Previously marked resolved:** Phase 5 sprint 2 — 2026-04-27  
-**Reopened:** 2026-04-27 — fix was incomplete; countdown still bounces 5→0→5→0 during active cycles; "Cycle In Progress" card not updating live.  
-
-
-**File:** `agent/dashboard/templates/index.html` — `pollStatus()`, countdown `setInterval`  
-**Severity:** Medium  
-**Description:** The dashboard has two independent timers: a 60-second full-page reload countdown and a one-shot `pollStatus()` call that triggers `window.location.reload()` after 5 seconds if a cycle is active. When a cycle is running, the page reloads every 5 seconds but the countdown still initialises at 60 and counts down from there — giving the impression of a stuck or restarting timer rather than the actual 5-second refresh cadence. More critically, the "Cycle In Progress" card (showing phase / CAMs responded) only updates on full reload; there is no live push or incremental AJAX update, so progress is only visible in arrears.  
-**Why deferred:** The template uses server-side Jinja2 rendering; live updates require either SSE/WebSocket or an AJAX polling loop to fetch `/api/state` and patch the DOM without a full reload.  
-**Suggested fix:**  
-1. Replace `pollStatus()` + `window.location.reload()` with a `setInterval` (every 5s when active, every 60s when idle) that fetches `/api/state` via AJAX and updates only the "Cycle In Progress" card and the countdown badge in-place.  
-2. Reset `seconds` to match the current interval (5 or 60) whenever the interval changes, so the badge accurately reflects the next actual refresh.  
-3. Trigger a full page reload only when the cycle transitions from active → complete (i.e., `cycle_active` flips from `true` to `false`), so the final health/report data is loaded cleanly.
+### TD-021 — Dashboard countdown resets to 5 during active cycle instead of counting down — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.1 sprint (already implemented in prior session)  
+**File:** `agent/dashboard/templates/index.html` — `pollStatus()`, countdown JS  
+**Description:** The dashboard now uses a single AJAX polling loop: `_pollMs` is set to 5000ms when a cycle is active, 60000ms when idle. `_nextPollAt` tracks the next fire time and the countdown badge is updated from `_nextPollAt - Date.now()`. `_updateCycleCard()` patches the "Cycle In Progress" card DOM in-place without a full reload. A full reload is triggered only when `cycle_active` transitions from `true` to `false` so the final health/report data loads cleanly.
 
 ---
 

@@ -158,6 +158,37 @@
     </div>
   </div>
 
+  <!-- Validation Alerts (TD-015) — shown only when the cycle flagged anomalies -->
+  {% set holds = state.get('validation_holds', []) %}
+  {% if holds %}
+  <details class="card" style="border-left:4px solid #f9ab00;background:#fffde7" open>
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;text-transform:uppercase;
+                    letter-spacing:0.05em;color:#b06000;padding:4px 0">
+      ⚠ Validation Alerts — {{ holds | length }} hold(s) flagged this cycle
+    </summary>
+    <table style="margin-top:12px">
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>CAM</th>
+          <th>Rule</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in holds %}
+        <tr>
+          <td>{{ h.get('task_id', '—') }}</td>
+          <td>{{ h.get('cam_name', '—') }}</td>
+          <td><span class="badge badge-MEDIUM">{{ h.get('rule', '—') }}</span></td>
+          <td style="font-size:12px;color:#555">{{ h.get('detail', '') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+
   <!-- Stats Row -->
   <div class="card">
     {% set cr = state.get('completion_report', {}) %}

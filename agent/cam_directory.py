@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -70,7 +71,12 @@ class CAMDirectory:
 
     def load_from_file(self, path: str | None = None) -> None:
         """
-        Load CAM records from a JSON file.
+        Load CAM records (and, if present, call history) from a JSON file.
+
+        Supports two formats for backward compatibility:
+          - Legacy: a JSON array  [{"cam_id": ..., "name": ..., ...}, ...]
+          - Current: a JSON object {"cams": [...], "call_history": {...}}
+            where call_history maps cam_name → list of attempt dicts (TD-003).
 
         Args:
             path: Path to cam_directory.json. Defaults to CAM_DIRECTORY_PATH env var.
@@ -79,7 +85,16 @@ class CAMDirectory:
         if not p.exists():
             raise FileNotFoundError(f"CAM directory file not found: {p}")
         data = json.loads(p.read_text(encoding="utf-8"))
-        for entry in data:
+
+        # Detect format: list = legacy, dict = current
+        if isinstance(data, list):
+            cam_entries = data
+            history_data: dict = {}
+        else:
+            cam_entries = data.get("cams", [])
+            history_data = data.get("call_history", {})
+
+        for entry in cam_entries:
             rec = CAMRecord(
                 cam_id=entry["cam_id"],
                 name=entry["name"],
@@ -92,7 +107,24 @@ class CAMDirectory:
                 task_ids=entry.get("task_ids", []),
             )
             self._cams[rec.name] = rec
-        logger.info("action=directory_loaded source=file cams=%d", len(self._cams))
+
+        # Restore call history (TD-003)
+        for cam_name, attempts in history_data.items():
+            self._call_history[cam_name] = [
+                CallRecord(
+                    cam_id=a.get("cam_id", cam_name),
+                    attempt_number=a.get("attempt_number", 1),
+                    timestamp=a.get("timestamp", ""),
+                    outcome=a.get("outcome", "no_answer"),
+                    transcript=a.get("transcript", []),
+                    structured_data=a.get("structured_data", []),
+                )
+                for a in attempts
+            ]
+        logger.info(
+            "action=directory_loaded source=file cams=%d history_cams=%d",
+            len(self._cams), len(self._call_history),
+        )
 
     def load_from_ims(self, tasks: list[dict[str, Any]]) -> None:
         """
@@ -127,10 +159,23 @@ class CAMDirectory:
         logger.info("action=directory_loaded source=ims cams=%d", len(self._cams))
 
     def save_to_file(self, path: str | None = None) -> str:
-        """Persist the current directory to JSON."""
+        """Persist the current directory and call history to JSON (TD-003).
+
+        Saves in the current format::
+
+            {
+                "cams": [{...}, ...],
+                "call_history": {
+                    "Alice Nguyen": [{"cam_id": ..., "outcome": ..., ...}, ...]
+                }
+            }
+
+        The legacy list-only format is never written; ``load_from_file`` still
+        reads both formats for backward compatibility.
+        """
         p = Path(path or _DIRECTORY_PATH)
         p.parent.mkdir(parents=True, exist_ok=True)
-        records = [
+        cam_records = [
             {
                 "cam_id": r.cam_id,
                 "name": r.name,
@@ -144,7 +189,22 @@ class CAMDirectory:
             }
             for r in self._cams.values()
         ]
-        p.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        history_records = {
+            cam_name: [
+                {
+                    "cam_id": rec.cam_id,
+                    "attempt_number": rec.attempt_number,
+                    "timestamp": rec.timestamp,
+                    "outcome": rec.outcome,
+                    "transcript": rec.transcript,
+                    "structured_data": rec.structured_data,
+                }
+                for rec in attempts
+            ]
+            for cam_name, attempts in self._call_history.items()
+        }
+        payload = {"cams": cam_records, "call_history": history_records}
+        p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         logger.info("action=directory_saved path=%s", p)
         return str(p)
 
@@ -176,12 +236,21 @@ class CAMDirectory:
 
     def can_call_now(self, cam: CAMRecord) -> bool:
         """
-        Return True if the current time is within the CAM's business hours.
+        Return True if the current UTC time is within the CAM's business hours
+        expressed in the CAM's own IANA timezone (TD-002).
 
-        Uses UTC + a fixed offset approximation since pytz may not be installed.
-        For production, replace with proper timezone handling.
+        Uses stdlib ``zoneinfo`` (Python 3.9+) — no third-party dependency.
+        Falls back to UTC if the timezone string is unrecognised.
         """
-        now_hour = datetime.now().hour  # local machine time
+        try:
+            tz = ZoneInfo(cam.timezone)
+        except (ZoneInfoNotFoundError, KeyError):
+            logger.warning(
+                "action=timezone_fallback cam=%s tz=%s using_utc=true",
+                cam.name, cam.timezone,
+            )
+            tz = ZoneInfo("UTC")
+        now_hour = datetime.now(tz).hour
         return cam.business_hours_start <= now_hour < cam.business_hours_end
 
     def should_retry(self, cam_name: str) -> bool:

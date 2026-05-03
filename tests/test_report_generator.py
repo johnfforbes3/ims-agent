@@ -166,3 +166,136 @@ class TestReportGenerator:
         )
         content = Path(report_path).read_text(encoding="utf-8")
         assert "Waiting on parts" in content
+
+
+# ---------------------------------------------------------------------------
+# TD-007 — _truncate_blocker helper (unit tests)
+# ---------------------------------------------------------------------------
+
+class TestTruncateBlockerHelper:
+    """Direct tests for the _truncate_blocker helper function."""
+
+    def test_empty_string_returns_unchanged(self):
+        from agent.report_generator import _truncate_blocker
+        assert _truncate_blocker("") == ("", False)
+
+    def test_short_string_not_truncated(self):
+        from agent.report_generator import _truncate_blocker
+        text = "Waiting on parts"
+        result, was_truncated = _truncate_blocker(text)
+        assert result == text
+        assert was_truncated is False
+
+    def test_sentence_boundary_truncation(self):
+        from agent.report_generator import _truncate_blocker
+        text = "First sentence. " + "x" * 200
+        result, was_truncated = _truncate_blocker(text)
+        assert was_truncated is True
+        assert result == "First sentence.*"
+
+    def test_exclamation_boundary_truncation(self):
+        from agent.report_generator import _truncate_blocker
+        text = "Critical failure! " + "y" * 200
+        result, was_truncated = _truncate_blocker(text)
+        assert was_truncated is True
+        assert result == "Critical failure!*"
+
+    def test_hard_truncation_when_no_sentence_boundary(self):
+        from agent.report_generator import _truncate_blocker
+        text = "x" * 200
+        result, was_truncated = _truncate_blocker(text, max_len=120)
+        assert was_truncated is True
+        assert result.endswith("…*")
+        # 120 source chars + "…" (1 char) + "*" (1 char) = 122
+        assert len(result) <= 122
+
+    def test_exactly_max_len_not_truncated(self):
+        from agent.report_generator import _truncate_blocker
+        text = "x" * 120
+        result, was_truncated = _truncate_blocker(text, max_len=120)
+        assert result == text
+        assert was_truncated is False
+
+
+# ---------------------------------------------------------------------------
+# TD-007 — integration: blockers in generated report
+# ---------------------------------------------------------------------------
+
+def _long_blocker_cam_inputs():
+    """CAM input with a blocker long enough to trigger truncation."""
+    return [
+        {
+            "task_id": "2",
+            "cam_name": "Bob Martinez",
+            "percent_complete": 30,
+            "blocker": "x" * 200,
+            "risk_flag": False,
+            "risk_description": "",
+            "timestamp": "2026-04-25T09:00:00",
+        }
+    ]
+
+
+def _sentence_blocker_cam_inputs():
+    """CAM input with a blocker that has a sentence boundary mid-way."""
+    return [
+        {
+            "task_id": "2",
+            "cam_name": "Bob Martinez",
+            "percent_complete": 30,
+            "blocker": "First sentence. " + "Much longer explanation " * 10,
+            "risk_flag": False,
+            "risk_description": "",
+            "timestamp": "2026-04-25T09:00:00",
+        }
+    ]
+
+
+class TestBlockerTruncationIntegration:
+    """TD-007 — blocker truncation and appendix in generated reports."""
+
+    def test_long_blocker_creates_appendix_section(self, tmp_path):
+        """A blocker > 120 chars with no sentence boundary creates a Blocker Details appendix."""
+        from agent.report_generator import ReportGenerator
+        import os
+        os.environ["REPORTS_DIR"] = str(tmp_path)
+
+        rg = ReportGenerator()
+        report_path = rg.generate(
+            _sample_tasks(), _sample_cp_result(), _sample_sra(),
+            _long_blocker_cam_inputs(), _sample_synthesis(), report_date=_REPORT_DATE,
+        )
+        content = Path(report_path).read_text(encoding="utf-8")
+        assert "## Blocker Details" in content
+
+    def test_full_blocker_text_appears_in_appendix(self, tmp_path):
+        """The complete blocker text appears somewhere in the report (inside the appendix)."""
+        from agent.report_generator import ReportGenerator
+        import os
+        os.environ["REPORTS_DIR"] = str(tmp_path)
+
+        inputs = _sentence_blocker_cam_inputs()
+        full_blocker = inputs[0]["blocker"]
+
+        rg = ReportGenerator()
+        report_path = rg.generate(
+            _sample_tasks(), _sample_cp_result(), _sample_sra(),
+            inputs, _sample_synthesis(), report_date=_REPORT_DATE,
+        )
+        content = Path(report_path).read_text(encoding="utf-8")
+        assert full_blocker in content
+
+    def test_short_blocker_produces_no_appendix(self, tmp_path):
+        """A short blocker (≤120 chars) does not create a Blocker Details appendix."""
+        from agent.report_generator import ReportGenerator
+        import os
+        os.environ["REPORTS_DIR"] = str(tmp_path)
+
+        rg = ReportGenerator()
+        report_path = rg.generate(
+            _sample_tasks(), _sample_cp_result(), _sample_sra(),
+            _sample_cam_inputs(), _sample_synthesis(), report_date=_REPORT_DATE,
+        )
+        content = Path(report_path).read_text(encoding="utf-8")
+        assert "## Blocker Details" not in content
+        assert "Waiting on parts" in content

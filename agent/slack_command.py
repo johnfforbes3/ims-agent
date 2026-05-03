@@ -75,22 +75,23 @@ def _handle_ims_command(command, ack, respond):
         respond(text=f"Question too long (max {_MAX_QUESTION_LEN} characters).")
         return
 
-    # Send a "thinking" message immediately, then update with the real answer
-    # (slash commands require an ack within 3s; LLM calls take longer)
+    # Send a "thinking" placeholder immediately (Slack requires ack within 3 s;
+    # LLM calls take longer).  When the answer arrives, replace the placeholder
+    # in-place via replace_original=True (TD-018 — eliminates double-message).
     respond(text=f"_Thinking about: {text}_")
 
     try:
         from agent.qa.qa_engine import QAEngine
         qa_response = QAEngine().ask(text)
         blocks = _format_answer(qa_response)
-        respond(blocks=blocks, text=qa_response.answer[:200])
+        respond(blocks=blocks, text=qa_response.answer[:200], replace_original=True)
         logger.info(
             "action=slack_qa answered direct=%s intents=%s",
             qa_response.direct, qa_response.intent,
         )
     except Exception as exc:
         logger.error("action=slack_qa_error error=%s", exc, exc_info=True)
-        respond(text=f":warning: Error answering question: {exc}")
+        respond(text=f":warning: Error answering question: {exc}", replace_original=True)
 
 
 def start(daemon: bool = True) -> threading.Thread | None:
