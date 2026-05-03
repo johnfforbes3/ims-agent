@@ -302,8 +302,12 @@ class InterviewAgent:
             if self._current_blocker:
                 # Blocker already captured — go straight to risk question, or skip if the
                 # milestone is already confirmed AT RISK (True) or has been denied ≥ 2 times.
+                # When the milestone is already at risk, skip the question but set this task's
+                # risk_flag=False — the milestone risk is already captured; we don't want to
+                # auto-flag every subsequent blocked task as an independent risk (that creates
+                # a flood of True flags that the CAM has to correct in CONFIRM).
                 if self._flagged_milestones.get(milestone_hint) is True:
-                    self._current_risk_flag = True
+                    self._current_risk_flag = False
                     return self._finalise_task_and_advance(pct)
                 if self._milestone_no_count.get(milestone_hint, 0) >= 2:
                     self._current_risk_flag = False
@@ -329,7 +333,10 @@ class InterviewAgent:
             if classification.get("cam_question"):
                 self._cam_question_note = _cam_question_ack()
             if self._flagged_milestones.get(milestone_hint) is True:
-                self._current_risk_flag = True
+                # Milestone already at risk — skip the question, default this task's
+                # risk_flag to False (milestone risk is already captured; no need to
+                # auto-flag every blocked task as an independent schedule risk).
+                self._current_risk_flag = False
                 return self._finalise_task_and_advance(self._current_pct)
             if self._milestone_no_count.get(milestone_hint, 0) >= 2:
                 self._current_risk_flag = False
@@ -355,10 +362,12 @@ class InterviewAgent:
         if classification.get("cam_question"):
             self._cam_question_note = _cam_question_ack()
         milestone_hint = self._nearest_milestone_name()
-        # Skip the risk question if the milestone is already confirmed AT RISK (auto-flag
-        # True) or has been denied ≥ 2 times in this session (avoid repetitive asking).
+        # Skip the risk question if the milestone is already confirmed AT RISK or denied ≥ 2×.
+        # When at risk: default this task's risk_flag=False — milestone risk is already
+        # captured from the task that triggered it; auto-flagging every subsequent blocked
+        # task True causes a flood of corrections in CONFIRM.
         if self._flagged_milestones.get(milestone_hint) is True:
-            self._current_risk_flag = True
+            self._current_risk_flag = False
             return self._finalise_task_and_advance(self._current_pct)
         if self._milestone_no_count.get(milestone_hint, 0) >= 2:
             self._current_risk_flag = False
