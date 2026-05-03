@@ -57,7 +57,7 @@ This converts `data/sample_ims.xml` into a timestamped `.mpp` in `data/ims_maste
 python -m pytest tests/ -q --tb=short
 ```
 
-Expected: `242 passed`. If any fail, see the TECHNICAL-DEBT.md register for known issues.
+Expected: `255 passed`. If any fail, see the TECHNICAL-DEBT.md register for known issues.
 
 ### Step 5 — Start the agent
 
@@ -71,10 +71,11 @@ python main.py --schedule
 python main.py --serve
 ```
 
-**Option C — Fire one cycle right now** (runs once, then exits):
+**Option C — Fire one cycle right now** via the API (server must be running):
 ```bat
-python main.py --trigger
+curl -s -X POST http://localhost:9000/api/trigger
 ```
+⚠️ **Do not use `python main.py --trigger` in Teams chat mode** — it runs in a separate process and cannot share the server's interview sessions. Always trigger via the API when using `CALL_TRANSPORT=teams_chat`. See ARCHITECTURE.md §6.
 
 The dashboard is at **http://localhost:9000**
 
@@ -178,12 +179,12 @@ The scheduler stops cleanly. The dashboard persists `data/dashboard_state.json` 
 |---------|-------------|
 | `python main.py --schedule` | **Production**: cron scheduler + dashboard. Fires automatically every Monday 06:00 ET. |
 | `python main.py --serve` | **Dashboard only**: no automatic cycles; use Trigger button or API to fire manually. |
-| `python main.py --trigger` | **One shot**: fire one full cycle right now, then exit. Good for on-demand runs. |
+| `curl -X POST http://localhost:9000/api/trigger` | **One shot**: fire one cycle via API (server must be running). Use this instead of `--trigger` for Teams chat mode. |
 | `python main.py --init-mpp` | **Seed**: convert `data/sample_ims.xml` → timestamped `.mpp` in `data/ims_master/`. Run after first checkout or if master folder is empty. |
 | `python main.py --demo` | Phase 2 simulated voice interview demo (no Teams required). |
 | `python main.py --demo-chat --cam "Alice Nguyen"` | Teams chat interview via Bot Framework (requires ngrok + Azure Bot Service). |
 | `python main.py --cam-responder` | Start Graph API auto-responders for all configured fake CAM accounts. |
-| `python -m pytest tests/ -q` | Run all 242 unit tests. |
+| `python -m pytest tests/ -q` | Run all 255 unit tests. |
 
 ---
 
@@ -232,7 +233,7 @@ If you are an AI agent reading this to bring the system up, follow these steps i
 
 2. **Check master IMS**: Run `python -c "from pathlib import Path; f=list(Path('data/ims_master').glob('*.*')); print(len(f), [x.name for x in f])"`. If count is 0, run `python main.py --init-mpp`. If `--init-mpp` fails (no COM, no JVM), note the error but continue — the cycle runner will fall back to `data/sample_ims.xml`.
 
-3. **Run unit tests**: Run `python -m pytest tests/ -q --tb=short 2>&1 | tail -5`. If all 242 pass, proceed. If failures exist, report them before starting the server.
+3. **Run unit tests**: Run `python -m pytest tests/ -q --tb=short 2>&1 | tail -5`. If all 255 pass, proceed. If failures exist, report them before starting the server.
 
 4. **Start the server**: Run `python main.py --schedule` (blocks). The server is ready when you see "Dashboard: http://localhost:9000".
 

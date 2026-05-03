@@ -4,6 +4,45 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Atlas Scheduler — Conversation Quality Sprint (2026-05-03)
+
+**Summary:** Four targeted fixes to the Teams Chat interview conversation flow, reducing CONFIRM-stage corrections from 12 per cycle to 3 (75% reduction). All 255 tests passing. Repo documentation overhauled: new `ARCHITECTURE.md`, `.gitignore` corrected, stale files archived.
+
+### Fixed
+
+- **TD-033** — `_nearest_milestone_name()` now uses the current task's finish date as the lower bound for milestone selection, preventing the logically wrong question "Could this put Milestone X at risk?" for tasks that finish after that milestone. (`fix(atlas): pick task-aware milestone for risk question`, commit `52878be`)
+- **TD-034** — `_flagged_milestones[True]` auto-inherit now sets `risk_flag=False` (was `True`) for subsequent tasks sharing a milestone already marked at risk. Eliminates cascading risk flag corrections in CONFIRM. (`fix(atlas): milestone True-auto-inherit sets risk=False not True`, commit `0e68d50`)
+- **TD-035** — Added `_milestone_no_count` tracking. After ≥2 consecutive NO answers for the same milestone in a session, subsequent tasks skip the risk question entirely and auto-set `risk_flag=False`. (`fix(atlas): suppress repeated milestone risk question + CONFIRM keyword pre-check`, commit `8b05a34`)
+- **TD-036** — CONFIRM keyword pre-check fires before the LLM classifier. Detects correction language ("actually", "that's wrong", "no,", etc.) and routes directly to `_extract_and_apply_correction()`, eliminating the CONFIRM correction loop. (`fix(atlas): suppress repeated milestone risk question + CONFIRM keyword pre-check`, commit `8b05a34`)
+
+### Added
+
+- `ARCHITECTURE.md` — Comprehensive technical reference: module map, full cycle data flow, interview state machine (11 states), Teams chat relay loop, `--schedule` vs `--trigger` constraint, environment variable guide, CAM directory setup, test suite map, design patterns, and AI agent gotchas.
+
+### Changed
+
+- `.gitignore` — Added rules for runtime data files (`data/cycle_history.json`, `data/dashboard_state.json`, `data/cam_sessions.json`, `data/ims.db`, `data/interview_kicks/`, `.coverage`, `htmlcov/`). Untracked `cycle_history.json` and `dashboard_state.json` from version control.
+- `data/sample_ims.xml` — Reset to clean baseline (cycle-modified state was committed in error).
+- `README.md`, `STARTUP.md` — Test count updated 242 → 255; Tier 4 note updated; `--trigger` warning added.
+- `TECHNICAL-DEBT.md` — Added TD-033 through TD-036 for all four conversation quality fixes.
+
+### Production Cycle Results (after all fixes)
+
+| CAM | CONFIRM corrections before | CONFIRM corrections after |
+|-----|---------------------------|--------------------------|
+| Carol Smith | 5 (True→False cascade) | 0 |
+| David Lee | 1 (False→True, wrong milestone) | 0 |
+| Alice Nguyen | 2 | 1 (legitimate cross-CAM dependency) |
+| Eva Johnson | 4 | 2 (legitimate deadline context) |
+| **Total** | **12** | **3** |
+
+### Metrics
+
+- Total tests: **255** (all passing)
+- New tests added: **13** (`test_milestone_no_count_skips_repeated_risk_question`, `test_nearest_milestone_uses_task_finish_date`, and 11 supporting tests)
+
+---
+
 ## Phase 5 Sprint 4 — Test Procedure Execution & Bug Fixes (2026-04-29)
 
 **Summary:** Full end-to-end execution of the Phase 5 / Sprint 3 test procedure (12 sections, 242 unit tests). Ten bugs found; all ten resolved in this sprint. Three were fixed during test execution; seven more fixed immediately after. No regressions; 242/242 tests pass.

@@ -210,6 +210,40 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
+## Atlas Scheduler — Conversation Quality (2026-05-03)
+
+### TD-033 — `_nearest_milestone_name()` ignored task finish date — **RESOLVED**
+**Resolved:** 2026-05-03 — commit `52878be`  
+**File:** `agent/voice/interview_agent.py` — `_nearest_milestone_name()`  
+**Description:** The method returned the globally-nearest upcoming milestone by date, ignoring the current task's own finish date. This caused the logically wrong question "Could this put Milestone X at risk?" when the task was scheduled to complete *after* Milestone X had already passed. Observed for documentation tasks finishing in June being asked about a June 3 milestone.  
+**Fix:** Changed lower bound from `datetime.now()` to `max(datetime.now(), task_finish)`. Milestone selection now returns the nearest milestone at or after the task's own finish date.
+
+---
+
+### TD-034 — `_flagged_milestones[True]` auto-inherit set risk=True for all subsequent tasks — **RESOLVED**
+**Resolved:** 2026-05-03 — commit `0e68d50`  
+**File:** `agent/voice/interview_agent.py` — `_handle_pct` (2 locations) and `_handle_blocker`  
+**Description:** When a CAM confirmed YES for a milestone risk, all subsequent tasks with blockers sharing the same milestone auto-set `risk_flag=True` without asking. This caused excessive CONFIRM corrections (5 corrections for Carol in a single cycle) because most subsequent tasks were NOT milestone risks — only the first one was.  
+**Fix:** Changed all 3 locations from `self._current_risk_flag = True` to `self._current_risk_flag = False`. The milestone is already flagged once; subsequent tasks should default to False and not be asked again (handled by `_milestone_no_count` threshold).
+
+---
+
+### TD-035 — No suppression for repeated milestone risk question — **RESOLVED**
+**Resolved:** 2026-05-03 — commit `8b05a34`  
+**File:** `agent/voice/interview_agent.py` — `_handle_blocker`, `_handle_pct`, `__init__`  
+**Description:** When many tasks share the same milestone, the agent asked "Could this put [milestone] at risk?" for every task, even after the CAM had already answered NO multiple times. Observed: CAMs responding "you've asked me this four times now."  
+**Fix:** Added `_milestone_no_count: dict[str, int]` instance variable. After ≥2 NO answers for the same milestone in a session, subsequent tasks with blockers skip the risk question and auto-set `risk_flag=False`.
+
+---
+
+### TD-036 — CONFIRM state looped on correction language in CAM response — **RESOLVED**
+**Resolved:** 2026-05-03 — commit `8b05a34`  
+**File:** `agent/voice/interview_agent.py` — `_handle_confirm`  
+**Description:** When a CAM said "No, that's wrong" in CONFIRM, the LLM classifier classified it as a negative, re-asked for correction, and the CAM's correction response (often starting with "No,") re-triggered the same path — creating a correction loop. This was the root cause underlying TD-004, which was only partially resolved previously.  
+**Fix:** Added a keyword pre-check in `_handle_confirm` that fires *before* the LLM classifier. Detects correction language ("actually", "that's wrong", "no,", "not quite", etc.) and routes directly to `_extract_and_apply_correction()`, bypassing the negative-response handler. Reduced CONFIRM corrections from 12 per cycle to 3 (75% reduction).
+
+---
+
 ## Phase 5 / Sprint 3
 
 ### TD-022 — `_notify_approval_required` passed plain string to `send_slack` — **RESOLVED**

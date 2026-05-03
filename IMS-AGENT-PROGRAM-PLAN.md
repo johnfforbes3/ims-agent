@@ -2,7 +2,7 @@
 **Program:** Integrated Master Schedule (IMS) AI Agent  
 **Version:** 1.0  
 **Created:** 2026-04-25  
-**Status:** Tier 4 — Teams Chat Bot Interview Complete. Phase 5 Production Hardening Complete.  
+**Status:** Conversation Quality Sprint Complete. All 255 tests passing. Phase 6 Productionization in planning.  
 **Owner:** John Forbes  
 
 ---
@@ -153,15 +153,16 @@ Output Distribution:
 
 ## PHASE OVERVIEW
 
-| Phase | Name | Description | Duration Estimate |
-|---|---|---|---|
-| **1** | Proof of Concept | Local agent reads .mpp, parses tasks, simulates CAM input, runs analysis, outputs text report | 2-3 weeks |
-| **2** | Voice Interview Layer | Agent conducts real Teams voice conversations with CAMs; captures structured + unstructured data | 4-6 weeks |
-| **3** | Full Automation Loop | End-to-end: scheduled trigger → interviews → update → analysis → output → dashboard | 4-6 weeks |
-| **4** | Q&A Interface | PM can ask the agent natural language questions about the schedule at any time | 3-4 weeks |
-| **5** | Production Hardening | Containerization, security review, ITAR compliance, deployment playbook, customer handoff | 4-6 weeks |
+| Phase | Name | Description | Duration Estimate | Status |
+|---|---|---|---|---|
+| **1** | Proof of Concept | Local agent reads .mpp, parses tasks, simulates CAM input, runs analysis, outputs text report | 2-3 weeks | ✅ Complete |
+| **2** | Voice Interview Layer | Agent conducts real Teams voice conversations with CAMs; captures structured + unstructured data | 4-6 weeks | ✅ Complete |
+| **3** | Full Automation Loop | End-to-end: scheduled trigger → interviews → update → analysis → output → dashboard | 4-6 weeks | ✅ Complete |
+| **4** | Q&A Interface | PM can ask the agent natural language questions about the schedule at any time | 3-4 weeks | ✅ Complete |
+| **5** | Production Hardening | Containerization, security review, ITAR compliance, deployment playbook, customer handoff | 4-6 weeks | ✅ Complete |
+| **6** | Productionization | Observability, security hardening, recovery, redundancy, IMS audit trail, first customer pilot | 8-12 weeks | ⏳ Planning |
 
-**Total estimated duration:** 17-25 weeks (4-6 months)
+**Total estimated duration:** 25-37 weeks (6-9 months)
 
 ---
 
@@ -609,12 +610,186 @@ The agent is ready to deploy at a real client. It is containerized, secured, doc
 - [ ] Deployment must complete in under 4 hours following the playbook
 
 #### 5.7 — Phase 5 Acceptance Test
-- [x] Full end-to-end test on development environment — 242 tests passing (2026-04-26)
+- [x] Full end-to-end test on development environment — 255 tests passing (2026-05-03)
 - [x] Security review sign-off — RBAC, rate limiting, data retention, dependency audit documented in SECURITY.md; accepted by John Forbes 2026-04-26
 - [x] All documentation complete and reviewed — DEPLOYMENT.md, OPERATIONS.md, SECURITY.md, API.md, CONFIGURATION.md, CHANGELOG.md, TEST-PROCEDURE.md
 - [ ] Deployment playbook verified by independent tester — **pending** (Section 5.6)
 - [ ] Full end-to-end test on production deployment (containerized, clean machine)
 - [ ] **Program complete — ready for first customer deployment** 🎉
+
+---
+
+## PHASE 6 — PRODUCTIONIZATION
+
+### Objective
+
+Transform the IMS Agent from a proven development system into a hardened, observable, recoverable production service ready for deployment at a real defense contractor. Phase 5 proved the system works correctly; Phase 6 proves it stays working under real-world conditions — outages, credential rotation, growing data volumes, audit demands, and multi-program scale.
+
+**Phase Gate:** The system has been running unattended in a production-like environment for 30 days with zero unrecovered failures, a complete audit trail, and a verified disaster recovery procedure that meets the customer's RTO/RPO requirements.
+
+---
+
+### Phase 6 Checklist
+
+#### 6.1 — Observability
+
+##### Metrics & Dashboards
+- [ ] Expose Prometheus-format metrics endpoint (`GET /metrics?format=prometheus`) alongside the existing JSON endpoint
+- [ ] Define key SLIs: cycle success rate, cycle duration P50/P95, Q&A response latency P50/P95, interview completion rate, CAM response rate per cycle
+- [ ] Deploy Grafana (or equivalent) with pre-built dashboards for each SLI
+- [ ] Alert rules: cycle failure → PagerDuty/Slack within 5 minutes; cycle duration > 30 min → warning; CAM response rate < 60% → warning
+
+##### Distributed Tracing
+- [ ] Instrument key code paths with OpenTelemetry spans: cycle start/end, per-CAM interview, LLM call, IMS write, SRA run
+- [ ] Export traces to a compatible backend (Jaeger, Tempo, or Datadog APM)
+- [ ] Trace IDs injected into structured log output so logs and traces correlate
+
+##### Log Aggregation
+- [ ] Deploy log aggregation (Datadog, ELK, or CloudWatch) in target environment
+- [ ] Configure `LOG_FORMAT=json` and ship logs from all containers
+- [ ] Define saved searches for operational patterns: cycle complete, validation hold, LLM failure, CAM no_response
+- [ ] Log retention policy aligned with data retention policy (default 90 days)
+
+##### Health & Alerting Verification
+- [ ] End-to-end alert test: simulate cycle failure; verify PagerDuty/Slack fires within SLA
+- [ ] Dead man's switch: alert if no successful cycle within `2 × SCHEDULE_PERIOD` (configurable)
+- [ ] `GET /health` extended: include last_cycle_age_seconds, sra_last_run_at, ims_last_write_at
+
+---
+
+#### 6.2 — Security Hardening
+
+##### Secrets Management
+- [ ] Replace `.env` file with a secrets manager (HashiCorp Vault, AWS Secrets Manager, or Azure Key Vault) for all production deployments
+- [ ] Implement secret rotation procedures: document rotation steps for ANTHROPIC_API_KEY, Teams bot credentials, SMTP password
+- [ ] Rotation must not require downtime — secrets fetched at use time, not at import time (fixes TD-014 as a side effect)
+- [ ] Audit log entry generated every time a secret is accessed
+
+##### Network Security
+- [ ] mTLS between all internal services (scheduler ↔ dashboard, Graph responder ↔ relay endpoint)
+- [ ] Firewall rules: agent can only reach allowlisted external endpoints (Anthropic API, ElevenLabs, Slack, SMTP, Azure Bot Service)
+- [ ] VPN or private network required for production deployment; no public exposure of `/internal/*` endpoints
+- [ ] Reverse proxy (nginx or Caddy) in front of FastAPI: TLS termination, rate limiting at network layer
+
+##### Compliance
+- [ ] CMMC Level 2 gap analysis: document controls required vs implemented; assign owner and target date for each gap
+- [ ] ITAR compliance checklist: confirm on-prem LLM is deployed and `LLM_BASE_URL` is set before any ITAR data enters the system
+- [ ] Independent security review: third-party penetration test of the deployed system (required before first customer data ingestion)
+- [ ] SIEM integration: forward security events (auth failures, rate limit hits, admin actions) to customer's SIEM
+
+##### Access Control
+- [ ] Replace hardcoded API key model with short-lived JWTs or OAuth2 client credentials for production
+- [ ] CAM identity federation: map CAM Teams identities to their IMS task assignments via the customer's AAD, not a local JSON file
+- [ ] Admin actions (purge, approve) require MFA-backed authentication in production
+
+---
+
+#### 6.3 — Recovery
+
+##### Backup Procedures
+- [ ] IMS XML backup: after every successful cycle write, copy the updated IMS to an off-node backup location (S3, Azure Blob, or NFS share); retain 90 days of versioned backups
+- [ ] Configuration backup: `cam_directory.json`, `cam_identity_map.json`, `.env` (excluding secrets), Docker Compose files — backed up to the same location on every change
+- [ ] Cycle history backup: `cycle_history.json` backed up daily; retained for program lifetime
+- [ ] Automated backup verification: daily job that downloads the latest backup and verifies it is valid JSON / parseable XML
+
+##### Disaster Recovery Runbook
+- [ ] Document RTO target (Recovery Time Objective): maximum acceptable downtime per incident
+- [ ] Document RPO target (Recovery Point Objective): maximum acceptable data loss (i.e., how many cycles can we lose?)
+- [ ] Write step-by-step DR runbook: start from a clean machine, restore from backup, verify system health — must complete within RTO
+- [ ] Test DR runbook: have someone who did not write it execute it on a clean machine; document gaps and fix them
+- [ ] DR runbook includes: container re-pull, secret injection, data restore, smoke test, handoff checklist
+
+##### Graceful Failure Modes
+- [ ] LLM API failure: cycle pauses at synthesis step, alerts PM, retries up to 3 times with exponential backoff before failing the cycle (not silently producing a report with missing synthesis)
+- [ ] Partial CAM failure: cycle proceeds with available data; missing CAMs flagged in report with escalation notice; does not block distribution
+- [ ] IMS write failure: cycle state is preserved; `POST /api/approvals/{id}/approve` endpoint allows re-running the write step without re-interviewing CAMs
+- [ ] Process crash recovery: on restart, `CycleRunner` checks for an in-progress cycle lock and resumes from the last completed phase (requires phase-level checkpointing)
+
+---
+
+#### 6.4 — Redundancy
+
+##### High-Availability Deployment
+- [ ] Evaluate HA requirements with the customer: single-instance with fast recovery vs active-active vs active-passive
+- [ ] If HA is required: deploy two instances behind a load balancer; implement distributed leader election for the scheduler (only one instance fires the cron at a time — e.g., via a distributed lock in Redis or PostgreSQL advisory lock)
+- [ ] `ChatInterviewManager` sessions must be persisted to shared storage (Redis or PostgreSQL) if HA is required, so a failover instance can resume in-flight interviews
+
+##### Database Backend
+- [ ] Evaluate replacing JSON file state with PostgreSQL for production scale (addresses TD-003, TD-013, TD-016 simultaneously)
+- [ ] If PostgreSQL adopted: schema for cycle_history, dashboard_state, pending_approvals, cam_sessions; SQLAlchemy ORM; Alembic migrations
+- [ ] JSON file fallback retained for single-machine deployments (no external DB dependency for dev/small deployments)
+
+##### Container Orchestration
+- [ ] Evaluate Kubernetes vs Docker Compose for target customer environment
+- [ ] If Kubernetes: Helm chart with configurable replicas, resource requests/limits, PersistentVolumeClaims for data, Secrets for credentials
+- [ ] Liveness probe: `GET /health` returns 200 within 5 seconds
+- [ ] Readiness probe: `GET /health` returns `state_file_present: true`
+
+---
+
+#### 6.5 — IMS Audit Trail & Compare Files
+
+##### Human-Auditable Diffs
+- [ ] After every cycle IMS write, generate a structured diff file: `data/ims_exports/{cycle_id}_diff.json` containing per-task changes (task_id, task_name, cam_name, field, old_value, new_value, change_reason)
+- [ ] Human-readable diff report: `data/ims_exports/{cycle_id}_diff.md` — Markdown table format, suitable for program review email attachment
+- [ ] Dashboard "What Changed" view: `GET /api/diff/{cycle_id}` returns the structured diff; dashboard renders it as a sortable table
+- [ ] Diff includes metadata: cycle_id, timestamp, interviewer (always "ATLAS Scheduler"), approver (if validation-held cycle)
+
+##### Change Tracking
+- [ ] Every IMS field write logged with: task_id, field, old_value, new_value, cam_name, cycle_id, timestamp (append-only log file)
+- [ ] Cumulative change report: `GET /api/changes?from={cycle_id}&to={cycle_id}` returns all field changes between two cycles
+- [ ] Baseline drift report: quarterly comparison of current schedule vs the original baseline (percent complete, float, milestone dates)
+
+##### Approval Workflow Extension
+- [ ] PM can view the structured diff for any validation-held cycle before approving
+- [ ] Approval captures: approver name, timestamp, optional comment
+- [ ] Rejection captures: reviewer name, timestamp, reason; rejected cycle data is archived (not deleted)
+- [ ] All approval/rejection events written to the append-only audit log
+
+---
+
+#### 6.6 — First Customer Pilot
+
+##### Onboarding Checklist
+- [ ] Customer IT provides: M365 tenant ID, Teams admin consent for bot, SMTP relay credentials, network allowlist for agent egress
+- [ ] Customer planner provides: real IMS file (MS Project XML export), CAM name list, reporting cycle (weekly/biweekly/monthly)
+- [ ] Agent team provisions: Azure Bot Service in customer tenant, CAM accounts (or federation with customer AAD), ngrok replacement with fixed FQDN
+- [ ] Security review: customer ISSO signs off on agent's network posture, data handling, and audit trail before any real data enters the system
+
+##### Pilot Acceptance Criteria
+- [ ] 4 consecutive unattended cycles with real CAM data, zero manual interventions
+- [ ] Planner confirms schedule data accuracy matches or exceeds the manual Excel process
+- [ ] PM asks 10 questions via Q&A interface; all answered accurately; zero hallucinations
+- [ ] DR runbook verified: standby engineer restores from backup within RTO on a simulated outage
+- [ ] Audit diff reviewed by planner after each cycle; all changes traceable to CAM interviews
+
+##### Feedback Capture
+- [ ] Weekly check-in with pilot PM and planner: what's working, what's confusing, what's missing
+- [ ] Document feedback in `PHASE6-FEEDBACK.md`
+- [ ] Triage feedback into: immediate fix (blocks adoption), Phase 6.x (near-term backlog), future phase (roadmap)
+
+---
+
+### Phase 6 Dependencies
+
+| Dependency | Owner | Status |
+|------------|-------|--------|
+| Customer IT engagement (M365, network allowlist) | John Forbes + Customer | ⏳ Not started |
+| Real IMS file from customer planner | Customer | ⏳ Not started |
+| Azure subscription for production Bot Service | John Forbes | ⏳ Not started |
+| Secrets manager decision (Vault vs AWS vs Azure) | John Forbes | ⏳ Not started |
+| Observability platform (Grafana vs Datadog vs CloudWatch) | John Forbes | ⏳ Not started |
+| Independent security review / penetration test | Third party | ⏳ Not started |
+
+### Phase 6 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Customer IT takes > 4 weeks to enable bot / allowlist | High | High | Start IT engagement at Phase 6 kickoff; have fallback (email-based CAM input) ready |
+| Real IMS file too complex for current parser (non-standard MS Project features) | Medium | High | Test with customer's actual export during onboarding; expand parser as needed |
+| Real CAMs resistant to voice/chat interviews | Medium | Medium | Short (<5 min) interview; allow async (CAM replies when ready, not during a live call); demonstrate time savings vs spreadsheet |
+| Customer security review identifies blockers | Medium | High | Share SECURITY.md and ARCHITECTURE.md early; pre-brief ISSO before formal review |
+| On-prem LLM quality insufficient for synthesis tasks | Low | Medium | Test with Llama 3 / Mistral against sample IMS before committing; keep Anthropic API as fallback for non-ITAR programs |
 
 ---
 
