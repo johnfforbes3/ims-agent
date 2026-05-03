@@ -438,7 +438,7 @@ class TestConversationalContext:
         assert agent.state == InterviewState.CONFIRM
 
         # Force the correction extraction to fail (simulates LLM unavailable / parse error)
-        with patch.object(agent, "_extract_and_apply_correction", return_value=False):
+        with patch.object(agent, "_extract_and_apply_correction", return_value=[]):
             turn = agent.process(
                 "Actually, AI-07 is wrong — it should be at 45%, not 30%"
             )
@@ -458,7 +458,8 @@ class TestConversationalContext:
         agent.process("no")   # no risk flag
         assert agent.state == InterviewState.CONFIRM
 
-        with patch.object(agent, "_extract_and_apply_correction", return_value=True):
+        with patch.object(agent, "_extract_and_apply_correction",
+                          return_value=[{"task_id": "AI-07", "field": "risk_flag"}]):
             turn = agent.process("AI-07 should be risk-flagged, not AI-09")
 
         # Correction was applied → bot stays in CONFIRM to re-confirm
@@ -477,7 +478,8 @@ class TestConversationalContext:
         agent.process("no")
         assert agent.state == InterviewState.CONFIRM
 
-        with patch.object(agent, "_extract_and_apply_correction", return_value=True):
+        with patch.object(agent, "_extract_and_apply_correction",
+                          return_value=[{"task_id": "AI-07", "field": "risk_flag"}]):
             agent.process("AI-07 should be risk-flagged, not AI-09")
 
         assert agent.state == InterviewState.CONFIRM

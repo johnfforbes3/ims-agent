@@ -31,7 +31,7 @@ import os
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -78,7 +78,13 @@ class GraphCAMResponder:
         self._simulator = CAMSimulator(persona)
         self._stop = stop_event or threading.Event()
         self._chat_id: str | None = None
-        self._last_check: datetime = datetime.now(timezone.utc)
+        # Initialize _last_check 30 s before now so we catch any greeting the
+        # cycle_runner sent just before this responder was created.  The cycle
+        # sends all greetings first, then initialises responders — so for later
+        # CAMs there can be a several-second gap where the greeting is older than
+        # the responder's start time.  Without the lookback the greeting is
+        # filtered as "already processed" and the interview stalls.
+        self._last_check: datetime = datetime.now(timezone.utc) - timedelta(seconds=30)
         self._token_cache = msal.SerializableTokenCache()
         self._load_token_cache()
         logger.info("action=responder_init cam=%s email=%s", cam_name, email)

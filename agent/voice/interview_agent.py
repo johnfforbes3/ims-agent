@@ -157,8 +157,9 @@ class InterviewAgent:
         self._current_blocker: str = ""
         self._current_risk_flag: bool = False
         self._current_risk_desc: str = ""
-        # Track milestones already flagged — don't ask the same risk question twice
-        self._flagged_milestones: set[str] = set()
+        # Track milestones already asked about — stores the risk answer so behind-schedule
+        # tasks reuse the same YES/NO rather than re-asking or auto-flagging True
+        self._flagged_milestones: dict[str, bool] = {}
         # Last confirmation message text — stored so correction prompts have full context
         self._last_confirmation_text: str = ""
         # Pending one-liner to prepend to the next task intro when the CAM asks a question
@@ -295,8 +296,11 @@ class InterviewAgent:
         if pct < expected - 10:  # Meaningfully behind schedule
             milestone_hint = self._nearest_milestone_name()
             if self._current_blocker:
-                # Blocker already captured — go straight to risk question (or skip if seen)
-                if milestone_hint in self._flagged_milestones:
+                # Blocker already captured — go straight to risk question, or skip if the
+                # milestone is already confirmed AT RISK (True).  We do NOT skip for a prior
+                # NO answer: a different task may have its own independent risk even though a
+                # previous task under the same milestone was not a risk.
+                if self._flagged_milestones.get(milestone_hint) is True:
                     self._current_risk_flag = True
                     return self._finalise_task_and_advance(pct)
                 return self._agent_turn(
@@ -309,7 +313,23 @@ class InterviewAgent:
                 f"Got it, {pct}%. What's the main thing holding that up?",
                 InterviewState.AWAITING_BLOCKER,
             )
-        # On track — finalise without asking follow-up
+
+        # On track percentage-wise — but if a blocker was mentioned, still ask about risk.
+        # A task can be "on schedule" (e.g. 0% with 0% expected) yet have a blocker that
+        # threatens future milestones (e.g. vendor delay, dependency not started).
+        # We do NOT apply _flagged_milestones deduplication here: on-track tasks may have
+        # independent blockers for the same milestone (e.g. different vendor dependencies),
+        # so each deserves its own risk assessment rather than inheriting a prior NO answer.
+        if self._current_blocker:
+            milestone_hint = self._nearest_milestone_name()
+            if classification.get("cam_question"):
+                self._cam_question_note = _cam_question_ack()
+            return self._agent_turn(
+                f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
+                InterviewState.AWAITING_RISK_FLAG,
+            )
+
+        # On track and no blocker — finalise without further follow-up
         return self._finalise_task_and_advance(pct)
 
     def _handle_blocker(self, norm: str, raw: str) -> AgentTurn:
@@ -325,7 +345,9 @@ class InterviewAgent:
         if classification.get("cam_question"):
             self._cam_question_note = _cam_question_ack()
         milestone_hint = self._nearest_milestone_name()
-        if milestone_hint in self._flagged_milestones:
+        # Only skip the risk question when the milestone is already confirmed AT RISK.
+        # A prior NO answer does not prevent subsequent tasks from being real risks.
+        if self._flagged_milestones.get(milestone_hint) is True:
             self._current_risk_flag = True
             return self._finalise_task_and_advance(self._current_pct)
         return self._agent_turn(
@@ -334,9 +356,7 @@ class InterviewAgent:
         )
 
     def _handle_risk_flag(self, norm: str, raw: str) -> AgentTurn:
-        # Always mark this milestone as seen — never ask the same risk question twice
         milestone = self._nearest_milestone_name()
-        self._flagged_milestones.add(milestone)
 
         classification = _classify_cam_response(
             state="risk_flag",
@@ -350,7 +370,12 @@ class InterviewAgent:
         if classification.get("cam_question"):
             self._cam_question_note = _cam_question_ack()
 
-        if classification["sentiment"] == "affirmative":
+        is_risk = classification["sentiment"] == "affirmative"
+        # Record this milestone's risk answer — behind-schedule tasks that hit the same
+        # milestone later reuse this answer (True/False) instead of re-asking
+        self._flagged_milestones[milestone] = is_risk
+
+        if is_risk:
             self._current_risk_flag = True
             return self._agent_turn(
                 "What would it take to clear that?",
@@ -384,16 +409,21 @@ class InterviewAgent:
         )
         if has_correction:
             # Attempt to extract, apply, and re-confirm the correction with full context
-            corrections_applied = self._extract_and_apply_correction(raw)
-            if corrections_applied and self._confirm_retry_count < 2:
+            applied_corrections = self._extract_and_apply_correction(raw)
+            if applied_corrections and self._confirm_retry_count < 2:
                 self._confirm_retry_count += 1
                 logger.info("action=confirm_correction_applied cam=%s retry=%d",
                             self._cam_name, self._confirm_retry_count)
-                return self._re_request_confirmation()
+                # Detect whether any risk_flag fields actually changed, so the
+                # re-confirmation can use the right opener (flag change vs notes update)
+                flags_changed = any(
+                    c.get("field") == "risk_flag" for c in applied_corrections
+                )
+                return self._re_request_confirmation(flags_changed=flags_changed)
             # Couldn't extract specific correction or retry cap hit — close gracefully
             logger.info("action=confirm_correction_noted cam=%s correction=%r closing",
                         self._cam_name, raw[:120])
-            return self._close_interview()
+            return self._close_interview_noted()
 
         if self._confirm_retry_count < 2:
             self._confirm_retry_count += 1
@@ -416,11 +446,11 @@ class InterviewAgent:
     # Correction helpers
     # ------------------------------------------------------------------
 
-    def _extract_and_apply_correction(self, raw: str) -> bool:
+    def _extract_and_apply_correction(self, raw: str) -> list[dict]:
         """Use LLM with full conversation context to extract and apply a CAM correction.
 
-        Returns True if at least one correction was successfully applied to results.
-        Falls back gracefully (returns False) if the LLM call fails — the caller
+        Returns the list of applied corrections (empty list on failure or no changes).
+        Falls back gracefully (returns []) if the LLM call fails — the caller
         will then close the interview gracefully rather than re-confirming.
         """
         task_summary = _format_task_results(self._results, self._tasks)
@@ -440,11 +470,21 @@ class InterviewAgent:
             if raw_resp.startswith("```"):
                 raw_resp = re.sub(r"^```[a-z]*\n?", "", raw_resp)
                 raw_resp = re.sub(r"\n?```$", "", raw_resp)
-            result = json.loads(raw_resp)
+            raw_resp = raw_resp.strip()
+            # Primary parse — try as-is
+            try:
+                result = json.loads(raw_resp)
+            except json.JSONDecodeError:
+                # LLM sometimes appends explanation after the JSON object.
+                # Extract the outermost {...} block and retry.
+                m = re.search(r'\{.*\}', raw_resp, re.DOTALL)
+                if not m:
+                    raise
+                result = json.loads(m.group(0))
 
             corrections = result.get("corrections", [])
             if not corrections:
-                return False
+                return []
 
             # Build a lookup from name-prefix (e.g. "AI-07") to numeric task ID
             # so corrections referencing "AI-07" can match result with task_id="62"
@@ -455,7 +495,7 @@ class InterviewAgent:
                 if m:
                     name_prefix_to_id[m.group(1).upper()] = str(t["task_id"]).upper()
 
-            applied = 0
+            applied: list[dict] = []
             for correction in corrections:
                 raw_id = str(correction.get("task_id", "")).strip()
                 # Resolve name-prefix aliases (e.g. "AI-07" → "62")
@@ -470,57 +510,74 @@ class InterviewAgent:
                             res.percent_complete = int(new_value)
                             logger.info("action=correction_applied task=%s field=pct %s→%s",
                                         task_id, old_val, int(new_value))
-                            applied += 1
+                            applied.append({"task_id": task_id, "field": field})
                         elif field == "risk_flag" and isinstance(new_value, bool):
                             old_val = res.risk_flag
                             res.risk_flag = new_value
                             logger.info("action=correction_applied task=%s field=risk_flag %s→%s",
                                         task_id, old_val, new_value)
-                            applied += 1
+                            applied.append({"task_id": task_id, "field": field})
                         elif field == "risk_description" and isinstance(new_value, str):
                             res.risk_description = new_value
                             logger.info("action=correction_applied task=%s field=risk_desc updated", task_id)
-                            applied += 1
+                            applied.append({"task_id": task_id, "field": field})
                         elif field == "blocker" and isinstance(new_value, str):
                             res.blocker = new_value
                             logger.info("action=correction_applied task=%s field=blocker updated", task_id)
-                            applied += 1
+                            applied.append({"task_id": task_id, "field": field})
                         break
 
-            if applied > 0:
-                logger.info("action=corrections_total cam=%s applied=%d", self._cam_name, applied)
-            return applied > 0
+            if applied:
+                logger.info("action=corrections_total cam=%s applied=%d", self._cam_name, len(applied))
+            return applied
 
         except Exception as exc:
             logger.warning("action=correction_extract_failed cam=%s error=%s", self._cam_name, exc)
-            return False
+            return []
 
-    def _re_request_confirmation(self) -> AgentTurn:
-        """Re-render the confirmation summary after corrections have been applied."""
+    def _re_request_confirmation(self, flags_changed: bool = True) -> AgentTurn:
+        """Re-render the confirmation summary after corrections have been applied.
+
+        Args:
+            flags_changed: True if risk_flag fields changed (not just risk_desc/blocker).
+                           When False, the opener acknowledges notes were updated rather
+                           than implying the flag list itself changed.
+        """
         all_risks = [r for r in self._results if r.risk_flag]
-        material_risks = [r for r in all_risks if self._is_material_risk(r)]
 
-        # Build name map: numeric task_id → spoken short name (e.g. "AI-07 Deploy…" → "AI-07")
+        # Build name map: numeric task_id → short task code (e.g. "AI-07"), falling
+        # back to spoken name if no code prefix is present.
         def _short_name(task_id: str) -> str:
             for t in self._tasks:
                 if str(t["task_id"]) == str(task_id):
-                    return _spoken_task_name(t["name"])
+                    name = t.get("name", "")
+                    m = re.match(r'^([A-Za-z]{2,4}-\d{2,3})\b', name)
+                    if m:
+                        return m.group(1)   # e.g. "AI-07"
+                    return _spoken_task_name(name)
             return str(task_id)
 
-        parts: list[str] = ["Got it — updated."]
-        if material_risks:
-            risk_names = _natural_list([_short_name(r.task_id) for r in material_risks])
-            parts.append(f"I now have {risk_names} flagged as schedule risks.")
-        elif all_risks:
-            count = len(all_risks)
-            risk_names = _natural_list([_short_name(r.task_id) for r in all_risks[:3]])
-            if count > 3:
-                parts.append(f"I'm noting {count} schedule risks ({risk_names} and {count - 3} more).")
-            else:
-                parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''} ({risk_names}).")
+        if flags_changed:
+            opener = "Got it — updated."
         else:
-            parts.append("Clean — no risk flags.")
-        parts.append("Does that look right now?")
+            opener = "Got it — I've updated my notes on that."
+
+        parts: list[str] = [opener]
+        if all_risks:
+            count = len(all_risks)
+            if count > 10:
+                # Too many to name — use count only
+                parts.append(f"I now have {count} tasks flagged as schedule risks.")
+            else:
+                # List all of them explicitly so the CAM can verify each one
+                risk_names = _natural_list([_short_name(r.task_id) for r in all_risks])
+                if flags_changed:
+                    parts.append(f"I now have {risk_names} flagged as schedule risks.")
+                else:
+                    parts.append(f"The flagged risks are still {risk_names}.")
+        else:
+            parts.append("Clean — no risk flags now.")
+        parts.append("Does that look right?")
 
         text = " ".join(parts)
         self._last_confirmation_text = text
@@ -620,37 +677,42 @@ class InterviewAgent:
                     self._cam_name, result.task_id)
         self._task_index += 1
         if self._task_index >= len(self._tasks):
-            full_text = text + " " + self._close_interview().text
-            return self._agent_turn(full_text, InterviewState.COMPLETE)
+            # Last task — still show the confirmation summary so the CAM can
+            # review what was captured (rather than jumping straight to close).
+            confirm_turn = self._request_confirmation()
+            return self._agent_turn(text + " " + confirm_turn.text, confirm_turn.state)
         advance_turn = self._introduce_current_task()
         return self._agent_turn(text + " " + advance_turn.text, advance_turn.state)
 
     def _request_confirmation(self) -> AgentTurn:
         n = len(self._results)
         all_risks = [r for r in self._results if r.risk_flag]
-        # Only name tasks that are materially behind schedule (> 10 pts gap)
-        material_risks = [r for r in all_risks if self._is_material_risk(r)]
         no_resp = [r for r in self._results if r.status == "no_response"]
 
-        task_name_map = {t["task_id"]: _spoken_task_name(t["name"]) for t in self._tasks}
+        # Build short names (task code like "AI-07") for listing risks
+        def _code_name(task_id: str) -> str:
+            for t in self._tasks:
+                if str(t["task_id"]) == str(task_id):
+                    name = t.get("name", "")
+                    m = re.match(r'^([A-Za-z]{2,4}-\d{2,3})\b', name)
+                    if m:
+                        return m.group(1)
+                    return _spoken_task_name(name)
+            return str(task_id)
 
         parts: list[str] = [f"Alright, I think I've got all {n} of your tasks."]
-        if material_risks:
-            total_material = len(material_risks)
-            if total_material >= n:
-                # Every task is a schedule risk — common shared-blocker scenario
-                parts.append(f"All {n} are flagged — same blocker chain running through everything.")
-            elif total_material > 2:
-                # Many risks — use count rather than naming them all
-                parts.append(f"I'm flagging {total_material} tasks as schedule risks.")
-            else:
-                risk_names = _natural_list(
-                    [task_name_map.get(r.task_id, r.task_id) for r in material_risks]
-                )
-                parts.append(f"I'm flagging {risk_names} as a schedule risk.")
-        elif all_risks:
+        if all_risks:
             count = len(all_risks)
-            parts.append(f"I'm noting {count} schedule risk{'s' if count > 1 else ''} for your review.")
+            if count >= n:
+                # Every task is a schedule risk — common shared-blocker scenario
+                parts.append(f"All {n} are flagged as schedule risks.")
+            elif count > 10:
+                # Too many to name individually — use count only
+                parts.append(f"I'm flagging {count} tasks as schedule risks.")
+            else:
+                # List all flagged tasks explicitly so the CAM can verify each one
+                risk_names = _natural_list([_code_name(r.task_id) for r in all_risks])
+                parts.append(f"I'm flagging {risk_names} as schedule risks.")
         else:
             # No risk flags — call it out so the CAM can push back if they disagree
             # Mention any tasks with active blockers even if not flagged as risks
@@ -685,6 +747,22 @@ class InterviewAgent:
             f"Got it, {first_name} — I'll update the schedule. Appreciate it!",
             f"Great, {first_name} — all set on my end. Talk soon!",
             f"Thanks {first_name}, that's everything I need. Have a good rest of your day!",
+        ]
+        return self._agent_turn(random.choice(closes), InterviewState.COMPLETE)
+
+    def _close_interview_noted(self) -> AgentTurn:
+        """Close gracefully when corrections were logged but not fully reconciled.
+
+        Used when the CAM's dispute couldn't be fully applied (e.g. requesting date
+        fields the agent doesn't hold) or when the correction retry limit was reached.
+        Acknowledges the feedback rather than claiming 'all set'.
+        """
+        import random
+        first_name = self._cam_name.split()[0]
+        closes = [
+            f"Noted, {first_name} — I'll flag that for the PM team to follow up. Thanks for the detail!",
+            f"Got it, {first_name} — I've logged your feedback for review. The team will come back to you on the specifics.",
+            f"Understood, {first_name} — I'll make sure that gets flagged. Appreciate you pushing on it!",
         ]
         return self._agent_turn(random.choice(closes), InterviewState.COMPLETE)
 
@@ -778,11 +856,18 @@ def _extract_percent(text: str) -> int | None:
             return val
 
     # Priority 3: word numbers (zero / ten / ... / hundred)
+    # Also explicitly handle "hasn't started" / "nothing started" phrases → 0%
     word_map = {
         "three quarters": 75, "three-quarters": 75,
         "zero": 0, "ten": 10, "twenty": 20, "thirty": 30, "forty": 40,
         "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
         "hundred": 100, "half": 50, "quarter": 25,
+        # Explicit "not started" patterns → 0
+        "hasn't started": 0, "haven't started": 0, "not started": 0,
+        "nothing started": 0, "nothing has started": 0, "hasn't been started": 0,
+        "nothing starts on it": 0, "can't start on it": 0, "cannot start on it": 0,
+        "no progress": 0, "zero progress": 0, "can't start": 0, "nothing to report": 0,
+        "not kicked off": 0, "not been kicked off": 0, "hasn't kicked off": 0,
     }
     for phrase, val in sorted(word_map.items(), key=lambda x: -len(x[0])):
         if phrase in text:
@@ -984,9 +1069,20 @@ Return ONLY a JSON object with these fields:
 Important rules:
 - For "percent": only capture the percentage the CAM is reporting for the task being asked about.
   Ignore any other task percentages mentioned in passing (e.g. "SE-06 is only at 10%").
+  If the CAM says the task hasn't started, nothing has started on it, or no progress yet
+  (e.g. "hasn't started", "nothing started", "not started", "zero progress", "nothing started
+  on it", "can't start yet"), that means percent=0 — do NOT return null for those cases.
+  Only return null if the CAM genuinely cannot give any completion estimate.
 - For "sentiment": base this on whether the CAM affirmed or denied what was specifically asked.
   If the CAM gave a nuanced answer that leans yes, use "affirmative".
   If they pushed back or said no, use "negative". If truly ambiguous, "unclear".
+  IMPORTANT for state="awaiting_risk_flag": the question asks if something "puts [milestone] at risk."
+  If the CAM confirms the task IS a schedule risk — using any phrasing like "is a schedule risk",
+  "live schedule risk", "puts the project at risk", "holds up delivery", "blocks the program",
+  "will delay", or similar — treat that as AFFIRMATIVE. Do not mark it negative just because
+  the CAM names a different milestone or downstream task; they may be describing the same risk
+  in their own terms. Mark it negative only if they clearly say the task does NOT create
+  schedule risk (e.g. "no", "not a risk", "won't delay anything", "just a sequencing issue").
 - For "blocker_mentioned": true if the CAM mentioned anything that is preventing, delaying,
   blocking, or holding up progress — even if phrased indirectly.
 - Use the conversation history to understand references to prior context (e.g. "that task"
@@ -1019,7 +1115,7 @@ Return ONLY a JSON object:
   "has_correction": <true if the CAM is correcting specific captured data>,
   "corrections": [
     {{
-      "task_id": "<task ID exactly as it appears in the conversation, e.g. AI-07, SE-03>",
+      "task_id": "<task ID exactly as it appears in the conversation, e.g. AI-07, SE-03, NET-11>",
       "field": "percent_complete" | "risk_flag" | "risk_description" | "blocker",
       "new_value": <corrected value — integer for percent_complete, boolean for risk_flag, string for others>,
       "note": "<one sentence description of what changed>"
@@ -1031,11 +1127,15 @@ Rules:
 - If the CAM affirms (yes, looks good, correct, that's right), sentiment="affirmative", has_correction=false, corrections=[]
 - If the CAM says "no" or "wrong" without specifying what to fix, sentiment="negative", has_correction=false, corrections=[]
 - If the CAM corrects a specific task's data, set has_correction=true and list each change
-- If the CAM says task X should be flagged INSTEAD of task Y, add TWO corrections:
-    {{"task_id": "X", "field": "risk_flag", "new_value": true, "note": "CAM says X is the primary risk"}},
-    {{"task_id": "Y", "field": "risk_flag", "new_value": false, "note": "CAM says Y is not the primary risk"}}
+- If the CAM says task X should be flagged INSTEAD of task Y (e.g. "AI-12 isn't a risk, NET-11 is"):
+    add TWO corrections — one to unflag the wrong task, one to flag the right task:
+    {{"task_id": "AI-12", "field": "risk_flag", "new_value": false, "note": "CAM says AI-12 is not a risk"}},
+    {{"task_id": "NET-11", "field": "risk_flag", "new_value": true, "note": "CAM says NET-11 is the real risk"}}
+- If the CAM says a task IS a risk that wasn't captured: add one correction with risk_flag=true for that task
+- If the CAM says a task is NOT a risk that was captured: add one correction with risk_flag=false for that task
 - Only include corrections for tasks actually mentioned by the CAM in their response
-- Use the exact task ID format from the conversation (e.g. "AI-07", not "AI7" or "ai-07")
+- Use the exact task ID format from the conversation (e.g. "AI-07", "NET-11" — not "AI7", "ai-07", or bare numbers)
+- Task IDs in this program use the format: 2-4 letters, hyphen, 2-3 digits (e.g. AI-07, NET-11, SE-03, DOC-08)
 - Do not invent corrections — only extract what the CAM explicitly stated"""
 
 
