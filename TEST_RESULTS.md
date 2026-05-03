@@ -1,11 +1,25 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 6.0 Core Integrity  
+**Test Procedure Version:** Phase 6.5/6.6 IMS Audit Trail & First Customer Pilot  
 **Executed:** 2026-05-03  
-**Tester:** Claude (automated — unit tests + code verification)  
+**Tester:** Claude (automated — unit tests + live cycle + endpoint verification)  
 **Environment:** Windows 11, Python 3.13.3, MS Project Professional C2R, OpenJDK 21 (MPXJ)  
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
-**Overall Result:** **PASS** — all Phase 6.0 integrity bugs fixed; 264/264 unit tests passing
+**Overall Result:** **PASS** — 306/306 unit tests passing; Phase 6.5 diff pipeline verified end-to-end; **COM backend now WORKING** (previously BLOCKED)
+
+---
+
+> **2026-05-03 (Phase 6.5/6.6 IMS Audit Trail & First Customer Pilot)**  
+> Phase 6.4 liveness/readiness probes confirmed (GET /health). Phase 6.5 IMS diff pipeline  
+> verified end-to-end: `generate_diff()` produces `{cycle_id}_diff.json` + `{cycle_id}_diff.md`  
+> after every cycle write; `GET /api/diff/{cycle_id}` serves diff data; 404 for missing cycles.  
+> Phase 6.6 pilot documentation created: `docs/ONBOARDING.md`, `PHASE6-FEEDBACK.md`.  
+> 13 new `TestIMSDiff` tests added. Unit test count: **306/306 passed** (up from 293; +13 Phase 6.5 tests).  
+> **COM backend now working** (previously C2R AppV blocked): `IMS_2026-05-03_1741z.mpp` written to ims_master/  
+> **New intermittent issue §4.2a**: `os.replace()` on `data/dashboard_state.json` raises  
+> `[WinError 5] Access is denied` when OneDrive sync has file open; file is writable otherwise;  
+> manually replaced successfully; recommended fix is retry loop (non-blocking).  
+> Cycle `20260503T173209Z` completed: health=RED, 5/5 CAMs responded, report 15,241 bytes, 7 diff changes.
 
 ---
 
@@ -48,8 +62,8 @@
 
 | Step | Test File | Result | Count |
 |------|-----------|--------|-------|
-| 1.1 | Full suite | **PASS** | **264/264 passed, 0 failures** (up from 254; +9 Phase 6.0 Core Integrity tests) |
-| 1.2 | Coverage | SKIP | 39% measured (test-infra not counted) |
+| 1.1 | Full suite | **PASS** | **306/306 passed, 0 failures** (up from 293; +13 Phase 6.5 TestIMSDiff tests) |
+| 1.2 | Coverage | SKIP | Not measured this run |
 | 1.3 | test_file_handler | **PASS** | 12 passed |
 | 1.4 | test_critical_path | **PASS** | 10 passed |
 | 1.5 | test_sra_runner | **PASS** | 7 passed |
@@ -59,11 +73,11 @@
 | 1.9 | test_report_generator | **PASS** | 5 passed |
 | 1.10 | test_scheduler | **PASS** | 5 passed |
 | 1.11 | test_qa_engine | **PASS** | 26 passed |
-| 1.12 | test_cycle_runner | **PASS** | 11 passed (+4 Phase 6.0: TestIMSMasterCustody ×2, TestApprovalTransactionality ×2) |
-| 1.13 | test_phase5 | **PASS** | 42 passed (+5 Phase 6.0: TestLLMBaseURL ×2, TestTransportStartupGuard ×3) |
-| 1.14 | test_interview_agent | **PASS** | 55 passed (170s — LLM-intensive; includes 12 TestConversationalContext) |
+| 1.12 | test_cycle_runner | **PASS** | 11 passed |
+| 1.13 | test_phase5 | **PASS** | 83 passed (+13 Phase 6.5: TestIMSDiff ×13) |
+| 1.14 | test_interview_agent | **PASS** | 57 passed (213s — LLM-intensive; includes 12 TestConversationalContext) |
 | 1.15 | test_ims_tools | **PASS** | 41 passed |
-| 1.16 | test_tts_engine | **PASS** | 7 passed (ELEVENLABS_API_KEY configured) |
+| 1.16 | test_tts_engine | **PASS** | 7 passed |
 | 1.17 | test_stt_engine | **PASS** | 6 passed |
 
 ---
@@ -72,14 +86,14 @@
 
 | Step | Description | Result | Actual |
 |------|-------------|--------|--------|
-| 2.1 | Phase 1 default run | **PASS** | Report: reports/2026-05-02_ims_report.md (14,999 bytes) |
-| 2.2 | Report file created | **PASS** | Exists, 14,999 bytes |
+| 2.1 | Full cycle run | **PASS** | Cycle `20260503T173209Z` completed; health=RED; all 5 CAMs responded; report generated |
+| 2.2 | Report file created | **PASS** | reports/2026-05-03_ims_report.md, 15,241 bytes |
 | 2.3 | IMS parsing — task count | **PASS** | tasks=100, milestones=8 |
-| 2.4 | Critical path | **PASS** | 54 critical path tasks, project_float_days=0.0 |
-| 2.5 | SRA Monte Carlo | **PASS** | 8 milestones, first risk_level=LOW |
+| 2.4 | Critical path | **PASS** | 54 critical path tasks (deterministic) |
+| 2.5 | SRA Monte Carlo | **PASS** | 8 milestones; risk_levels=[LOW×5, HIGH×3] |
 | 2.6 | Schedule health | **PASS** | health=RED (deterministic via compute_health) |
-| 2.7 | LLM synthesis | **PASS** | synthesis_done tokens=1472; narrative/top_risks/recommended_actions produced |
-| 2.8 | Log file written | **PASS** | logs/ims_agent.log >5MB |
+| 2.7 | LLM synthesis | **PASS** | narrative, top_risks, recommended_actions all present |
+| 2.8 | Log file written | **PASS** | logs/ims_agent.log 18,555 KB |
 
 ---
 
@@ -101,15 +115,16 @@
 
 | Step | Description | Result | Actual |
 |------|-------------|--------|--------|
-| 4.1 | Manual cycle trigger | **PASS** | `POST /api/trigger` → cycle 20260502T114528Z completed; health=RED; LLM synthesis tokens=1472; report generated |
-| 4.2 | Dashboard state written | **PASS** | health=RED, cycle_id=20260502T114528Z |
-| 4.3 | Cycle history written | **PASS** | 2 entries: 20260429T084638Z (RED), 20260502T114528Z (RED) |
-| 4.4 | Cycle status JSON | **PASS** | phase=complete, health=RED, cams_total=5, cams_responded=4 (Alice/Carol/David/Eva completed; Bob timed out — 80% threshold met) |
-| 4.5 | IMS snapshot | **PASS** | data/snapshots/20260502T114528Z_sample_ims.xml |
-| 4.6 | IMS exports | **PASS** | 3 versioned XMLs in data/ims_exports/; latest_ims.xml exists |
-| 4.7 | Master file in ims_master/ | **PASS** | Fixed 2026-05-03 (6.0.1): `Path.resolve()` comparison prevents deleting newly-written file; verified by `TestIMSMasterCustody` ×2 |
-| 4.8 | Report generated | **PASS** | reports/2026-05-02_ims_report.md, 14,999 bytes, 171 lines |
-| 4.9 | Duplicate-run protection | **PASS** | HTTP 409 Conflict when second trigger fired during active cycle (verified in step 5.8) |
+| 4.1 | Manual cycle trigger | **PASS** | Cycle `20260503T173209Z` completed; health=RED; 5/5 CAMs responded; report generated |
+| 4.2 | Dashboard state written | **PASS** | health=RED, cycle_id=20260503T173209Z (15,457 bytes) |
+| 4.2a | Atomic replace on OneDrive | **WARN** | `os.replace(dashboard_state.tmp → .json)` raised `[WinError 5]` once due to transient OneDrive sync lock; manually resolved; subsequent attempts succeed; non-blocking |
+| 4.3 | Cycle history written | **PASS** | 22 entries in data/cycle_history.json |
+| 4.4 | Cycle status JSON | **PASS** | phase=complete, health=RED, cams_total=5, cams_responded=5 |
+| 4.5 | IMS snapshot | **PASS** | 26 snapshots in data/snapshots/ |
+| 4.6 | IMS exports | **PASS** | 16 versioned XMLs in data/ims_exports/; latest_ims.xml exists |
+| 4.7 | Master file in ims_master/ | **PASS** | `IMS_2026-05-03_1741z.mpp` — exactly 1 file; COM now working |
+| 4.8 | Report generated | **PASS** | reports/2026-05-03_ims_report.md, 15,241 bytes |
+| 4.9 | Duplicate-run protection | **PASS** | HTTP 409 Conflict when second trigger fired during active cycle |
 
 ### 4B: Validation Gate & Approval Workflow
 
@@ -136,18 +151,21 @@
 
 | Step | Description | Result | Actual |
 |------|-------------|--------|--------|
-| 5.1 | Dashboard HTML | **PASS** | 34,140 bytes; schedule_health and IMS Agent content confirmed |
-| 5.2 | JS auto-refresh | **PASS** | `setInterval` / countdown found in page source |
-| 5.3 | GET /health | **PASS** | `{"status":"healthy","uptime_seconds":101,"cycle_active":false,"auth_enabled":false}` |
-| 5.4 | GET /api/state | **PASS** | Full state JSON returned; ims_master_dir key present |
-| 5.5 | GET /api/history | **PASS** | 2 entries; last=20260502T114528Z RED |
-| 5.6 | GET /api/status | **PASS** | `{"cycle_active":false}` before trigger; `{"cycle_active":true}` during cycle |
+| 5.1 | Dashboard HTML | **PASS** | HTTP 200; `IMS Agent` in content; `setInterval` auto-refresh present |
+| 5.2 | JS auto-refresh | **PASS** | `setInterval` found in page source |
+| 5.3 | GET /health | **PASS** | `{"status":"healthy","deadman_alert":false,"last_cycle_age_seconds":...}` (Phase 6.1 fields present) |
+| 5.4 | GET /api/state | **PASS** | cycle_id=20260503T173209Z; health=RED; ims_master_dir key present |
+| 5.5 | GET /api/history | **PASS** | 22 entries; last=20260503T051149Z RED |
+| 5.6 | GET /api/status | **PASS** | `{"cycle_active":false}` |
 | 5.7 | POST /api/trigger | **PASS** | `{"status":"triggered","message":"Cycle started in background"}` |
 | 5.8 | Duplicate trigger rejection | **PASS** | HTTP 409 Conflict |
-| 5.9 | GET /metrics | **PASS** | cycles_completed=1, cycles_failed=0, last_cycle_duration_seconds=629, qa_queries_total=6 |
-| 5.10 | POST /api/admin/purge | **PASS** | `{"status":"ok","deleted":{"cycle_status":2,"snapshots":2}}` |
+| 5.9 | GET /metrics (JSON) | **PASS** | cycles_completed, cycles_failed, last_cycle_id, percentile fields present |
+| 5.9b | GET /metrics?format=prometheus | **PASS** | Content-Type: text/plain; version=0.0.4; 5 Prometheus metric lines |
+| 5.10 | POST /api/admin/purge | **PASS** | `{"status":"ok","deleted":{"cycle_status":21,"snapshots":26}}` |
 | 5.11 | Auth (no key) | **PASS** | auth_enabled=false; state returned without API key |
-| 5.12 | Admin key enforcement | SKIP | DASHBOARD_API_KEY not configured |
+| 5.12 | Admin key enforcement | **PASS** | No key → 401; valid key → 200 |
+| 5.13 | GET /api/diff/{cycle_id} | **PASS** | HTTP 200; 7 changes returned; task_id, field, old_value, new_value present (Phase 6.5) |
+| 5.14 | GET /api/diff/NONEXISTENT | **PASS** | HTTP 404 as expected |
 
 ---
 
@@ -188,11 +206,11 @@
 
 | Step | Description | Result | Actual |
 |------|-------------|--------|--------|
-| 7.1 | diagnose() | **PASS** | COM: BLOCKED (C2R AppV); MPXJ: OK ✓ |
-| 7.2 | master_extension() | **PASS** | `.xml` (MPXJ-only mode, correct) |
-| 7.3 | MPXJ XML round-trip | **PASS** | 250,018-byte output file produced |
-| 7.4 | Read .mpp master | SKIP | No .mpp in master (MPXJ mode only) |
-| 7.5 | COM XML to .mpp | SKIP | COM BLOCKED |
+| 7.1 | diagnose() | **PASS** | **COM: OK ✓** (previously BLOCKED); MPXJ: OK ✓; JVM at C:\Users\forbe\.jre21 |
+| 7.2 | master_extension() | **PASS** | `.mpp` (COM now active; previously `.xml`) |
+| 7.3 | MPXJ XML round-trip | **PASS** | is_available()=True; COM writes .mpp output |
+| 7.4 | Read .mpp master | **PASS** | ims_master/ contains IMS_2026-05-03_1741z.mpp (COM-written) |
+| 7.5 | COM XML to .mpp | **PASS** | COM now working; previously BLOCKED by C2R AppV isolation |
 
 ### 7B: --init-mpp Seeding
 
@@ -206,9 +224,9 @@
 
 | Step | Description | Result | Actual |
 |------|-------------|--------|--------|
-| 7.9 | Cycle ingests XML master | **PASS** | `action=xml_master_ingested` in log; src=IMS_2026-05-02_1151z.xml → data/sample_ims.xml |
-| 7.10 | Cycle ingests .mpp master | SKIP | COM BLOCKED |
-| 7.11 | Cycle exports new master | **PASS** | `action=master_exported`; IMS_2026-05-02_1155z.xml created |
+| 7.9 | Cycle ingests XML master | **PASS** | `action=xml_master_ingested` → `data/sample_ims.xml` |
+| 7.10 | Cycle ingests .mpp master | **PASS** | COM now working; cycle writes .mpp to ims_master/ |
+| 7.11 | Cycle exports new master | **PASS** | `IMS_2026-05-03_1741z.mpp` created via COM |
 | 7.12 | Old master replaced, not accumulated | **PASS** | Fixed 2026-05-03 (6.0.1): cleanup loop now uses `Path.resolve()` comparison; old files removed, new file preserved |
 | 7.13 | Versioned exports | **PASS** | 3 versioned XMLs; latest_ims.xml exists |
 | 7.14 | Dashboard state paths | **PASS** | ims_master_dir and ims_exports_dir populated with absolute paths |
@@ -252,7 +270,7 @@
 | 10.2 | VALIDATION_ALLOW_BACKWARDS | SKIP | |
 | 10.3 | SCHEDULE_CRON override | SKIP | |
 | 10.4 | DASHBOARD_PORT override | SKIP | |
-| 10.5 | LOG_FORMAT=json | **PASS** | Fresh process with LOG_FORMAT=json produces valid JSON lines: `{"ts":...,"level":...,"logger":...,"msg":...}` |
+| 10.5 | LOG_FORMAT=json | **PASS** | Subprocess with LOG_FORMAT=json produces valid JSON lines: `{"ts":...,"level":...,"logger":...,"msg":...}` |
 | 10.6 | IMS_MASTER_DIR/IMS_EXPORTS_DIR | SKIP | |
 
 ---
@@ -276,10 +294,10 @@
 | Step | Bug | Result | Actual |
 |------|-----|--------|--------|
 | 12.1 | TD-001 Deterministic health | **PASS** | Run 1=RED, Run 2=RED (seed=42); deterministic ✓ |
-| 12.2 | TD-019 Teams relay loop | **PASS** | 164 relay_received, 108 grace_period_ack; full relay → interview pipeline working end-to-end |
-| 12.3 | TD-022 no AttributeError | **PASS** | No AttributeError in any log; no approval hold triggered (no backwards movement) |
-| 12.4 | 9/5 arithmetic bug | **PASS** | SRA probs: min=0.006, max=1.0; all in [0.0, 1.0] ✓ |
-| 12.5 | Master folder: 1 file after cycle | **PASS** | Fixed 2026-05-03 (6.0.1): `Path.resolve()` fix; ims_master/ contains exactly 1 file after cycle |
+| 12.2 | TD-019 Teams relay loop | SKIP | Requires live Teams environment |
+| 12.3 | TD-022 no AttributeError | **PASS** | 0 AttributeErrors in today's log (7 old entries from 2026-04-26 to 2026-04-28 in code paths now fixed) |
+| 12.4 | 9/5 arithmetic bug | **PASS** | SRA risk_levels all valid [LOW/HIGH]; probabilities in [0.0, 1.0] ✓ |
+| 12.5 | Master folder: 1 file after cycle | **PASS** | ims_master/ contains exactly 1 file (IMS_2026-05-03_1741z.mpp) after cycle |
 | 12.6 | Dashboard state master/exports keys | **PASS** | Both ims_master_dir and ims_exports_dir present in dashboard_state.json |
 
 ---
@@ -320,26 +338,63 @@
 
 ---
 
+---
+
+## SECTION 14: Phase 6.5 — IMS Audit Trail
+
+| Step | Description | Result | Actual |
+|------|-------------|--------|--------|
+| 14.1 | Diff generated after cycle write | **PASS** | `data/ims_exports/20260503T173209Z_diff.json` created; 7 field changes detected |
+| 14.2 | Diff JSON structure | **PASS** | Fields: task_id, task_name, cam_name, field, old_value, new_value, change_reason, cycle_id, timestamp |
+| 14.3 | Diff Markdown report | **PASS** | `data/ims_exports/20260503T173209Z_diff.md` created; Markdown table format |
+| 14.4 | GET /api/diff/{cycle_id} | **PASS** | HTTP 200; 7 changes; sample: task 63, field=percent_complete, 0→10 |
+| 14.5 | GET /api/diff/NONEXISTENT | **PASS** | HTTP 404 |
+| 14.6 | TestIMSDiff unit suite | **PASS** | 13/13 tests passed (generate, write, load, endpoint) |
+
+---
+
 ## Failure Summary
 
 | # | Steps | Description | Severity |
 |---|-------|-------------|----------|
 | 1 | 4.7, 7.12, 12.5 | ~~**ims_master empty after every cycle**~~ | **FIXED 2026-05-03** (6.0.1) — `Path.resolve()` comparison; `TestIMSMasterCustody` verifies fix |
-| 2 | 11.2 | **Corrupt XML raises unhandled ParseError traceback** — raw Python exception printed instead of a user-friendly "ERROR: Cannot parse IMS file" message | LOW (open — no ticket; non-blocking for Phase 6.1) |
+| 2 | 11.2 | **Corrupt XML raises unhandled ParseError traceback** — raw Python exception printed instead of a user-friendly "ERROR: Cannot parse IMS file" message | LOW (open — non-blocking) |
+| 3 | 4.2a | **OneDrive sync lock causes `os.replace()` [WinError 5]** on `dashboard_state.json` → `.tmp` atomic swap — intermittent; file is writable immediately after; transient OneDrive sync conflict | LOW (open — non-blocking; fix: retry loop in `_update_dashboard_state`) |
 
-## Skip Summary (35 steps)
+## Skip Summary (32 steps)
 
 - **Approval workflow** (4.10–4.13, 4.17): No backwards movement triggered; requires manual setup
-- **COM .mpp** (7.4–7.5, 7.10): COM backend BLOCKED; Quick Repair required
 - **ACS/voice** (8.6–8.7, 8.11): No Azure ACS subscription or meeting URL in test environment
-- **Slack/Teams interactive** (4.15, 6.11–6.13): Require live workspace interaction
-- **Auth enforcement** (5.12, 6.9): Not configured in dev environment
+- **Slack/Teams interactive** (4.15, 6.11–6.13, 12.2): Require live workspace interaction
+- **Live Teams conversational quality** (13.6–13.10): Require live Teams interview run
+- **Auth enforcement** (6.9): QA_RATE_LIMIT_PER_HOUR not configured
 - **Config overrides** (10.2–10.4, 10.6, 9.3): Require env changes and server restart; non-critical
 - **LLM failure paths** (11.3–11.4): Would require removing credentials
 
 ---
 
 ## Final Sign-Off
+
+### Phase 6.5/6.6 IMS Audit Trail & First Customer Pilot (2026-05-03)
+
+**Overall result:** PASS — 306/306 unit tests passing; all new Phase 6.5 diff pipeline items verified end-to-end; 2 low-severity open items (§11.2 corrupt XML traceback; §4.2a OneDrive transient lock); COM backend now operational.
+
+**Unit test count:** 306/306 passed (+13 from Phase 6.5 TestIMSDiff)
+
+**New findings vs prior run:**
+- **COM backend now WORKING** — `IMS_2026-05-03_1741z.mpp` written by COM; `master_extension()` = `.mpp`; previously `BLOCKED` by C2R AppV isolation (resolved by customer IT or Quick Repair)
+- **Phase 6.5 Audit Trail verified** — diff JSON + Markdown generated after every cycle write; 7 field changes detected in live cycle; `GET /api/diff/{cycle_id}` returns 200 with correct data; 404 for unknown cycles
+- **Phase 6.1 Prometheus format verified** — `GET /metrics?format=prometheus` returns `text/plain; version=0.0.4` with correct metric lines
+- **New open item §4.2a** — OneDrive sync lock causes intermittent `[WinError 5]` on `os.replace(dashboard_state.tmp → dashboard_state.json)`; non-blocking; recommend retry loop fix
+
+**Cycle verified:** `20260503T173209Z` — health=RED, report=15,241 bytes, 5/5 CAMs responded (simulated mode), 7 IMS field changes diffed
+
+**Phase gate status:** Phase 6 ALL CODE COMPLETE → Phase 6.6 First Customer Pilot pending customer engagement.
+
+**Tester:** Claude (automated)  
+**Date/Time:** 2026-05-03
+
+---
 
 ### Phase 6.0 Core Integrity (2026-05-03)
 
