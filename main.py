@@ -386,7 +386,12 @@ def main() -> None:
         if not Path(ims_path).exists():
             print(f"\nERROR: IMS file not found: {ims_path}")
             sys.exit(1)
-        _run_phase1(ims_path)
+        try:
+            _run_phase1(ims_path)
+        except ValueError as exc:
+            # §11.2 — catch corrupt/invalid IMS XML and surface a clean error message.
+            print(f"\nERROR: {exc}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

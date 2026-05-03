@@ -3020,7 +3020,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: AI-06 cannot close until downstream dependency AI-07 (API gateway integration, currently 60% complete) stabilizes.</Notes>
+            <Notes>BLOCKER: The remaining 15% integration work connecting to the API gateway layer depends on AI-07 closing out before it can be completed.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3072,7 +3072,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Mid-integration with the authentication layer may delay completion, with auth service delays cited as a specific risk. | RISK: </Notes>
+            <Notes>BLOCKER: Auth layer completion is blocked on mutual TLS cert infrastructure being stood up by Carol, preventing gateway finalization. | RISK: If AI-07 does not close by mid-May, Eva's end-to-end inference test cannot start, and that test is on the acceptance critical path.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3110,7 +3110,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>10</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3127,7 +3127,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-06 Vault deployment has not started, and secrets management must be in place before the end-to-end inference pipeline integration test can run. | RISK: We need to sequence this properly. NET-06 Vault deployment goes first — that's the foundation. Once that's done, NET-08 and NET-09 can run in parallel with NET-10. NET-11 penetration test follows remediation, and NET-15 sign-off is last. Someone needs to own NET-06 and start it this week. That's the critical path.</Notes></Task>
+        <Notes>BLOCKER: Progress is slow due to resource constraints, and the task is expected to accelerate only after AI-12 advances further.</Notes></Task>
         <Task>
             <UID>64</UID>
             <ID>64</ID>
@@ -3154,7 +3154,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>10</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3171,7 +3171,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: AI-09 is sequenced after AI-07 stabilizes and cannot start until that dependency is met. | RISK: </Notes></Task>
+        <Notes>BLOCKER: GPU tuning has a sequencing dependency on AI-07 closing out, as meaningful optimization runs require the full inference pipeline to be stable first.</Notes></Task>
         <Task>
             <UID>65</UID>
             <ID>65</ID>
@@ -3198,7 +3198,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>5</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3215,7 +3215,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by the AI-07 dependency chain, the same blocker affecting AI-10. | RISK: </Notes></Task>
+        <Notes>BLOCKER: An unresolved architecture decision between MLflow and a custom S3-backed scheme is blocking real implementation from starting.</Notes></Task>
         <Task>
             <UID>66</UID>
             <ID>66</ID>
@@ -3249,7 +3249,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: The ML team has not finalized their model versioning approach, preventing the CAM from completing and locking down the architecture documentation.</Notes>
+            <Notes>BLOCKER: Task is blocked on Alice finalizing the API contracts for the orchestration layer before the architecture document can be completed.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3287,7 +3287,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>25</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3304,7 +3304,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Container finalization is blocked until the pipeline environment is operational, which is dependent on NET-06 being resolved. | RISK: </Notes></Task>
+        <Notes>BLOCKER: Nothing's holding it up — no blockers. Just steady progress. We're on track.</Notes></Task>
         <Task>
             <UID>68</UID>
             <ID>68</ID>
@@ -3396,7 +3396,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>20</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3413,7 +3413,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-01 cannot begin until facility physical infrastructure tasks (FAC) are complete, which are still in progress. | RISK: FAC tasks need to hit at least 80–90% before we can meaningfully start NET-01. FAC-01 is closest at 70%, so that's the near-term unlock — once rack location is confirmed, we can start VLAN planning in parallel. The bottleneck is really FAC-02 and FAC-03 (power and cabling) — those need to be substantially done before any live network config makes sense.</Notes></Task>
+        <Notes>BLOCKER: NET-01 is blocked on David's topology document being delivered. | RISK: ATLAS — same answer as before: David needs to finalize the network topology doc with VLAN assignments locked. We covered this already! We're done! 👋</Notes></Task>
         <Task>
             <UID>70</UID>
             <ID>70</ID>
@@ -3440,7 +3440,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>5</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3457,7 +3457,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Firewall configuration is blocked pending completion of physical network infrastructure dependencies FAC-02 and FAC-03.</Notes></Task>
+        <Notes>BLOCKER: NET-02 is blocked behind NET-01 due to the same VLAN dependency requiring David's finalized network topology document.</Notes></Task>
         <Task>
             <UID>71</UID>
             <ID>71</ID>
@@ -3545,7 +3545,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by a FAC (Facilities/Infrastructure) dependency that has not yet been resolved.</Notes></Task>
+        <Notes>BLOCKER: NET-04 is blocked behind NET-07, which must provide TLS certificates before work can begin.</Notes></Task>
         <Task>
             <UID>73</UID>
             <ID>73</ID>
@@ -3772,7 +3772,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Remediation cannot begin because the required vulnerability scanning (NET-08, which depends on NET-06) has not been completed, leaving NET-09 with no inputs.</Notes></Task>
+        <Notes>BLOCKER: NET-09 is blocked on NET-08 — remediation cannot begin until the Nessus scan report is completed and in hand.</Notes></Task>
         <Task>
             <UID>78</UID>
             <ID>78</ID>
@@ -3867,7 +3867,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by both NET-06 and NET-09 dependencies, as penetration testing cannot proceed until network findings have been remediated.</Notes></Task>
+        <Notes>BLOCKER: Vendor coordination is stalled with two firms in scope, neither having confirmed dates for the penetration test. | RISK: Pen test vendor unconfirmed — two firms in scope, neither has confirmed dates. If not completed by end of May, NET-15 slips with it.</Notes></Task>
         <Task>
             <UID>80</UID>
             <ID>80</ID>
@@ -3955,7 +3955,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: A FAC dependency is blocking any progress on this task.</Notes></Task>
+        <Notes>BLOCKER: Task is downstream of the VLAN chain and cannot progress until NET-01 (VLAN assignments) is resolved.</Notes></Task>
         <Task>
             <UID>82</UID>
             <ID>82</ID>
@@ -3999,7 +3999,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The task cannot start until finalized network diagrams are received from the infrastructure team.</Notes></Task>
+        <Notes>BLOCKER: Task has not started because the CAM has not yet scheduled coordination time with the network and security team to gather topology details and confirm security controls.</Notes></Task>
         <Task>
             <UID>83</UID>
             <ID>83</ID>
@@ -4050,7 +4050,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The NET-06 blocker is preventing any progress on this task, as it is last in the dependent chain.</Notes></Task>
+        <Notes>BLOCKER: NET-15 cannot begin until all upstream tasks are complete, including NET-11 (external pen test), which is currently blocked by unconfirmed vendor coordination and poses a live schedule risk to program completion. | RISK: Final security gate — any slip on NET-15 blocks program completion. Risk is driven by upstream dependency on NET-11.</Notes></Task>
         <Task>
             <UID>84</UID>
             <ID>84</ID>
@@ -4135,7 +4135,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>15</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4152,7 +4152,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The runbook cannot progress until NET-14's infrastructure setup is finalized, as the runbook content depends on that completed configuration.</Notes></Task>
+        <Notes>BLOCKER: No hard blockers, but competing priorities and lack of dedicated time are slowing progress.</Notes></Task>
         <Task>
             <UID>86</UID>
             <ID>86</ID>
@@ -4196,7 +4196,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-02 cannot proceed because the AI stack (AI-07 dependency chain) has not stabilized, making it impossible to write operations documentation against a moving target.</Notes></Task>
+        <Notes>BLOCKER: DOC-02 cannot begin until AI-07 and AI-10 are further along, as a meaningful ops and troubleshooting guide requires a stable AI stack.</Notes></Task>
         <Task>
             <UID>87</UID>
             <ID>87</ID>
@@ -4285,7 +4285,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The task is blocked by an unresolved infrastructure finalization dependency previously flagged by the CAM.</Notes></Task>
+        <Notes>BLOCKER: Task has not started due to competing priorities and the need to coordinate with stakeholders to validate recovery procedures and failback sequences.</Notes></Task>
         <Task>
             <UID>89</UID>
             <ID>89</ID>
@@ -4417,7 +4417,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-07 is blocked on AI stack stabilization via the AI-07 dependency chain, the same blocker affecting DOC-02.</Notes></Task>
+        <Notes>BLOCKER: DOC-07 cannot start until the AI stack is stable and onboarding flows are defined, creating a sequencing dependency on upstream AI tasks.</Notes></Task>
         <Task>
             <UID>92</UID>
             <ID>92</ID>
@@ -4496,7 +4496,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-08 cannot start until all predecessor tasks are complete, and NET-14, DOC-01, DOC-04, and DOC-05 are still outstanding.</Notes></Task>
+        <Notes>BLOCKER: DOC-08 cannot begin until upstream documentation tasks are completed, and if those docs aren't finished at least two weeks before the sign-off window, the review cycle will be compressed and sign-off risks slipping. | RISK: If upstream documentation tasks are not completed at least two weeks before the sign-off window, the review cycle will be compressed and sign-off may slip, putting the System Accepted acceptance gate at risk.</Notes></Task>
         <Task>
             <UID>93</UID>
             <ID>93</ID>
@@ -4672,7 +4672,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by a FAC (Facility/Facility Access Condition) dependency that has not been resolved.</Notes></Task>
+        <Notes>BLOCKER: Cannot run throughput and latency tests until network configuration is in place, as this task is downstream of the VLAN chain (blocked by NET-01).</Notes></Task>
         <Task>
             <UID>97</UID>
             <ID>97</ID>
