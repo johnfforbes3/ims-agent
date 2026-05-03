@@ -3,10 +3,17 @@ LLM interface — single entry point for all Anthropic SDK calls.
 
 All Claude API usage in the IMS Agent goes through this module.
 Nothing else imports anthropic directly.
+
+Phase 6.3 — Recovery:
+  All ``messages.create()`` calls are routed through ``_call_with_retry()``,
+  which retries up to ``_MAX_RETRIES`` times (default 3) with exponential
+  backoff on transient failures (network errors, rate limits, 5xx responses).
+  Non-retryable errors (auth failure, bad request) are re-raised immediately.
 """
 
 import logging
 import os
+import time
 from typing import Any
 
 import anthropic
@@ -18,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 _MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 _BASE_URL = os.getenv("LLM_BASE_URL", "")
+_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
+_RETRY_BASE_DELAY = float(os.getenv("LLM_RETRY_BASE_DELAY", "1.0"))  # seconds
 
 _SYSTEM_PROMPT = """You are an expert program management analyst specializing in defense program \
 Integrated Master Schedule (IMS) analysis. You help program managers understand schedule health, \
@@ -62,6 +71,53 @@ class LLMInterface:
         self._model = _MODEL
         logger.info("action=llm_init model=%s base_url=%s", self._model, _BASE_URL or "(default)")
 
+    def _call_with_retry(self, **kwargs: Any) -> Any:
+        """
+        Call ``self._client.messages.create(**kwargs)`` with exponential-backoff retry.
+
+        Retries on:
+          - ``anthropic.RateLimitError`` (429) — common under high load
+          - ``anthropic.APIConnectionError`` — transient network issues
+          - ``anthropic.APIStatusError`` with HTTP status >= 500 — server errors
+
+        Does NOT retry on:
+          - ``anthropic.AuthenticationError`` — bad API key; retry will not help
+          - ``anthropic.BadRequestError`` — bad prompt/params; retry will not help
+          - Any other non-``APIError`` exception
+
+        Raises:
+            The original exception after ``_MAX_RETRIES`` exhausted attempts.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                return self._client.messages.create(**kwargs)
+            except (anthropic.RateLimitError, anthropic.APIConnectionError) as exc:
+                last_exc = exc
+                delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "action=llm_retry attempt=%d/%d error=%s delay_s=%.1f",
+                    attempt, _MAX_RETRIES, type(exc).__name__, delay,
+                )
+                time.sleep(delay)
+            except anthropic.APIStatusError as exc:
+                if exc.status_code >= 500:
+                    last_exc = exc
+                    delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "action=llm_retry attempt=%d/%d status=%d delay_s=%.1f",
+                        attempt, _MAX_RETRIES, exc.status_code, delay,
+                    )
+                    time.sleep(delay)
+                else:
+                    # 4xx (except 429 handled above) — do not retry
+                    raise
+        logger.error(
+            "action=llm_exhausted_retries attempts=%d error=%s",
+            _MAX_RETRIES, last_exc,
+        )
+        raise last_exc  # type: ignore[misc]
+
     def synthesize(
         self,
         tasks: list[dict[str, Any]],
@@ -94,7 +150,7 @@ class LLMInterface:
         )
         logger.info("action=llm_call type=synthesis model=%s health=%s", self._model, schedule_health)
 
-        response = self._client.messages.create(
+        response = self._call_with_retry(
             model=self._model,
             max_tokens=2048,
             system=_SYSTEM_PROMPT,
@@ -122,7 +178,7 @@ class LLMInterface:
             The model's answer as a string.
         """
         logger.info("action=llm_call type=qa model=%s", self._model)
-        response = self._client.messages.create(
+        response = self._call_with_retry(
             model=self._model,
             max_tokens=1024,
             system=_SYSTEM_PROMPT,
@@ -172,7 +228,7 @@ class LLMInterface:
         logger.info("action=llm_call type=qa_tools model=%s", self._model)
 
         for round_num in range(max_rounds):
-            response = self._client.messages.create(
+            response = self._call_with_retry(
                 model=self._model,
                 max_tokens=1024,
                 system=_SYSTEM_PROMPT,

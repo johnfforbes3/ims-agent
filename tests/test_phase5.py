@@ -834,3 +834,120 @@ class TestAuditLogging:
 
         assert r.status_code == 429
         assert any("audit_rate_limit_exceeded" in record.message for record in caplog.records)
+
+
+# ===========================================================================
+# Phase 6.3 — Recovery: LLM retry with exponential backoff
+# ===========================================================================
+
+class TestLLMRetry:
+    """6.3 — _call_with_retry() retries on transient errors, not on auth/bad-request."""
+
+    @pytest.fixture()
+    def llm(self, monkeypatch):
+        """Construct LLMInterface without a real API key."""
+        monkeypatch.setattr("agent.llm_interface._BASE_URL", "http://localhost:11434")
+        monkeypatch.setattr("agent.llm_interface._MAX_RETRIES", 3)
+        monkeypatch.setattr("agent.llm_interface._RETRY_BASE_DELAY", 0.0)  # no sleep in tests
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("anthropic.Anthropic"):
+            from agent.llm_interface import LLMInterface
+            instance = LLMInterface()
+        return instance
+
+    def test_retries_on_rate_limit_error(self, llm, monkeypatch):
+        """RateLimitError triggers retries; succeeds on 3rd attempt."""
+        import anthropic
+        ok_response = MagicMock()
+        ok_response.content = [MagicMock(text="ok")]
+        ok_response.usage.output_tokens = 10
+
+        call_count = [0]
+        def side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] < 3:
+                raise anthropic.RateLimitError("rate limited", response=MagicMock(status_code=429), body={})
+            return ok_response
+
+        llm._client.messages.create = side_effect
+        result = llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert result is ok_response
+        assert call_count[0] == 3
+
+    def test_retries_on_connection_error(self, llm):
+        """APIConnectionError triggers retries."""
+        import anthropic
+        ok_response = MagicMock()
+        ok_response.content = [MagicMock(text="ok")]
+        ok_response.usage.output_tokens = 5
+
+        call_count = [0]
+        def side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise anthropic.APIConnectionError(request=MagicMock())
+            return ok_response
+
+        llm._client.messages.create = side_effect
+        result = llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert result is ok_response
+        assert call_count[0] == 2
+
+    def test_raises_after_max_retries_exhausted(self, llm):
+        """Raises original error after all retry attempts fail."""
+        import anthropic
+        llm._client.messages.create = MagicMock(
+            side_effect=anthropic.APIConnectionError(request=MagicMock())
+        )
+        with pytest.raises(anthropic.APIConnectionError):
+            llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert llm._client.messages.create.call_count == 3  # _MAX_RETRIES
+
+    def test_does_not_retry_on_auth_error(self, llm):
+        """AuthenticationError is not retried — bad key will stay bad."""
+        import anthropic
+        llm._client.messages.create = MagicMock(
+            side_effect=anthropic.AuthenticationError(
+                "invalid key", response=MagicMock(status_code=401), body={}
+            )
+        )
+        with pytest.raises(anthropic.AuthenticationError):
+            llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert llm._client.messages.create.call_count == 1  # no retry
+
+    def test_retries_on_server_error_5xx(self, llm):
+        """APIStatusError with status >= 500 is retried."""
+        import anthropic
+        ok_response = MagicMock()
+        ok_response.content = [MagicMock(text="ok")]
+        ok_response.usage.output_tokens = 5
+
+        call_count = [0]
+        def side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise anthropic.APIStatusError(
+                    "server error",
+                    response=MagicMock(status_code=503),
+                    body={},
+                )
+            return ok_response
+
+        llm._client.messages.create = side_effect
+        result = llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert result is ok_response
+        assert call_count[0] == 2
+
+    def test_does_not_retry_on_4xx_non_rate_limit(self, llm):
+        """APIStatusError with 4xx (not 429) is not retried."""
+        import anthropic
+        llm._client.messages.create = MagicMock(
+            side_effect=anthropic.APIStatusError(
+                "bad request",
+                response=MagicMock(status_code=400),
+                body={},
+            )
+        )
+        with pytest.raises(anthropic.APIStatusError):
+            llm._call_with_retry(model="test", messages=[], max_tokens=10)
+        assert llm._client.messages.create.call_count == 1  # no retry
