@@ -11,15 +11,16 @@
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 6 COMPLETE — All code phases done; pilot execution pending customer engagement |
+| **Phase** | Phase 6 COMPLETE — 314 tests passing; Phase 7 + Phase 8 planned (see IMS-AGENT-PROGRAM-PLAN.md) |
 | **Unit tests** | **314 / 314 passing** |
 | **Last procedure run** | 2026-05-03 (§4.2a + §11.2 bug fixes — 314 tests passing) |
-| **Last production cycle** | 2026-05-02 — `20260502T114528Z`, health=RED, 4/5 CAMs responded |
+| **Last production cycle** | 2026-05-03 — `20260503T191337Z`, health=RED, 5/5 CAMs responded (Teams chat relay) |
 | **Open FAILs** | None |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
 | **IMS** | AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs |
 | **Python** | 3.13.3 |
 | **MPP backend** | MPXJ (COM BLOCKED — C2R AppV isolation) |
+| **Next phase** | Phase 7.1 (Technical Debt Sprint) — highest priority; can start immediately |
 
 ---
 
@@ -58,14 +59,32 @@ All four Core Integrity bugs are fixed and verified by unit tests. Phase 6.0 is 
 
 ## Phase 6.6 Gate Status
 
-Documentation complete; pilot execution pending customer engagement.
+Documentation complete; pilot execution moved to Phase 7.5.
 
 | Item | Status |
 |------|--------|
 | `docs/ONBOARDING.md` — customer onboarding checklist | ✅ DONE |
 | `PHASE6-FEEDBACK.md` — weekly pilot feedback template | ✅ DONE |
 | Pilot acceptance criteria defined | ✅ DONE |
-| Pilot execution (4 cycles, real CAM data) | ⏳ PENDING — awaiting customer engagement |
+| Pilot execution (4 cycles, real CAM data) | ⏳ Phase 7.5 — awaiting customer engagement |
+
+---
+
+## Phase 7 + 8 Planning Gate Status
+
+Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` and `§Phase 8` for full checklists.
+
+| Sub-phase | Description | Status |
+|-----------|-------------|--------|
+| **7.1** | Technical Debt Sprint (TD-001/002/003/013/014/015/021 + LOW items) | ⏳ Ready to start — no external dependencies |
+| **7.2** | Security & Compliance (JWT auth, MFA, IR plan, SIEM, key lifecycle) | ⏳ Ready to start — no external dependencies |
+| **7.3** | Infrastructure & Observability (Grafana, log aggregation, backup automation, DR test) | ⏳ Awaiting deployment platform decision |
+| **7.4** | Platform Enhancements (live dashboard, cumulative diff, baseline drift, Q&A cache) | ⏳ Starts after 7.1 complete |
+| **7.5** | First Customer Pilot Execution (4 cycles, real data, acceptance criteria) | ⏳ Blocked on customer engagement |
+| **8.1** | Real Teams/ACS Voice Integration | ⏳ Backlog — post-pilot |
+| **8.2** | Multi-Tenant / Multi-Program Support | ⏳ Backlog — post-pilot |
+| **8.3** | Advanced SRA (beta-PERT, correlation matrix) | ⏳ Backlog — post-pilot |
+| **8.4** | Enterprise Integrations (P6, Jira, Whisper real-audio) | ⏳ Backlog — post-pilot |
 
 ---
 
@@ -88,3 +107,4 @@ Documentation complete; pilot execution pending customer engagement.
 | 2026-05-03 | Phase 6.5 IMS Audit Trail — ims_diff.py, {cycle_id}_diff.json/.md, GET /api/diff/{cycle_id} | 306 |
 | 2026-05-03 | Phase 6.6 First Customer Pilot — ONBOARDING.md, PHASE6-FEEDBACK.md, pilot docs complete | **306** |
 | 2026-05-03 | Bug fixes §4.2a + §11.2 — os.replace retry loop; corrupt XML ValueError; 8 new tests | **314** |
+| 2026-05-03 | Phase 7 + Phase 8 planned — multi-phase roadmap written to IMS-AGENT-PROGRAM-PLAN.md | **314** |

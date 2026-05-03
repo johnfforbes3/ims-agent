@@ -1,8 +1,9 @@
 # IMS Agent — Enterprise Program Plan
 **Program:** Integrated Master Schedule (IMS) AI Agent  
-**Version:** 1.0  
+**Version:** 1.1  
 **Created:** 2026-04-25  
-**Status:** Phase 6 COMPLETE — All code phases (6.0–6.5) done; 306 tests passing. Phase 6.6 pilot execution pending customer engagement.  
+**Updated:** 2026-05-03  
+**Status:** Phase 6 COMPLETE — 314 tests passing. Phase 7 (TD sprint, security hardening, infrastructure, platform enhancements, pilot execution) and Phase 8 (advanced capabilities) planned.  
 **Owner:** John Forbes  
 
 ---
@@ -160,9 +161,11 @@ Output Distribution:
 | **3** | Full Automation Loop | End-to-end: scheduled trigger → interviews → update → analysis → output → dashboard | 4-6 weeks | ✅ Complete |
 | **4** | Q&A Interface | PM can ask the agent natural language questions about the schedule at any time | 3-4 weeks | ✅ Complete |
 | **5** | Production Hardening | Containerization, security review, ITAR compliance, deployment playbook, customer handoff | 4-6 weeks | ✅ Complete |
-| **6** | Productionization | Observability, security hardening, recovery, redundancy, IMS audit trail, first customer pilot | 8-12 weeks | ⏳ Planning |
+| **6** | Productionization | Observability, security hardening, recovery, redundancy, IMS audit trail, first customer pilot | 8-12 weeks | ✅ Code complete — pilot execution pending |
+| **7** | Continuous Improvement, Security & Pilot Execution | TD sprint, CMMC gap closure, infra deployment, platform enhancements, first customer pilot | 10-14 weeks | ⏳ Planned |
+| **8** | Advanced Capabilities | Real ACS voice, multi-tenant, advanced SRA, enterprise integrations (P6, Jira) | TBD (post-pilot) | ⏳ Backlog |
 
-**Total estimated duration:** 25-37 weeks (6-9 months)
+**Total estimated duration:** 37-55 weeks (9-14 months)
 
 ---
 
@@ -848,6 +851,419 @@ Transform the IMS Agent from a proven development system into a hardened, observ
 | Real CAMs resistant to voice/chat interviews | Medium | Medium | Short (<5 min) interview; allow async (CAM replies when ready, not during a live call); demonstrate time savings vs spreadsheet |
 | Customer security review identifies blockers | Medium | High | Share SECURITY.md and ARCHITECTURE.md early; pre-brief ISSO before formal review |
 | On-prem LLM quality insufficient for synthesis tasks | Low | Medium | Test with Llama 3 / Mistral against sample IMS before committing; keep Anthropic API as fallback for non-ITAR programs |
+
+---
+
+## PHASE 7 — CONTINUOUS IMPROVEMENT, SECURITY & PILOT EXECUTION
+
+### Objective
+
+Resolve all open technical debt, close CMMC Level 2 security gaps, deploy the production infrastructure deferred from Phase 6, and execute the First Customer Pilot. Phase 7 converts the Phase 6 hardened codebase into a certified, auditable, continuously-running production service operating on real program data.
+
+**Phase Gate:** Four consecutive unattended cycles on real customer data with zero manual interventions; all six HIGH-priority CMMC gaps remediated or formally accepted; planner confirms data quality meets or exceeds the manual process; PM Q&A verified at zero hallucinations; DR runbook executed successfully by an independent tester within 4-hour RTO.
+
+> **Sequencing note:** Sub-phases 7.1 (Technical Debt) and 7.2 (Security) and 7.3 (Infrastructure) can run in parallel. Sub-phase 7.4 (Platform Enhancements) can start as soon as 7.1 is complete. Sub-phase 7.5 (Pilot Execution) is the only hard sequential dependency — it requires customer prerequisites (real IMS, M365 tenant, Azure Bot subscription) and cannot start until those are in hand. Work 7.1–7.4 while waiting on the customer.
+
+---
+
+### 7.1 — Technical Debt Sprint
+
+**Duration:** 2 weeks  
+**Goal:** Close the highest-value open technical debt items — all are code-only changes requiring no external infrastructure.
+
+#### 7.1.1 — HIGH / MEDIUM Code Fixes
+
+##### TD-001 — Deterministic Schedule Health Thresholds
+**File:** `agent/cycle_runner.py`, `agent/llm_interface.py`
+- [ ] Define threshold constants `HEALTH_GREEN_THRESHOLD` (default 0.75) and `HEALTH_YELLOW_THRESHOLD` (default 0.50) as env vars; document in `CONFIGURATION.md`
+- [ ] Compute health deterministically in `cycle_runner._run_inner()` from SRA milestone `prob_on_baseline` values: GREEN if ≥75% of milestones have prob_on_baseline ≥ GREEN_THRESHOLD; YELLOW if ≥50%; RED otherwise
+- [ ] Pass computed health label into the LLM synthesis prompt as a given — remove the "decide the health label" instruction from the system prompt in `llm_interface.py`
+- [ ] Unit tests: assert GREEN/YELLOW/RED boundary transitions at correct thresholds (3 tests); assert LLM synthesis prompt contains the pre-computed label, not a directive to choose one
+- [ ] Update `CONFIGURATION.md` with the two new env vars
+
+##### TD-002 — CAM Business Hours Timezone Fix
+**File:** `agent/cam_directory.py:can_call_now()`
+- [ ] Replace `datetime.now().hour` with `datetime.now(ZoneInfo(cam.timezone)).hour` using stdlib `zoneinfo` (Python 3.9+; no new dependency)
+- [ ] Default CAM timezone: `America/New_York`; read `timezone` field from `cam_identity_map.json` if present; fall back to default if absent or invalid
+- [ ] Unit test: `can_call_now()` returns False for a CAM in `America/Los_Angeles` at 0600 UTC (10pm Pacific the prior evening); returns True at 1500 UTC (7am Pacific)
+
+##### TD-003 — Persist CAM Call History
+**File:** `agent/cam_directory.py`
+- [ ] Extend `save_to_file()` to include `_call_history` dict as a `call_history` key in `data/cam_directory.json`
+- [ ] Extend `load_from_ims()` / `load_from_file()` to restore `_call_history` from that key if present
+- [ ] Unit test: record two call attempts, save, reload from file, assert `should_retry()` and `should_escalate()` return the same results as before the restart
+
+##### TD-013 — Mark RESOLVED ✅
+**Status:** RESOLVED by §4.2a fix (2026-05-03) — `os.replace(tmp, state_path)` with exponential-backoff retry loop replaced the prior `write_text()` call in `_update_dashboard_state()`. Dashboard state writes are now atomic on both POSIX and Windows.
+
+##### TD-014 — Notifier Config at Import Time
+**File:** `agent/notifier.py`
+- [ ] Move all `os.getenv` calls for Slack/SMTP credentials inside `send_slack()` and `send_email()` function bodies (or into a `_get_config()` helper called at send time)
+- [ ] Remove module-level `_SLACK_WEBHOOK`, `_EMAIL_HOST`, `_EMAIL_PORT`, `_EMAIL_USER`, `_EMAIL_PASS`, `_EMAIL_TO`, `_DASHBOARD_URL` globals
+- [ ] Unit test: monkeypatch env var AFTER module import; assert notifier uses the updated value (not the import-time snapshot)
+
+##### TD-015 — Validation Holds Not Surfaced on Dashboard
+**File:** `agent/cycle_runner.py`, `agent/dashboard/templates/index.html`
+- [ ] Add `"validation_holds": status.get("validation_holds", [])` to the dashboard state dict in `_update_dashboard_state()`
+- [ ] Add a collapsible "⚠ Validation Alerts" section to `index.html` that renders each hold as a warning card (task name, rule, detail) when the list is non-empty; hidden when empty
+- [ ] Unit test: after a cycle that triggers a backwards-movement hold, assert `dashboard_state.json` contains the `validation_holds` list with the expected entry
+
+##### TD-021 — Dashboard Countdown Timer (REOPENED)
+**File:** `agent/dashboard/templates/index.html`
+- [ ] Replace `pollStatus()` + `window.location.reload()` with a `setInterval` AJAX loop that calls `GET /api/state` every 5s (active cycle) or every 60s (idle) and patches the DOM in-place
+- [ ] Active cycle: update "Cycle In Progress" card fields (phase, cams_responded, tasks_captured) without a full reload
+- [ ] Countdown badge: reset to the current interval (5 or 60) whenever the interval changes; badge accurately reflects next actual refresh
+- [ ] Full page reload only when `cycle_active` transitions `true → false`, so final health / report data loads cleanly
+- [ ] Manual test: run a cycle; verify phase and CAM count update live during the interview phase; countdown badge shows correct values
+
+#### 7.1.2 — LOW Priority Code Polish
+
+##### TD-005 — `_extract_percent` First-Match Bug
+**File:** `agent/voice/interview_agent.py:_extract_percent()`
+- [ ] Prefer numeric tokens immediately preceded by percent-context words ("is", "at", "about", "around", "currently", "approximately"); skip tokens that are part of task IDs (digits immediately following "SE-", "HW-", "SW-", "PROC-", etc.)
+- [ ] Unit tests: `"SE-04 is 100%, not 4%"` → 100; `"it's about 75"` → 75; `"HW-03 is complete at 100"` → 100
+
+##### TD-007 — Report Blocker Text Truncation
+**File:** `agent/report_generator.py:_build_tasks_behind_section()`
+- [ ] Truncate blocker text to first sentence or 120 characters in the table cell; append `*` footnote marker when truncated
+- [ ] Add a "Blocker Details" appendix section at report end with full text for every truncated entry
+- [ ] Unit test: report table cell ≤ 120 chars when blocker text is long; full text appears in appendix
+
+##### TD-018 — Slack "Thinking…" UX
+**File:** `agent/slack_command.py:_handle_ims_command()`
+- [ ] Post initial message with `app.client.chat_postMessage` to get a `ts`; update in-place with `chat_update` when answer is ready
+- [ ] Fallback to `response_url` with `replace_original: true` if `channel_id` is unavailable (DM context)
+- [ ] Manual test: `/ims` slash command shows a single message that updates in-place, not two separate posts
+
+##### TD-023 — Bootstrap First-Contact for New CAMs
+**File:** `main.py`, `agent/voice/teams_chat_connector.py`
+- [ ] Add `--bootstrap-sessions` CLI flag to `main.py`
+- [ ] For each CAM in `cam_identity_map.json` with `auto_respond: true` and no entry in `cam_sessions.json`: send a Graph API email prompting them to message the bot; poll for first incoming bot message; save `conversation_id` to `cam_sessions.json`
+- [ ] Update `TEAMS-SETUP.md` with the bootstrap procedure and when to run it
+
+##### TD-024 — Eva Johnson Teams Session (IN PROGRESS)
+- [ ] Complete M365 account creation: `eva@intelligenceexpanse.onmicrosoft.com`
+- [ ] Run cam-responder for Eva; complete device-code auth; verify token cached in MSAL token cache
+- [ ] Bootstrap first 1:1 Teams contact with the bot; confirm `cam_sessions.json` entry created
+- [ ] Run one live `teams_chat` cycle; verify Eva's row in dashboard `cam_response_status` shows `completed`
+
+#### 7.1.3 — Phase 7.1 Acceptance Gate
+- [ ] All HIGH/MEDIUM items above (TD-001, TD-002, TD-003, TD-014, TD-015, TD-021) checked off
+- [ ] Unit test count ≥ 325 (minimum 11 new tests for the above items)
+- [ ] `pytest -x -q` passes with zero failures
+- [ ] `TECHNICAL-DEBT.md` updated: TD-013 marked RESOLVED; TD-001/002/003/014/015/021 marked RESOLVED with date
+- [ ] `docs/STATUS.md` history row added
+
+---
+
+### 7.2 — Security & Compliance Hardening
+
+**Duration:** 3-4 weeks (can run in parallel with 7.3)  
+**Goal:** Close all six HIGH-priority CMMC Level 2 gaps identified in `docs/CMMC_GAP.md`. Must be complete before any real CUI or ITAR-controlled schedule data enters the system.
+
+#### 7.2.1 — Short-Lived Token Authentication (CMMC AC.1.001, IA.3.083, IA.3.084)
+
+**Replace static API key with JWT client credentials**
+- [ ] Implement `POST /api/auth/token` endpoint: accepts `client_id` + `client_secret` from request body; returns a signed JWT (HS256) with 1-hour expiry; credentials stored in `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET` env vars
+- [ ] Implement admin-tier JWT: separate `ADMIN_CLIENT_ID` / `ADMIN_CLIENT_SECRET` env vars; admin JWT required for write/trigger/purge routes
+- [ ] Replace `_require_api_key()` header check with JWT validation using `python-jose` or `PyJWT` (add to `requirements.txt`)
+- [ ] Backward-compatible mode: `ENABLE_JWT=false` (default for this release) retains the existing `X-API-Key` model — no breaking change on upgrade; `ENABLE_JWT=true` activates JWT enforcement
+- [ ] Unit tests `TestJWTAuth`: valid token passes (read and admin tiers); expired token rejected (401); wrong tier rejected (403); malformed token rejected (401); missing token rejected (401); minimum 6 tests
+- [ ] Update `SECURITY.md` with JWT architecture; update `API.md` with `/api/auth/token` endpoint; update `CONFIGURATION.md` with new env vars
+
+**MFA for admin routes (AC.1.002)**
+- [ ] Add TOTP (RFC 6238) second-factor check for `POST /api/trigger`, `POST /api/admin/purge`, `POST /api/approvals/{id}/approve`; use stdlib `hmac` + `hashlib` (no new dependency); `ADMIN_TOTP_SECRET` env var (base32 seed)
+- [ ] If `ADMIN_TOTP_SECRET` is not set, admin routes require admin JWT only (TOTP not enforced); `GET /health` includes `mfa_configured: false` warning
+- [ ] Unit tests: valid TOTP (within ±1 window) passes; stale TOTP (>30s) rejected; no TOTP when secret not configured passes (with warning)
+
+**Replay-resistant auth (IA.3.084)**
+- [ ] JWTs include `jti` (JWT ID) UUID claim; maintain an in-memory LRU blocklist (max 10,000 entries, 1-hour TTL) to prevent token replay on admin actions
+- [ ] `POST /api/auth/token` issues a fresh `jti` per token; on admin route use, JTI is checked against blocklist, then added to it
+- [ ] Unit test: same admin JWT cannot be used twice for a protected route; read-tier JWTs are not blocklisted (performance)
+
+#### 7.2.2 — Key Lifecycle Management (CMMC SC.3.187)
+- [ ] Document API key rotation procedure in `docs/DR_RUNBOOK.md` — new §9 "Credential Rotation": step-by-step for rotating `ANTHROPIC_API_KEY`, `DASHBOARD_API_KEY`, Teams bot credentials, SMTP password; covers zero-downtime rotation using `get_secret()` hot-reload
+- [ ] Implement key age alert: at startup and on each `GET /health` call, compute days since `ANTHROPIC_API_KEY` was set (`KEY_CREATED_AT` env var, ISO date string); if > 90 days, include `key_age_warning: true` and `key_age_days: N` in the `/health` response
+- [ ] Unit test: `GET /health` includes `key_age_warning: true` and correct `key_age_days` when `KEY_CREATED_AT` is > 90 days ago; `key_age_warning: false` when recent
+
+#### 7.2.3 — Incident Response Plan (CMMC IR.2.092)
+- [ ] Write `docs/IR_PLAN.md`: incident classification (P1 data breach, P2 unauthorized access attempt, P3 data corruption, P4 service outage); detection sources (`action=audit_auth_failure` events, deadman alert, Slack cycle-failed notification); response procedures per severity; CSIRT contact list placeholder; post-incident review template
+- [ ] Add IR plan reference link to `OPERATIONS.md §Incident Response` and `SECURITY.md §Incident Response`
+
+#### 7.2.4 — SIEM Integration (CMMC AU.3.045)
+- [ ] Add `SIEM_SYSLOG_HOST` and `SIEM_SYSLOG_PORT` env vars; if set, attach a `logging.handlers.SysLogHandler` that forwards all `action=audit_*` log events to the configured syslog endpoint at startup
+- [ ] Document in `SECURITY.md §Log Integration`: target SIEM configuration; key `action=audit_*` fields to alert on; recommended saved searches
+- [ ] Unit test: when `SIEM_SYSLOG_HOST` is set, a `SysLogHandler` is present in the root logger's handler list; audit log events at WARNING+ are forwarded
+
+#### 7.2.5 — Phase 7.2 Acceptance Gate
+- [ ] `docs/CMMC_GAP.md` updated: AC.1.001, AC.1.002, IA.3.083, IA.3.084, SC.3.187, IR.2.092, AU.3.045 all marked REMEDIATED (or ACCEPTED with rationale)
+- [ ] `docs/IR_PLAN.md` created and reviewed by program owner
+- [ ] JWT test suite ≥ 6 new tests; all existing tests still pass
+- [ ] Penetration test scheduled (can remain PENDING for this gate; date must be documented in `docs/CMMC_GAP.md §Remaining Actions`)
+- [ ] `docs/STATUS.md` history row added
+
+---
+
+### 7.3 — Infrastructure & Observability Deployment
+
+**Duration:** 2-3 weeks (can run in parallel with 7.2)  
+**Goal:** Deploy the production infrastructure items deferred from Phase 6.1, 6.3, and 6.4. These are environment-level tasks, not code changes.
+
+#### 7.3.1 — Grafana Observability Stack
+- [ ] Add Grafana service to `docker-compose.prod.yml` (or document standalone deployment); configure to scrape `GET /metrics?format=prometheus` from the agent container
+- [ ] Build pre-built dashboard JSON (`docs/grafana_dashboard.json`) with panels for: cycle success rate, cycle duration P50/P95, CAM response rate per cycle, Q&A latency P50/P95, dead man's switch alert state
+- [ ] Configure alert rules: cycle failure → Slack/email within 5 minutes; cycle duration > 30 min → warning; CAM response rate < 60% → warning
+- [ ] Alert test: simulate a cycle failure (`POST /api/trigger` on an invalid IMS path); verify Slack alert fires within 5 minutes
+- [ ] Commit `docs/grafana_dashboard.json` to repository; document setup in `OPERATIONS.md §Grafana`
+
+#### 7.3.2 — Log Aggregation
+- [ ] Deploy log aggregation in target environment (customer decision: Datadog, ELK Stack, or AWS CloudWatch)
+- [ ] Configure all container log streams to ship with `LOG_FORMAT=json`
+- [ ] Create saved searches / log filters for operational patterns: `action=cycle_complete`, `action=cycle_failed`, `action=validation_hold`, `action=cam_no_response`, `action=llm_exhausted_retries`, `action=audit_auth_failure`, `action=master_custody_lost`
+- [ ] Log retention: align with `DATA_RETENTION_DAYS` (default 90 days) at the aggregator level
+- [ ] Document aggregator configuration in `OPERATIONS.md §Log Aggregation`
+
+#### 7.3.3 — Automated Backup
+- [ ] Add `IMS_BACKUP_PATH` env var (file path, network share UNC, or S3 URI); document in `CONFIGURATION.md`
+- [ ] In `cycle_runner._run_inner()`: after every successful IMS write, copy the updated IMS XML to `IMS_BACKUP_PATH/{cycle_id}_ims_backup.xml`
+- [ ] Daily config backup via scheduler: tar `cam_directory.json`, `cam_identity_map.json`, `cam_sessions.json`, `.env`, Docker Compose files → `{backup_path}/config_{date}.tar.gz`
+- [ ] Post-backup verification: parse the backup XML and assert valid; log `action=backup_verified` or `action=backup_failed` accordingly
+- [ ] Cycle proceeds even if backup fails (log error, do not raise); a `backup_failed` event triggers a Slack/email alert via the notifier
+- [ ] Unit test: after a successful mock cycle, assert backup file exists at `IMS_BACKUP_PATH` and parses without error; assert a backup failure logs the error and does not raise
+
+#### 7.3.4 — DR Runbook Independent Test
+- [ ] Identify an independent tester (someone who did not write the runbook)
+- [ ] Tester executes `docs/DR_RUNBOOK.md` on a clean machine from scratch
+- [ ] System must reach `GET /health → 200` + `POST /api/trigger` completing a successful cycle within the 4-hour RTO
+- [ ] Document results in a new `docs/DR_RUNBOOK.md §Results` section: date, tester name, start/end times, any deviations from the documented steps
+- [ ] Fix any gaps identified; re-test if material changes were required
+
+#### 7.3.5 — Phase 7.3 Acceptance Gate
+- [ ] Grafana dashboard is live and displaying real SLI data from at least one full cycle
+- [ ] One alert rule verified to fire correctly on a simulated failure
+- [ ] Backup automation running; backup file confirmed valid (parses as XML) after a live cycle
+- [ ] DR runbook test complete; results documented; no critical gaps remaining
+- [ ] `docs/STATUS.md` history row added
+
+---
+
+### 7.4 — Platform Enhancements
+
+**Duration:** 4-6 weeks  
+**Goal:** Deliver meaningful user-facing and pipeline improvements that increase PM/planner adoption and auditability. All items in this sub-phase are code improvements that do not require external infrastructure.
+
+#### 7.4.1 — Dashboard Live Updates (TD-021 Extension)
+- [ ] Complete TD-021 AJAX countdown fix (see 7.1.1 above)
+- [ ] Add real-time per-CAM progress row during active cycle: display `Alice ✓ | Bob ⏳ | Carol ✓ | ...` as interviews complete, updating via AJAX without full reload
+- [ ] "Validation Alerts" collapsible panel from TD-015 (see 7.1.1) integrated into the same AJAX state update
+- [ ] Add a "What Changed" tab to the dashboard: renders `GET /api/diff/{cycle_id}` output as a sortable table; defaults to the latest completed cycle; cycle selector dropdown allows historical review
+- [ ] Manual test: run a full cycle; verify CAM progress ticks live during the interview phase; "What Changed" tab populates after cycle complete
+
+#### 7.4.2 — Cumulative Change Report (Phase 6.5 Deferred)
+**File:** `agent/dashboard/server.py`, `agent/ims_diff.py`
+- [ ] Implement `GET /api/changes?from={cycle_id}&to={cycle_id}` endpoint: load all `data/ims_exports/{cycle_id}_diff.json` files between the two cycle IDs (inclusive); merge by task_id + field; return per-task net change (earliest old_value → latest new_value), hop count, and list of contributing cycle IDs
+- [ ] Dashboard "Change History" tab: date-range selector → calls `/api/changes` → renders merged diff table; exportable as CSV via `GET /api/changes?format=csv`
+- [ ] Unit tests `TestCumulativeDiff`: merge two consecutive diff files; assert net field values correct; assert hop count = number of intermediate changes; assert correct contributing cycle IDs (minimum 4 tests)
+
+#### 7.4.3 — Baseline Drift Report (Phase 6.5 Deferred)
+**File:** `agent/dashboard/server.py`, `agent/ims_diff.py`
+- [ ] Define baseline: IMS snapshot at program start, identified by `BASELINE_CYCLE_ID` env var; if not set, use the oldest snapshot in `data/ims_exports/`
+- [ ] Implement `GET /api/baseline-drift` endpoint: compare current IMS task list vs baseline snapshot; report per-task slip in calendar days (finish date delta), percent complete delta, and tasks added/removed since baseline
+- [ ] Dashboard "Baseline Drift" tab: table sorted by largest slip; highlight tasks > 14-day slip in amber, > 30-day in red; exportable as CSV
+- [ ] Unit tests `TestBaselineDrift`: create two synthetic IMS snapshots with known date differences; assert drift report shows correct slip values and correct added/removed task lists (minimum 4 tests)
+
+#### 7.4.4 — Q&A Context Caching (TD-016)
+**File:** `agent/qa/context_builder.py`
+- [ ] Cache dashboard state and cycle history in module-level variables with 30-second TTL; invalidate when `dashboard_state.json` modification time changes
+- [ ] Unit test: call `load_state()` twice within TTL; assert only one file read occurs; update file; assert next call reads fresh data
+
+#### 7.4.5 — CAM Simulator Rate Limiting (TD-009)
+**File:** `agent/voice/cam_simulator.py`
+- [ ] Add `SIMULATOR_CALL_DELAY_MS` env var (default 200ms); apply as `time.sleep(delay_s)` between successive `respond()` API calls within a single session
+- [ ] Document in `CONFIGURATION.md`
+- [ ] Unit test: mock `time.sleep`; assert it is called with the correct delay value for each turn in a multi-task session
+
+#### 7.4.6 — Cycle Report Enhancements
+**File:** `agent/report_generator.py`
+- [ ] Add "IMS Diff Summary" section to each cycle report: table of first 5 field changes from `{cycle_id}_diff.md`; note total change count if > 5
+- [ ] Add "Baseline Drift Alert" section when any milestone has slipped > 14 days from baseline (populate from `/api/baseline-drift` data); include milestone name, baseline date, current projected date, days slipped
+- [ ] Unit test: report contains "IMS Diff Summary" section when diff file is present for the cycle; "Baseline Drift Alert" section appears when a milestone is > 14 days late
+
+#### 7.4.7 — Phase 7.4 Acceptance Gate
+- [ ] Dashboard live CAM progress confirmed working in a real cycle (no full-page reload during interview phase)
+- [ ] `/api/changes` returns correct merged data across two real consecutive cycles
+- [ ] `/api/baseline-drift` returns correct slip values on the ATLAS test IMS
+- [ ] Cycle report contains "IMS Diff Summary" section
+- [ ] Test count ≥ 14 new tests for this sub-phase
+- [ ] `docs/STATUS.md` history row added
+
+---
+
+### 7.5 — First Customer Pilot Execution
+
+**Duration:** 4-6 weeks (sequential; blocked on customer prerequisites)  
+**Goal:** Execute the first real-world pilot on live program data with a paying customer. Validate the agent's core value proposition — does it save planner time, does it capture accurate data, does the PM trust the output?
+
+> **This sub-phase cannot start until** all items in 7.5.1 Prerequisites are complete. Work 7.1–7.4 while waiting.
+
+#### 7.5.1 — Prerequisites (Customer Dependencies)
+- [ ] **Customer IT:** M365 tenant ID provided; Teams admin consent granted for bot app registration; SMTP relay credentials provided; network allowlist configured for agent egress (Anthropic API or on-prem LLM, Teams/Graph API, Slack, SMTP)
+- [ ] **Customer planner:** Real IMS XML export (MS Project MSPDI format) provided; CAM name list with Teams account UPNs provided; reporting cycle defined (weekly/biweekly/monthly); interview window defined (day of week, time range)
+- [ ] **Agent team:** Azure Bot Service provisioned in customer M365 tenant; `cam_identity_map.json` populated with real CAM names and UPNs; `cam_sessions.json` bootstrapped via `--bootstrap-sessions` after bot is live
+- [ ] **Security gate:** Customer ISSO reviews `SECURITY.md` and `docs/CMMC_GAP.md`; signs off on network posture and data handling before any real schedule data enters the system
+- [ ] **Smoke test:** `POST /api/trigger` in `CALL_TRANSPORT=simulated` mode on the customer's real IMS file; verify cycle completes, report is coherent, no parser errors
+
+#### 7.5.2 — Pilot Cycle Execution
+- [ ] **Cycle 1 (Supervised):** Agent team monitors all logs in real time; planner reviews cycle report same day; document any issues immediately in `PHASE6-FEEDBACK.md`
+- [ ] **Cycle 2 (Semi-supervised):** Planner reviews report independently without prompt; PM uses Q&A interface for ≥5 questions; capture feedback in weekly check-in
+- [ ] **Cycle 3 (Unattended):** No monitoring during execution; review output at completion only; confirm dead man's switch and alert system worked correctly
+- [ ] **Cycle 4 (Acceptance):** Unattended; acceptance criteria formally evaluated at completion; sign-off required to close the pilot
+
+#### 7.5.3 — Pilot Acceptance Criteria
+- [ ] 4 consecutive unattended cycles with real CAM data, zero manual interventions required
+- [ ] Planner confirms: schedule data accuracy matches or exceeds the manual Excel process; time savings are real and measurable
+- [ ] PM asks ≥10 questions via Q&A interface; all answered accurately; zero hallucinated task names, dates, or percent-complete values
+- [ ] DR runbook independently verified: standby engineer restores from backup within 4-hour RTO on a simulated outage
+- [ ] Audit diff reviewed by planner after each cycle; every change is traceable to a specific CAM interview response
+- [ ] No open P1 or P2 incidents during the pilot window
+
+#### 7.5.4 — Phase 7.5 / Phase 7 Gate
+- [ ] All 6 acceptance criteria signed off by customer planner and PM (written confirmation)
+- [ ] `PHASE6-FEEDBACK.md` pilot summary section completed (wins, issues, backlog items)
+- [ ] Post-pilot backlog triage: immediate fixes (blocks continued use) vs Phase 8 roadmap items; documented in `PHASE6-FEEDBACK.md §Triage`
+- [ ] `docs/STATUS.md` updated: "Last production cycle" field, pilot sign-off date
+- [ ] Phase 7 formally complete — program proceeds to Phase 8 based on customer and commercial priorities
+
+---
+
+### Phase 7 Dependencies
+
+| Dependency | Owner | Status | Blocks |
+|---|---|---|---|
+| Customer IT engagement (M365, allowlist, SMTP) | John Forbes + Customer IT | ⏳ Not started | 7.5.1 |
+| Real IMS XML from customer planner | Customer planner | ⏳ Not started | 7.5.1 |
+| Azure Bot Service production subscription | John Forbes | ⏳ Not started | 7.5.1 |
+| Secrets manager decision (Vault / AWS / Azure Key Vault) | John Forbes | ⏳ Not started | 7.2.1 |
+| Observability platform decision (Grafana / Datadog / CloudWatch) | John Forbes | ⏳ Not started | 7.3.1–7.3.2 |
+| Backup storage location (network share, S3, Azure Blob) | John Forbes | ⏳ Not started | 7.3.3 |
+| Independent security review / penetration test | Third party | ⏳ Not started | 7.2.5 |
+| DR runbook independent tester | John Forbes | ⏳ Not started | 7.3.4 |
+| Customer ISSO security sign-off | Customer ISSO | ⏳ Not started | 7.5.1 |
+
+### Phase 7 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Customer IT engagement takes > 4 weeks | High | Medium | 7.1–7.4 proceed in parallel; pilot is not on the critical path for code improvements |
+| JWT implementation introduces auth regression | Medium | High | `ENABLE_JWT=false` default; full auth test suite before enabling; staged rollout |
+| Real IMS too complex or non-standard for current parser | Medium | High | Smoke test on customer export in 7.5.1 before Cycle 1; expand parser if needed |
+| CMMC pen test identifies a critical gap post-7.2 | Low | High | 7.2 closes all 6 HIGH-priority gaps first; pen test is verification, not discovery |
+| DR runbook independent test fails (clean machine) | Medium | Medium | Gaps are likely minor (env var docs, path instructions); 4-hour RTO is generous |
+| Customer CAMs resistant to chat/voice interviews | Medium | Medium | Short (<5 min) interview; async mode (reply when ready); show time savings vs Excel |
+
+---
+
+## PHASE 8 — ADVANCED CAPABILITIES
+
+### Objective
+
+Extend the IMS Agent into a multi-tenant, multi-integration platform capable of supporting real-time voice interviews via Azure ACS, ingesting schedules from Primavera P6 and Jira, and delivering ML-enhanced schedule forecasting. Phase 8 items are post-pilot roadmap — they are planned and sequenced here but do not activate until pilot feedback confirms customer demand.
+
+**Phase Gate:** Each 8.x sub-phase has its own independent gate. There is no single gate for Phase 8 as a whole. Sub-phases activate based on pilot feedback priority and commercial commitments.
+
+---
+
+### 8.1 — Real Teams/ACS Voice Integration (TD-011)
+
+**Context:** `agent/voice/teams_connector.py::TeamsACSConnector` is a documented stub that raises `NotImplementedError`. Full Tier 3 voice interviews require an Azure Communication Services subscription and real-time audio handling infrastructure.
+
+**Phase Gate:** End-to-end live voice interview with one real CAM; all five tasks captured; transcript and structured data match what the chat interview would have produced.
+
+- [ ] Obtain Azure ACS calling subscription; provision a calling-enabled resource
+- [ ] Implement `TeamsACSConnector.__init__()`: initialise `azure.communication.callautomation.CallAutomationClient`; load `ACS_CONNECTION_STRING` env var
+- [ ] Implement outbound call flow: `initiate_call(cam_teams_id)` → receive `CallConnected` event → play greeting TTS → process `SpeechRecognized` events through `InterviewAgent` state machine → play next prompt → `HangUp` on close
+- [ ] Wire `WhisperSTTEngine` to real-time chunked ACS audio stream (or use ACS's built-in speech recognition if latency acceptable)
+- [ ] Wire `ElevenLabsTTSEngine` or `AzureTTSEngine` to ACS TTS output; play pre-synthesized prompts to reduce latency
+- [ ] Unit tests (mocked `CallAutomationClient`): validate connector state machine — `initiate_call`, receive `CallConnected`, play prompt, receive `SpeechRecognized`, advance state, `HangUp`; minimum 8 tests
+- [ ] Integration test (ACS sandbox): agent calls a test PSTN number; full `InterviewAgent` state machine completes; transcript captured; structured data extracted correctly
+- [ ] Update `CONFIGURATION.md` with ACS env vars; update `ARCHITECTURE.md §Voice` with Tier 3 call flow; update `TEAMS-SETUP.md` with ACS provisioning steps
+
+---
+
+### 8.2 — Multi-Tenant / Multi-Program Support
+
+**Context:** Defense contractors manage dozens of programs simultaneously. The current agent is single-program (one IMS, one CAM set, one schedule). Multi-program support is the key unlock for enterprise licensing.
+
+**Phase Gate:** Two programs running concurrently on independent schedules with separate IMS files, CAM sets, and notification targets; no data cross-contamination confirmed by test.
+
+- [ ] Design tenant isolation model: evaluate options — (a) one agent process per program (namespace by env), (b) single shared process with program routing; document decision in `docs/decisions.md` as ADR-007
+- [ ] Implement program registry: `data/programs.json` maps `program_id` → `{ims_path, cam_identity_map, cam_sessions, schedule_cron, notification_targets}`
+- [ ] Multi-program scheduler: `CycleScheduler` fires a separate `CycleRunner` per program per configured cron; isolation confirmed by separate `cycle_id` namespaces
+- [ ] Dashboard: program selector dropdown at top-right; all views (health, milestones, risks, Q&A) filtered to selected program
+- [ ] Q&A: route question to correct program context based on user's authenticated program association (extend JWT claims with `program_id`)
+- [ ] API: all `/api/*` routes accept optional `?program_id=` parameter; scoped API keys per program; cross-program access denied with 403
+- [ ] Unit tests: two concurrent `CycleRunner` instances on different IMS paths do not share state; `/api/diff/{cycle_id}` returns 403 when `cycle_id` belongs to a different program
+
+---
+
+### 8.3 — Advanced SRA & Probabilistic Forecasting (TD-001 Extension)
+
+**Context:** Current SRA uses ±10% uniform duration distribution for all tasks. Real programs use three-point estimates (optimistic / most likely / pessimistic) which produce materially different P80/P95 dates. This phase delivers risk accuracy that justifies SRA as a procurement differentiator.
+
+**Phase Gate:** SRA with three-point estimates produces P80 dates within ±5% of an independently-calculated Monte Carlo on the same input data.
+
+- [ ] Extend `IMSFileHandler.parse()` to extract three-point estimate fields from MS Project XML (`DurationVariance`, `OptimisticDuration`, `PessimisticDuration`) when present; store in `Task` dataclass as `duration_opt`, `duration_ml`, `duration_pess`
+- [ ] Update `SRARunner` to use beta-PERT distribution when all three estimates are present; fall back to existing ±10% uniform distribution when they are absent
+- [ ] Implement optional task-pair correlation matrix: `data/sra_correlations.json`; if present, apply Cholesky decomposition to correlated task duration samples
+- [ ] Update deterministic health thresholds (from TD-001 / Phase 7.1) to use beta-PERT P50 in the GREEN/YELLOW/RED computation
+- [ ] Unit tests `TestBetaPERT`: known optimistic/most-likely/pessimistic inputs produce P50/P80/P95 within analytically-expected bounds; correlation matrix shifts joint probability in the correct direction (minimum 6 tests)
+- [ ] Update `API.md` to document new SRA fields in milestone responses; update `CONFIGURATION.md` with `sra_correlations.json` format
+
+---
+
+### 8.4 — Enterprise Schedule Integrations
+
+**Context:** Customers outside the MS Project ecosystem use Primavera P6 (large defense programs), Jira (software programs), and various ERPs for resource planning. Each integration expands the addressable market.
+
+#### 8.4.1 — Primavera P6 Integration
+**Phase Gate:** End-to-end cycle on a P6 XML export; critical path matches P6's own output; report is indistinguishable from an MS Project-sourced run.
+- [ ] Implement P6 XML ingestion in `agent/file_handler.py`: parse P6's `xer` or P6 XML schema; map P6 WBS activities → `Task` dataclass (activity ID, resource, start/finish, percent complete, predecessor links, baseline dates)
+- [ ] Support P6 WBS hierarchy: summarise sub-activities into parent WBS elements for reporting
+- [ ] Integration test: parse a sample P6 XML export; assert parsed task count, critical path, and float values match P6's own reports
+- [ ] Document P6 setup in `CONFIGURATION.md §IMS Formats`
+
+#### 8.4.2 — Jira Integration
+**Phase Gate:** Jira-sourced cycle completes; Q&A can answer questions about Jira epics/stories; story status updated in Jira after cycle.
+- [ ] Implement `agent/connectors/jira_connector.py`: pull epics and stories via Jira REST API v3; map story points and sprint velocity to percent complete; map Jira assignees to CAM names
+- [ ] Bidirectional write: after cycle, update Jira story description/comment with CAM interview data (blocker, risk flag, updated percent complete)
+- [ ] `JIRA_BASE_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL` env vars; document in `CONFIGURATION.md`
+- [ ] Unit tests (mocked Jira API): task list parsed correctly; write-back updates correct story fields
+
+#### 8.4.3 — WhisperSTTEngine Real-Audio Testing (TD-010)
+**Phase Gate:** Integration test suite passes on a machine with `openai-whisper` installed.
+- [ ] Add `@pytest.mark.integration` test suite for `WhisperSTTEngine`; auto-skip when `openai-whisper` is not installed
+- [ ] Test with a short WAV file containing known phrases ("percent complete", "blocked", "risk"); assert transcript contains expected keywords
+- [ ] Add `openai-whisper` and `sounddevice` to `requirements-optional.txt` with install instructions
+
+---
+
+### Phase 8 Dependencies
+
+| Dependency | Owner | Status | Blocks |
+|---|---|---|---|
+| Azure ACS calling subscription | John Forbes | ⏳ Not started | 8.1 |
+| Phase 7.5 pilot complete (confirms customer demand) | John Forbes + Customer | ⏳ Not started | 8.1, 8.2, 8.3 |
+| Customer with P6-based program (validates 8.4.1) | Sales / John Forbes | ⏳ Not started | 8.4.1 |
+| Customer with Jira-based program (validates 8.4.2) | Sales / John Forbes | ⏳ Not started | 8.4.2 |
+
+### Phase 8 Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| ACS real-time audio latency unacceptable for CAM interviews | Medium | High | Test ACS audio round-trip early; Azure TTS pre-synthesized prompts reduce perceived latency |
+| Multi-tenant isolation bug leaks data across programs | Low | Critical | Strict unit test for cross-program access before any multi-tenant deployment; default to process-per-program model |
+| P6 XML schema varies across P6 versions | High | Medium | Test against multiple P6 export versions; fail gracefully with clear error message |
+| Three-point estimate data not available from most customers | Medium | Medium | Uniform ±10% fallback already works; beta-PERT is an enhancement, not a dependency |
 
 ---
 

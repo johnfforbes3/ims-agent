@@ -119,12 +119,12 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 3
 
-### TD-013 — Dashboard state file write is not atomic
-**File:** `agent/cycle_runner.py` — `_update_dashboard_state`, `_write_phase`  
+### TD-013 — Dashboard state file write is not atomic — **RESOLVED**
+**Resolved:** 2026-05-03 — §4.2a fix  
+**File:** `agent/cycle_runner.py` — `_update_dashboard_state`  
 **Severity:** Medium  
-**Description:** `state_path.write_text(...)` and `history_path.write_text(...)` write JSON directly to the target file. If the process is killed (SIGKILL, power loss, OOM) mid-write, the file is left truncated or with invalid JSON. The dashboard will 500 on the next request until the file is manually repaired or a new cycle overwrites it.  
-**Why deferred:** Acceptable risk for single-machine dev deployment; not a data-loss risk since the authoritative record is the IMS XML and cycle status JSONs in `reports/cycles/`.  
-**Suggested fix:** Write to a temp file in the same directory, then `os.replace(tmp, target)`. `os.replace` is atomic on POSIX and atomic on Windows when src/dst are on the same volume. One-line change per write site.
+**Description:** `state_path.write_text(...)` wrote JSON directly to the target file; a mid-write kill left the file truncated or invalid.  
+**Fix:** §4.2a replaced the `write_text()` call with a write-to-temp + `os.replace(tmp, state_path)` pattern, adding an exponential-backoff retry loop (0.1s → 0.2s → raise) for Windows `PermissionError [WinError 5]` from OneDrive sync locks. `os.replace` is atomic on POSIX and on Windows when src/dst are on the same volume. Verified by `TestDashboardStateRetry` (4 tests).
 
 ---
 
