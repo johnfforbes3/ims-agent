@@ -631,6 +631,58 @@ Transform the IMS Agent from a proven development system into a hardened, observ
 
 ### Phase 6 Checklist
 
+> **Sequencing note:** Phase 6.0 (Core Integrity) is a hard gate for all subsequent sub-phases. Shipping observability infrastructure, DR procedures, or HA deployments on top of known integrity bugs creates false confidence. Complete and verify 6.0 before beginning 6.1.
+
+---
+
+#### 6.0 — Core Integrity (Gate for All Phase 6 Work)
+
+**Context:** An independent technical review of the repo (2026-05-03) identified four confirmed bugs that represent foundational integrity gaps — not cosmetic issues. Two are confirmed FAIL items in the most recent test procedure run. All four are targeted, low-scope fixes that do not require new architecture. They must land before Phase 6.1 begins.
+
+##### 6.0.1 — Fix IMS Master Custody
+**Status:** Confirmed FAIL — TEST_RESULTS.md §4.7: "0 files — `master_old_removed` fires on both old and newly created file; folder empty after cycle."
+
+`_export_ims_snapshot()` in `agent/cycle_runner.py` (cleanup loop, line ~182) deletes all `.mpp` and `.xml` files from `data/ims_master/` including the newly-written file, whenever `xml_to_master()` returns a path that does not compare equal to the `new_master` path (case, symlink, or normalization difference). The folder ends up empty after every cycle. For a system whose core product promise is schedule custody, this is the most critical open bug.
+
+- [ ] Diagnose root cause: add logging to compare `actual_path` vs `new_master`; determine whether case mismatch, symlink resolution, or path separator causes the inequality on Windows
+- [ ] Fix cleanup logic: resolve both paths with `Path.resolve()` before comparing; add a post-cleanup assertion that `master_dir` contains exactly one file before returning
+- [ ] Add unit test: assert `ims_master/` contains exactly one file after `_export_ims_snapshot()` completes, even when `xml_to_master()` returns a differently-cased path
+- [ ] Re-run TEST_RESULTS.md §4.7; verify PASS before proceeding
+
+##### 6.0.2 — Make `LLM_BASE_URL` Genuinely Independent of Anthropic Credentials
+**Status:** Confirmed bug. README and SECURITY.md both state that setting `LLM_BASE_URL` to a local Ollama endpoint is sufficient for ITAR/on-prem deployment. This is false: `agent/llm_interface.py` (line 40–42) raises `EnvironmentError` unconditionally when `ANTHROPIC_API_KEY` is not set, regardless of whether `LLM_BASE_URL` is configured.
+
+- [ ] Change `LLMInterface.__init__()`: when `LLM_BASE_URL` is set, make `ANTHROPIC_API_KEY` optional — accept a sentinel value (e.g., `"ollama"`) or skip the key check entirely; confirm the Anthropic SDK accepts an empty/dummy key when a `base_url` override is provided
+- [ ] Add smoke test: assert `LLMInterface()` initializes without error when `LLM_BASE_URL` is set and `ANTHROPIC_API_KEY` is unset
+- [ ] Manual verification: boot the full agent with only `LLM_BASE_URL` set (local Ollama instance); confirm `--run` completes a cycle without credential errors
+- [ ] Update `CONFIGURATION.md` and `SECURITY.md`: explicitly state that `ANTHROPIC_API_KEY` is not required when `LLM_BASE_URL` points to a local endpoint
+
+##### 6.0.3 — Collapse Transport Ambiguity Into One Safe Entry Path
+**Status:** Architectural fragility. The `--schedule` vs `--trigger` distinction is documented in ARCHITECTURE.md as a warning ("getting it wrong silently breaks interviews"), but `main.py` still creates `CycleRunner` without explicitly threading `CALL_TRANSPORT`. The failure mode — all CAM replies silently dropped — has no error output and is very difficult to diagnose.
+
+- [ ] In `main.py`, read `CALL_TRANSPORT` at startup, log it at INFO level, and validate against the launch mode: if `CALL_TRANSPORT=teams_chat` and the mode has no HTTP server (i.e., `--run` or legacy `--trigger`), emit a clear error and exit rather than running and silently failing
+- [ ] Add startup guard in `CycleRunner.__init__()`: if `mode="teams_chat"` and no server context is detected, log a warning with the correct startup pattern
+- [ ] Evaluate removing the `--trigger` CLI flag entirely or converting it to a thin HTTP client that posts to `POST /api/trigger` on the running server — eliminating the failure mode at the source
+- [ ] Unit test: assert that a `CycleRunner` initialized with `CALL_TRANSPORT=teams_chat` in a no-server context raises a `ConfigurationError` with a descriptive message pointing to the correct pattern
+
+##### 6.0.4 — Make Approval Application Transactional
+**Status:** Confirmed bug. `apply_approved()` in `agent/cycle_runner.py` calls `mark_approved(cycle_id, approver)` at line 223, before `handler.apply_updates()` at line 227. If the IMS write fails (disk full, validation error, file lock), the approval record is permanently marked `"approved"` but the IMS was never updated. The cycle cannot be retried via the approval endpoint because the status check (`record.get("status") != "pending"`) will reject it.
+
+- [ ] Move `mark_approved()` to after `apply_updates()` and `_export_ims_snapshot()` both succeed
+- [ ] Wrap the full apply sequence in try/except: on any exception, ensure the approval record remains in `"pending"` state (or transitions to a new `"approval_failed"` state) so the PM can retry
+- [ ] Add unit test: mock `apply_updates` to raise; assert the approval store record is still retrievable with status `"pending"` after the exception
+- [ ] Verify that the approval endpoint returns a meaningful error response when the apply fails (not a 500)
+
+##### 6.0.5 — Resolve Documentation Drift
+**Status:** Three documents currently report inconsistent test counts and system state. An AI agent or new engineer reading the repo cannot determine the actual state of the system.
+
+- [ ] Fix `README.md` project structure section: "242 tests" → current count; "57-task ATLAS program IMS" → current IMS description (100-task AI Agent Server Rack)
+- [ ] Update `TEST_RESULTS.md`: add a dated header indicating when the procedure was last run; reconcile section 1.1 count (254) with current pytest actual; note all open FAIL items prominently at the top
+- [ ] Establish a documentation accuracy rule: test count, last run date, and open FAIL items must be updated in `TEST_RESULTS.md` and `README.md` before any commit that touches the test suite or runs the test procedure
+- [ ] Consider adding a `docs/STATUS.md` as a single-line-of-truth file: current test count, last procedure run date, last production cycle date, open FAILs — updated on every procedure run
+
+---
+
 #### 6.1 — Observability
 
 ##### Metrics & Dashboards

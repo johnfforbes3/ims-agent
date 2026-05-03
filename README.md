@@ -103,9 +103,9 @@ ims-agent/
 │       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
 │       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
 ├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
-├── tests/                      — pytest test suite (242 tests)
+├── tests/                      — pytest test suite (255 tests)
 ├── data/
-│   ├── sample_ims.xml          — Synthetic 57-task ATLAS program IMS
+│   ├── sample_ims.xml          — Synthetic 100-task AI Agent Server Rack IMS
 │   ├── dashboard_state.json    — Live dashboard state (updated each cycle)
 │   ├── cycle_history.json      — Per-cycle summary history
 │   └── snapshots/              — Timestamped IMS copies before each update
