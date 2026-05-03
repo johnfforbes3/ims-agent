@@ -193,6 +193,70 @@ class TestLLMBaseURL:
         _, kwargs = mock_cls.call_args
         assert "base_url" not in kwargs
 
+    # --- Phase 6.0.2 additions ---
+
+    def test_no_api_key_required_when_base_url_set(self, monkeypatch):
+        """LLMInterface must initialise without ANTHROPIC_API_KEY when LLM_BASE_URL is set."""
+        monkeypatch.setattr("agent.llm_interface._BASE_URL", "http://localhost:11434")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            from agent.llm_interface import LLMInterface
+            llm = LLMInterface()  # must not raise
+
+        assert llm is not None
+        _, kwargs = mock_cls.call_args
+        # Sentinel key is passed so SDK doesn't reject the call, but it is not a real credential.
+        assert kwargs.get("api_key") == "ollama"
+        assert kwargs.get("base_url") == "http://localhost:11434"
+
+    def test_raises_when_no_key_and_no_base_url(self, monkeypatch):
+        """EnvironmentError raised when both ANTHROPIC_API_KEY and LLM_BASE_URL are absent."""
+        monkeypatch.setattr("agent.llm_interface._BASE_URL", "")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        from agent.llm_interface import LLMInterface
+        with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+            LLMInterface()
+
+
+# ===========================================================================
+# Phase 6.0.3 — Transport startup guard
+# ===========================================================================
+
+class TestTransportStartupGuard:
+    """--trigger must refuse to run when CALL_TRANSPORT=teams_chat."""
+
+    def test_trigger_exits_when_teams_chat_transport(self, monkeypatch, capsys):
+        """_run_trigger should sys.exit(1) with a clear message when CALL_TRANSPORT=teams_chat."""
+        import importlib
+        import main as main_mod
+
+        monkeypatch.setenv("CALL_TRANSPORT", "teams_chat")
+
+        with pytest.raises(SystemExit) as exc_info:
+            main_mod._run_trigger("data/sample_ims.xml")
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "teams_chat" in captured.out
+        assert "api/trigger" in captured.out or "POST" in captured.out
+
+    def test_trigger_proceeds_when_simulated_transport(self, monkeypatch):
+        """_run_trigger must not exit when CALL_TRANSPORT=simulated."""
+        import main as main_mod
+
+        monkeypatch.setenv("CALL_TRANSPORT", "simulated")
+
+        with patch("agent.cycle_runner.CycleRunner.run", return_value={
+            "schedule_health": "GREEN",
+            "report_path": "reports/test.md",
+            "error": None,
+        }):
+            # Should not raise or exit.
+            main_mod._run_trigger("data/sample_ims.xml")
+
 
 # ===========================================================================
 # Dashboard server — shared fixtures

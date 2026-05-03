@@ -36,11 +36,26 @@ class LLMInterface:
     """Wraps the Anthropic SDK for all IMS Agent LLM calls."""
 
     def __init__(self) -> None:
-        """Initialize the Anthropic client from the environment API key."""
+        """Initialize the Anthropic client.
+
+        When ``LLM_BASE_URL`` is set (local Ollama or on-prem endpoint),
+        ``ANTHROPIC_API_KEY`` is not required — the key check is skipped and a
+        sentinel value is used so the SDK does not reject the instantiation.
+        This makes the ITAR/on-prem swap path genuinely credential-free.
+
+        When ``LLM_BASE_URL`` is not set (default Anthropic cloud), a real
+        ``ANTHROPIC_API_KEY`` is required.
+        """
         api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise EnvironmentError("ANTHROPIC_API_KEY is not set in the environment.")
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        if not api_key and not _BASE_URL:
+            raise EnvironmentError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Set it for the Anthropic API, or set LLM_BASE_URL to use a "
+                "local Ollama-compatible endpoint (no API key required)."
+            )
+        # When a local endpoint is configured the SDK still requires a non-empty
+        # api_key string; use a sentinel so no real credential is transmitted.
+        kwargs: dict[str, Any] = {"api_key": api_key or "ollama"}
         if _BASE_URL:
             kwargs["base_url"] = _BASE_URL
         self._client = anthropic.Anthropic(**kwargs)

@@ -10,9 +10,9 @@ Variables marked **Required** have no safe default and the agent will not start 
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Yes** | Anthropic API key. Obtain at console.anthropic.com. Replace with local model endpoint for ITAR compliance. |
+| `ANTHROPIC_API_KEY` | — | **Conditional** | Anthropic API key. Required when `LLM_BASE_URL` is empty (Anthropic cloud). **Not required** when `LLM_BASE_URL` points to a local Ollama-compatible endpoint. Obtain at console.anthropic.com. |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | No | Claude model ID. Change to test other models. |
-| `LLM_BASE_URL` | *(empty)* | No | Override the Anthropic API base URL. Set to an Ollama-compatible endpoint for on-prem/ITAR deployments (e.g., `http://localhost:11434`). Empty = Anthropic cloud. |
+| `LLM_BASE_URL` | *(empty)* | No | Override the Anthropic API base URL. Set to an Ollama-compatible endpoint for on-prem/ITAR deployments (e.g., `http://localhost:11434`). When set, `ANTHROPIC_API_KEY` is not required. Empty = Anthropic cloud. |
 | `IMS_FILE_PATH` | `data/sample_ims.xml` | **Yes** | Path to the IMS XML file (MSPDI format). Relative to the project root. |
 | `REPORTS_DIR` | `reports` | No | Directory for generated reports and cycle status JSONs. |
 | `LOGS_DIR` | `logs` | No | Directory for log files. Created automatically if missing. |

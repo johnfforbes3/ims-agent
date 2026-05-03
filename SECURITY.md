@@ -104,7 +104,7 @@ All LLM inference uses the Anthropic cloud API. **IMS schedule data for ITAR-con
    ```
    LLM_BASE_URL=http://your-ollama-host:11434
    ```
-   The `LLM_BASE_URL` env var is passed as `base_url` to the Anthropic SDK client, which supports Ollama-compatible endpoints. No code changes required. Test synthesis quality with the local model and adjust prompts if needed.
+   When `LLM_BASE_URL` is set, `ANTHROPIC_API_KEY` is **not required** — the agent initializes without it and all inference traffic goes to your local endpoint. No code changes required. Test synthesis quality with the local model and adjust prompts if needed.
 
 2. **Confirm no other outbound calls carry program data.** Current outbound calls:
    - Anthropic API (LLM inference) — replace with on-prem

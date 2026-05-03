@@ -118,7 +118,17 @@ def _run_demo() -> None:
 def _run_trigger(ims_path: str) -> None:
     from agent.cycle_runner import CycleRunner
     mode = os.getenv("CALL_TRANSPORT", "simulated")
-    print(f"Triggering one full cycle...  (mode={mode})")
+    if mode == "teams_chat":
+        print(
+            "ERROR: CALL_TRANSPORT=teams_chat is set but --trigger runs in a separate\n"
+            "process that cannot share the server's ChatInterviewManager. All Teams Chat\n"
+            "CAM replies would be silently dropped.\n\n"
+            "Use --schedule (or --serve) instead and fire the cycle via:\n"
+            "    curl -X POST http://localhost:9000/api/trigger\n\n"
+            "See ARCHITECTURE.md §6 for details."
+        )
+        sys.exit(1)
+    print(f"Triggering one full cycle...  (transport={mode})")
     runner = CycleRunner(ims_path=ims_path, mode=mode)
     status = runner.run()
     print(f"\nCycle complete — health: {status['schedule_health']}")
@@ -144,7 +154,11 @@ def _run_schedule(ims_path: str) -> None:
     from agent.dashboard.server import serve
     from agent.slack_command import start as start_slack
 
-    runner = CycleRunner(ims_path=ims_path)
+    mode = os.getenv("CALL_TRANSPORT", "simulated")
+    logger.info("action=startup mode=schedule transport=%s ims=%s", mode, ims_path)
+    print(f"Transport: {mode}")
+
+    runner = CycleRunner(ims_path=ims_path, mode=mode)
     scheduler = CycleScheduler(cycle_fn=runner.run)
     scheduler.start()
     start_slack()  # no-op if tokens not configured

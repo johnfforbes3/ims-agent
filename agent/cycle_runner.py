@@ -178,14 +178,34 @@ class CycleRunner:
                 shutil.copy2(actual, exports_dir / f"latest_ims{actual.suffix}")
                 logger.info("action=master_exported cycle=%s master=%s", cycle_id, actual.name)
 
-                # Remove all old master files (.mpp and .xml) to keep folder unambiguous
+                # Remove old master files to keep folder unambiguous.
+                # Use .resolve() for comparison so Windows path-case differences
+                # (e.g. C:\Data\IMS_… vs c:\data\IMS_…) do not cause the
+                # newly-written file to be deleted alongside the old ones.
+                actual_resolved = actual.resolve()
                 for old in list(master_dir.glob("*.mpp")) + list(master_dir.glob("*.xml")):
-                    if old != actual:
+                    if old.resolve() != actual_resolved:
                         try:
                             old.unlink()
                             logger.info("action=master_old_removed path=%s", old)
                         except OSError as exc:
                             logger.warning("action=master_remove_failed path=%s error=%s", old, exc)
+
+                # Verify the folder is not empty — custody must be maintained.
+                remaining = (
+                    list(master_dir.glob("*.mpp")) + list(master_dir.glob("*.xml"))
+                )
+                if not remaining:
+                    logger.error(
+                        "action=master_custody_lost cycle=%s master_dir=%s "
+                        "— folder is empty after cleanup; actual=%s",
+                        cycle_id, master_dir, actual_path,
+                    )
+                else:
+                    logger.info(
+                        "action=master_custody_ok cycle=%s master=%s",
+                        cycle_id, remaining[0].name,
+                    )
             except Exception as exc:
                 logger.error("action=master_export_failed cycle=%s error=%s", cycle_id, exc)
         else:
@@ -220,13 +240,28 @@ class CycleRunner:
         ims_path = record.get("ims_path", _IMS_PATH)
         cam_inputs = record["cam_inputs"]
 
-        mark_approved(cycle_id, approver=approver)
+        # Apply IMS write BEFORE marking approved so that a write failure
+        # leaves the record in "pending" state and the PM can retry.
+        try:
+            handler = IMSFileHandler(ims_path)
+            handler.parse()  # prime the tree
+            handler.apply_updates(cam_inputs)
+            tasks_updated = handler.parse()
+            cls._export_ims_snapshot(cycle_id, ims_path)
+        except Exception as exc:
+            logger.error(
+                "action=approval_apply_failed cycle=%s error=%s — record remains pending",
+                cycle_id, exc,
+            )
+            return {
+                "error": (
+                    f"IMS write failed for cycle {cycle_id}: {exc}. "
+                    "Record remains pending — correct the issue and retry the approval."
+                )
+            }
 
-        handler = IMSFileHandler(ims_path)
-        handler.parse()  # prime the tree
-        handler.apply_updates(cam_inputs)
-        tasks_updated = handler.parse()
-        cls._export_ims_snapshot(cycle_id, ims_path)
+        # All writes succeeded — now commit the approval status.
+        mark_approved(cycle_id, approver=approver)
 
         cp_result = calculate_critical_path(tasks_updated)
         sra_results = SRARunner(tasks_updated, seed=None).run()
