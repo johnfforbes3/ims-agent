@@ -278,3 +278,121 @@ class TestApprovalTransactionality:
             f"Record must be 'approved' after successful write; got {record['status']!r}"
         )
         assert record["approver"] == "pm@test.com"
+
+
+# ---------------------------------------------------------------------------
+# §4.2a — _update_dashboard_state retries os.replace() on PermissionError
+# ---------------------------------------------------------------------------
+
+class TestDashboardStateRetry:
+    """
+    Unit tests for the retry logic added to _update_dashboard_state().
+
+    We patch os.replace inside agent.cycle_runner to simulate transient
+    PermissionError (WinError 5 / OneDrive lock) and verify that:
+      - A single transient failure is recovered without raising.
+      - Two consecutive failures are recovered without raising.
+      - Three consecutive failures (max retries) re-raise the PermissionError.
+    """
+
+    def _make_runner(self, tmp_path, monkeypatch):
+        """Return a CycleRunner wired to a temp directory."""
+        data = tmp_path / "data"
+        data.mkdir(exist_ok=True)
+        state_file = str(data / "dashboard_state.json")
+        history_file = str(data / "cycle_history.json")
+        monkeypatch.setattr("agent.cycle_runner._DASHBOARD_STATE_FILE", state_file)
+        monkeypatch.setattr("agent.cycle_runner._CYCLE_HISTORY_FILE", history_file)
+        return CycleRunner(ims_path="data/sample_ims.xml")
+
+    def _call_update(self, runner):
+        """Call _update_dashboard_state with minimal valid arguments."""
+        mock_dir = MagicMock()
+        mock_dir.get_call_status_summary.return_value = {}
+        runner._update_dashboard_state(
+            cycle_id="TEST_RETRY_01",
+            health="GREEN",
+            tasks=[],
+            cp_result={"critical_path": []},
+            sra_results=[],
+            synthesis={"narrative": "", "top_risks": [], "recommended_actions": []},
+            cam_inputs=[],
+            directory=mock_dir,
+            completion_report={"responded": 0, "total": 0, "completion_rate": 0.0},
+            report_path="reports/test.md",
+            status={},
+        )
+
+    def test_succeeds_on_first_try(self, tmp_path, monkeypatch):
+        """When os.replace succeeds immediately, no retry occurs."""
+        runner = self._make_runner(tmp_path, monkeypatch)
+        replace_calls = []
+
+        original_replace = __import__("os").replace
+
+        def counting_replace(src, dst):
+            replace_calls.append((src, dst))
+            return original_replace(src, dst)
+
+        monkeypatch.setattr("agent.cycle_runner.os.replace", counting_replace)
+        self._call_update(runner)
+
+        # Two replaces occur: dashboard_state.json and cycle_history.json.
+        # Filter to just the dashboard state file to confirm exactly 1 attempt.
+        dashboard_replaces = [c for c in replace_calls if "dashboard_state" in str(c[1])]
+        assert len(dashboard_replaces) == 1
+
+    def test_retries_once_on_transient_permission_error(self, tmp_path, monkeypatch):
+        """A single PermissionError on os.replace is retried and succeeds."""
+        import os
+        runner = self._make_runner(tmp_path, monkeypatch)
+        # Track only dashboard_state replace calls
+        dashboard_calls = [0]
+        original_replace = os.replace
+
+        def flaky_replace(src, dst):
+            if "dashboard_state" in str(dst):
+                dashboard_calls[0] += 1
+                if dashboard_calls[0] == 1:
+                    raise PermissionError("[WinError 5] Access is denied (simulated)")
+            return original_replace(src, dst)
+
+        monkeypatch.setattr("agent.cycle_runner.os.replace", flaky_replace)
+        monkeypatch.setattr("agent.cycle_runner.time.sleep", lambda _: None)
+
+        # Should NOT raise — retry recovers
+        self._call_update(runner)
+        assert dashboard_calls[0] == 2  # 1 failure + 1 success (dashboard only)
+
+    def test_retries_twice_on_two_transient_errors(self, tmp_path, monkeypatch):
+        """Two consecutive PermissionErrors are retried and the third attempt succeeds."""
+        import os
+        runner = self._make_runner(tmp_path, monkeypatch)
+        dashboard_calls = [0]
+        original_replace = os.replace
+
+        def doubly_flaky_replace(src, dst):
+            if "dashboard_state" in str(dst):
+                dashboard_calls[0] += 1
+                if dashboard_calls[0] <= 2:
+                    raise PermissionError("[WinError 5] Access is denied (simulated)")
+            return original_replace(src, dst)
+
+        monkeypatch.setattr("agent.cycle_runner.os.replace", doubly_flaky_replace)
+        monkeypatch.setattr("agent.cycle_runner.time.sleep", lambda _: None)
+
+        self._call_update(runner)
+        assert dashboard_calls[0] == 3  # 2 failures + 1 success (dashboard only)
+
+    def test_raises_after_max_retries(self, tmp_path, monkeypatch):
+        """After 3 consecutive PermissionErrors the exception is re-raised."""
+        runner = self._make_runner(tmp_path, monkeypatch)
+
+        def always_fail(src, dst):
+            raise PermissionError("[WinError 5] Access is denied (simulated)")
+
+        monkeypatch.setattr("agent.cycle_runner.os.replace", always_fail)
+        monkeypatch.setattr("agent.cycle_runner.time.sleep", lambda _: None)
+
+        with pytest.raises(PermissionError):
+            self._call_update(runner)

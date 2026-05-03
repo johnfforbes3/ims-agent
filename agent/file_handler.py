@@ -145,7 +145,16 @@ class IMSFileHandler:
         if not self.file_path.exists():
             raise FileNotFoundError(f"IMS file not found: {self.file_path}")
         ET.register_namespace("", _NS)
-        self._tree = ET.parse(str(self.file_path))
+        try:
+            self._tree = ET.parse(str(self.file_path))
+        except ET.ParseError as exc:
+            # §11.2 — surface a clear, actionable message instead of a raw traceback.
+            # The raw ET.ParseError includes a line/column reference which we preserve.
+            raise ValueError(
+                f"IMS file is not valid XML and cannot be parsed: {self.file_path}\n"
+                f"  XML error: {exc}\n"
+                f"  Check that the file is a valid MSPDI export and is not corrupted."
+            ) from exc
         self._root = self._tree.getroot()
         logger.info("action=file_loaded path=%s", self.file_path)
 

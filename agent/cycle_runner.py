@@ -22,6 +22,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -826,10 +827,35 @@ class CycleRunner:
             "latest_ims_path": str((Path(_IMS_EXPORTS_DIR) / "latest_ims.xml").resolve()),
         }
 
-        import os as _os
         tmp = state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
-        _os.replace(tmp, state_path)
+        # §4.2a — retry os.replace() to handle transient OneDrive/antivirus file locks.
+        # Windows raises PermissionError (WinError 5) when another process briefly holds
+        # the destination file open during sync.  Three attempts with exponential back-off
+        # (0.1 s, 0.2 s) cover the vast majority of transient locks without meaningful delay.
+        _replace_attempts = 3
+        _replace_delay = 0.1  # seconds; doubles on each retry
+        for _attempt in range(_replace_attempts):
+            try:
+                os.replace(tmp, state_path)
+                break
+            except PermissionError as exc:
+                if _attempt < _replace_attempts - 1:
+                    logger.warning(
+                        "action=dashboard_state_replace_retry attempt=%d delay=%.1fs error=%s",
+                        _attempt + 1,
+                        _replace_delay,
+                        exc,
+                    )
+                    time.sleep(_replace_delay)
+                    _replace_delay *= 2
+                else:
+                    logger.error(
+                        "action=dashboard_state_replace_failed attempts=%d error=%s",
+                        _replace_attempts,
+                        exc,
+                    )
+                    raise
 
         # Append to rolling history (keep 1 year = 52 weekly cycles)
         history: list = []
@@ -848,7 +874,7 @@ class CycleRunner:
         })
         tmp_h = history_path.with_suffix(".tmp")
         tmp_h.write_text(json.dumps(history[-52:], indent=2), encoding="utf-8")
-        _os.replace(tmp_h, history_path)
+        os.replace(tmp_h, history_path)
         logger.info("action=dashboard_updated cycle=%s", cycle_id)
 
     def _persist_status(self, status: dict) -> None:

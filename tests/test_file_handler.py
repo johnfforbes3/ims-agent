@@ -208,3 +208,65 @@ class TestWriteback:
         assert "Waiting on vendor delivery" in notes, (
             f"Expected blocker in notes, got: {notes!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# §11.2 — Corrupt XML raises ValueError with a clear message (not a raw traceback)
+# ---------------------------------------------------------------------------
+
+class TestParseError:
+    def test_corrupt_xml_raises_value_error(self, tmp_path):
+        """A corrupt XML file raises ValueError, not a raw ET.ParseError traceback."""
+        from agent.file_handler import IMSFileHandler
+
+        bad_xml = tmp_path / "corrupt.xml"
+        bad_xml.write_text("<<< this is not valid XML >>>", encoding="utf-8")
+
+        handler = IMSFileHandler(str(bad_xml))
+        with pytest.raises(ValueError) as exc_info:
+            handler.parse()
+
+        msg = str(exc_info.value)
+        assert "not valid XML" in msg, f"Expected 'not valid XML' in message, got: {msg!r}"
+        assert str(bad_xml) in msg, f"Expected file path in message, got: {msg!r}"
+
+    def test_corrupt_xml_message_includes_xml_error_detail(self, tmp_path):
+        """The ValueError message includes the underlying ET.ParseError detail."""
+        from agent.file_handler import IMSFileHandler
+        import xml.etree.ElementTree as ET
+
+        bad_xml = tmp_path / "partial.xml"
+        bad_xml.write_text("<Project><Tasks><Task>unclosed", encoding="utf-8")
+
+        handler = IMSFileHandler(str(bad_xml))
+        with pytest.raises(ValueError) as exc_info:
+            handler.parse()
+
+        # The original ET.ParseError should be chained as __cause__
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(exc_info.value.__cause__, ET.ParseError)
+
+    def test_corrupt_xml_parse_error_not_propagated_raw(self, tmp_path):
+        """ET.ParseError is never surfaced directly to the caller — only ValueError is."""
+        import xml.etree.ElementTree as ET
+        from agent.file_handler import IMSFileHandler
+
+        bad_xml = tmp_path / "bad.xml"
+        bad_xml.write_text("<unclosed>", encoding="utf-8")
+
+        handler = IMSFileHandler(str(bad_xml))
+        with pytest.raises(ValueError):
+            handler.parse()
+        # If we reach here, ET.ParseError was NOT raised raw — the test passes
+
+    def test_valid_xml_still_loads(self, tmp_path):
+        """A valid MSPDI file still loads correctly after the error-handling change."""
+        from agent.file_handler import IMSFileHandler
+        import shutil
+
+        tmp_file = tmp_path / "valid.xml"
+        shutil.copy(_SAMPLE, tmp_file)
+
+        handler = IMSFileHandler(str(tmp_file))
+        tasks = handler.parse()
+        assert len(tasks) == _EXPECTED_TASK_COUNT

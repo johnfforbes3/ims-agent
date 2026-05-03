@@ -12,10 +12,10 @@
 | Field | Value |
 |---|---|
 | **Phase** | Phase 6 COMPLETE — All code phases done; pilot execution pending customer engagement |
-| **Unit tests** | **306 / 306 passing** |
-| **Last procedure run** | 2026-05-03 (Phase 6.6 First Customer Pilot — documentation complete) |
+| **Unit tests** | **314 / 314 passing** |
+| **Last procedure run** | 2026-05-03 (§4.2a + §11.2 bug fixes — 314 tests passing) |
 | **Last production cycle** | 2026-05-02 — `20260502T114528Z`, health=RED, 4/5 CAMs responded |
-| **Open FAILs** | §11.2 — Corrupt XML raises unhandled ParseError traceback (LOW, non-blocking) |
+| **Open FAILs** | None |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
 | **IMS** | AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs |
 | **Python** | 3.13.3 |
@@ -87,3 +87,4 @@ Documentation complete; pilot execution pending customer engagement.
 | 2026-05-03 | Phase 6.4 Redundancy — liveness/readiness probes confirmed; HA/DB/K8s deferred | 293 |
 | 2026-05-03 | Phase 6.5 IMS Audit Trail — ims_diff.py, {cycle_id}_diff.json/.md, GET /api/diff/{cycle_id} | 306 |
 | 2026-05-03 | Phase 6.6 First Customer Pilot — ONBOARDING.md, PHASE6-FEEDBACK.md, pilot docs complete | **306** |
+| 2026-05-03 | Bug fixes §4.2a + §11.2 — os.replace retry loop; corrupt XML ValueError; 8 new tests | **314** |
