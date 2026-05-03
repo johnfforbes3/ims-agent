@@ -840,18 +840,39 @@ class InterviewAgent:
         return _calc_expected_pct(self._current_task)
 
     def _nearest_milestone_name(self) -> str:
-        """Return the next upcoming milestone name, or a generic fallback.
+        """Return the most relevant upcoming milestone name for the current task.
+
+        Picks the nearest milestone whose date is AT OR AFTER the current task's
+        own finish date.  This prevents the logically incorrect question "Could
+        this put Milestone X at risk?" when the task is actually scheduled to
+        complete AFTER Milestone X.
+
+        Example: a documentation task finishing 2026-06-10 gets "System Accepted"
+        (2026-06-25), not "Network and Security Hardened" (2026-06-03).
+
+        Falls back to the globally-nearest upcoming milestone if no milestone
+        falls after the task's finish, or the task has no finish date.
 
         Strips IMS prefixes ("MILESTONE: ", "MILESTONE - ") and parenthetical
-        abbreviations so the name reads naturally in chat ("AI Stack Deployed"
-        rather than "MILESTONE: AI Stack Deployed").
+        abbreviations so the name reads naturally in chat.
         """
         from datetime import datetime
         now = datetime.now()
+
+        # Use the current task's finish date as the lower bound so we never
+        # ask about a milestone that is already past when this task completes.
+        task_finish = self._current_task.get("finish") if self._tasks else None
+        lower_bound = task_finish if task_finish and task_finish > now else now
+
         upcoming = [
             t for t in self._milestones
-            if t.get("finish") and t["finish"] >= now
+            if t.get("finish") and t["finish"] >= lower_bound
         ]
+        # If no milestones fall on or after the task finish, fall back to
+        # any future milestone (edge case: task is already overdue).
+        if not upcoming:
+            upcoming = [t for t in self._milestones if t.get("finish") and t["finish"] >= now]
+
         if upcoming:
             nearest = min(upcoming, key=lambda t: t["finish"])
             name = nearest.get("name", "")

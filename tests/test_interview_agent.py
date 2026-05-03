@@ -611,3 +611,35 @@ class TestConversationalContext:
             )
             # Risk flag should be auto-set to False
             assert agent._results[2].risk_flag is False
+
+
+def test_nearest_milestone_uses_task_finish_date():
+    """_nearest_milestone_name must return the nearest milestone AT OR AFTER
+    the current task's finish date, not just the globally-nearest milestone.
+
+    Prevents the logically wrong question "Could this put Milestone X at risk?"
+    when the task is actually scheduled to complete AFTER Milestone X.
+    """
+    # Task finishes 2026-06-10.  Network and Security Hardened = 2026-06-03.
+    # System Accepted = 2026-06-25.  Correct answer: System Accepted.
+    late_task = {
+        "task_id": "DOC-01",
+        "name": "Write system administration runbook",
+        "percent_complete": 15,
+        "cam": "David Lee",
+        "start": datetime(2026, 6, 5),
+        "finish": datetime(2026, 6, 10),
+        "is_milestone": False,
+    }
+    agent = InterviewAgent("David Lee", [late_task], expected_pcts={"DOC-01": 100})
+    agent._milestones = [
+        {"name": "MILESTONE: AI Stack Deployed",          "finish": datetime(2026, 4, 28)},
+        {"name": "MILESTONE: Network and Security Hardened", "finish": datetime(2026, 6, 3)},
+        {"name": "MILESTONE: System Accepted",             "finish": datetime(2026, 6, 25)},
+    ]
+    result = agent._nearest_milestone_name()
+    assert result == "System Accepted", (
+        f"Expected 'System Accepted' for a task finishing 2026-06-10, got {result!r}. "
+        "The bot should not ask about 'Network and Security Hardened' (2026-06-03) "
+        "for a task that completes AFTER that milestone."
+    )
