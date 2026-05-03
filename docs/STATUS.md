@@ -11,9 +11,9 @@
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 6.3 Recovery — code complete; backup automation and DR test deferred to deployment |
-| **Unit tests** | **293 / 293 passing** |
-| **Last procedure run** | 2026-05-03 (Phase 6.3 Recovery — unit tests + code verification) |
+| **Phase** | Phase 6.5 IMS Audit Trail — code complete; extended change tracking deferred to deployment |
+| **Unit tests** | **306 / 306 passing** |
+| **Last procedure run** | 2026-05-03 (Phase 6.5 IMS Audit Trail — unit tests + code verification) |
 | **Last production cycle** | 2026-05-02 — `20260502T114528Z`, health=RED, 4/5 CAMs responded |
 | **Open FAILs** | §11.2 — Corrupt XML raises unhandled ParseError traceback (LOW, non-blocking) |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
@@ -70,4 +70,6 @@ All four Core Integrity bugs are fixed and verified by unit tests. Phase 6.0 is 
 | 2026-05-03 | Phase 6.0 Core Integrity — 4 bugs fixed | 264 |
 | 2026-05-03 | Phase 6.1 Observability — Prometheus, extended /health, dead man's switch | 279 |
 | 2026-05-03 | Phase 6.2 Security Hardening — secrets helper, audit logging, CMMC gap analysis | 287 |
-| 2026-05-03 | Phase 6.3 Recovery — LLM retry backoff, DR runbook, graceful failure modes | **293** |
+| 2026-05-03 | Phase 6.3 Recovery — LLM retry backoff, DR runbook, graceful failure modes | 293 |
+| 2026-05-03 | Phase 6.4 Redundancy — liveness/readiness probes confirmed; HA/DB/K8s deferred | 293 |
+| 2026-05-03 | Phase 6.5 IMS Audit Trail — ims_diff.py, {cycle_id}_diff.json/.md, GET /api/diff/{cycle_id} | **306** |

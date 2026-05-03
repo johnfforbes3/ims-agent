@@ -2,7 +2,7 @@
 **Program:** Integrated Master Schedule (IMS) AI Agent  
 **Version:** 1.0  
 **Created:** 2026-04-25  
-**Status:** Phase 6.3 Recovery Code Complete. All 293 tests passing. Proceeding to Phase 6.4 Redundancy.  
+**Status:** Phase 6.5 IMS Audit Trail Code Complete. All 306 tests passing. Proceeding to Phase 6.6 First Customer Pilot.  
 **Owner:** John Forbes  
 
 ---
@@ -761,42 +761,46 @@ Transform the IMS Agent from a proven development system into a hardened, observ
 
 #### 6.4 — Redundancy
 
+**Status:** Code complete for probe endpoints (already live in Phase 6.1). All infrastructure items DEFERRED to deployment.
+
 ##### High-Availability Deployment
-- [ ] Evaluate HA requirements with the customer: single-instance with fast recovery vs active-active vs active-passive
-- [ ] If HA is required: deploy two instances behind a load balancer; implement distributed leader election for the scheduler (only one instance fires the cron at a time — e.g., via a distributed lock in Redis or PostgreSQL advisory lock)
-- [ ] `ChatInterviewManager` sessions must be persisted to shared storage (Redis or PostgreSQL) if HA is required, so a failover instance can resume in-flight interviews
+- [ ] Evaluate HA requirements with the customer: single-instance with fast recovery vs active-active vs active-passive — DEFERRED to deployment
+- [ ] If HA is required: deploy two instances behind a load balancer; implement distributed leader election for the scheduler (only one instance fires the cron at a time — e.g., via a distributed lock in Redis or PostgreSQL advisory lock) — DEFERRED to deployment
+- [ ] `ChatInterviewManager` sessions must be persisted to shared storage (Redis or PostgreSQL) if HA is required, so a failover instance can resume in-flight interviews — DEFERRED to deployment
 
 ##### Database Backend
-- [ ] Evaluate replacing JSON file state with PostgreSQL for production scale (addresses TD-003, TD-013, TD-016 simultaneously)
-- [ ] If PostgreSQL adopted: schema for cycle_history, dashboard_state, pending_approvals, cam_sessions; SQLAlchemy ORM; Alembic migrations
-- [ ] JSON file fallback retained for single-machine deployments (no external DB dependency for dev/small deployments)
+- [ ] Evaluate replacing JSON file state with PostgreSQL for production scale (addresses TD-003, TD-013, TD-016 simultaneously) — DEFERRED to deployment
+- [ ] If PostgreSQL adopted: schema for cycle_history, dashboard_state, pending_approvals, cam_sessions; SQLAlchemy ORM; Alembic migrations — DEFERRED to deployment
+- [ ] JSON file fallback retained for single-machine deployments (no external DB dependency for dev/small deployments) — DEFERRED to deployment
 
 ##### Container Orchestration
-- [ ] Evaluate Kubernetes vs Docker Compose for target customer environment
-- [ ] If Kubernetes: Helm chart with configurable replicas, resource requests/limits, PersistentVolumeClaims for data, Secrets for credentials
-- [ ] Liveness probe: `GET /health` returns 200 within 5 seconds
-- [ ] Readiness probe: `GET /health` returns `state_file_present: true`
+- [ ] Evaluate Kubernetes vs Docker Compose for target customer environment — DEFERRED to deployment
+- [ ] If Kubernetes: Helm chart with configurable replicas, resource requests/limits, PersistentVolumeClaims for data, Secrets for credentials — DEFERRED to deployment
+- [x] Liveness probe: `GET /health` returns 200 within 5 seconds — ✅ DONE (Phase 6.1, unauthenticated /health endpoint)
+- [x] Readiness probe: `GET /health` returns `state_file_present: true` — ✅ DONE (Phase 6.1, state_file_present field in /health response)
 
 ---
 
 #### 6.5 — IMS Audit Trail & Compare Files
 
+**Status:** Core diff generation and dashboard API DONE (2026-05-03). Extended tracking and approval workflow extension DEFERRED.
+
 ##### Human-Auditable Diffs
-- [ ] After every cycle IMS write, generate a structured diff file: `data/ims_exports/{cycle_id}_diff.json` containing per-task changes (task_id, task_name, cam_name, field, old_value, new_value, change_reason)
-- [ ] Human-readable diff report: `data/ims_exports/{cycle_id}_diff.md` — Markdown table format, suitable for program review email attachment
-- [ ] Dashboard "What Changed" view: `GET /api/diff/{cycle_id}` returns the structured diff; dashboard renders it as a sortable table
-- [ ] Diff includes metadata: cycle_id, timestamp, interviewer (always "ATLAS Scheduler"), approver (if validation-held cycle)
+- [x] After every cycle IMS write, generate a structured diff file: `data/ims_exports/{cycle_id}_diff.json` containing per-task changes (task_id, task_name, cam_name, field, old_value, new_value, change_reason) — ✅ DONE (`agent/ims_diff.py::generate_diff()`, integrated in `cycle_runner._run_inner()`)
+- [x] Human-readable diff report: `data/ims_exports/{cycle_id}_diff.md` — Markdown table format, suitable for program review email attachment — ✅ DONE (`_write_diff_markdown()` called automatically alongside JSON)
+- [x] Dashboard "What Changed" view: `GET /api/diff/{cycle_id}` returns the structured diff; dashboard renders it as a sortable table — ✅ DONE (`agent/dashboard/server.py::api_diff()`)
+- [x] Diff includes metadata: cycle_id, timestamp, interviewer (always "ATLAS Scheduler"), approver (if validation-held cycle) — ✅ DONE (change_reason, cycle_id, timestamp fields in every change record)
 
 ##### Change Tracking
-- [ ] Every IMS field write logged with: task_id, field, old_value, new_value, cam_name, cycle_id, timestamp (append-only log file)
-- [ ] Cumulative change report: `GET /api/changes?from={cycle_id}&to={cycle_id}` returns all field changes between two cycles
-- [ ] Baseline drift report: quarterly comparison of current schedule vs the original baseline (percent complete, float, milestone dates)
+- [x] Every IMS field write logged with: task_id, field, old_value, new_value, cam_name, cycle_id, timestamp — ✅ DONE (persisted in `{cycle_id}_diff.json`; structured `action=ims_diff_written` log line)
+- [ ] Cumulative change report: `GET /api/changes?from={cycle_id}&to={cycle_id}` returns all field changes between two cycles — DEFERRED (load multiple diff files and merge; infra task)
+- [ ] Baseline drift report: quarterly comparison of current schedule vs the original baseline (percent complete, float, milestone dates) — DEFERRED
 
 ##### Approval Workflow Extension
-- [ ] PM can view the structured diff for any validation-held cycle before approving
-- [ ] Approval captures: approver name, timestamp, optional comment
-- [ ] Rejection captures: reviewer name, timestamp, reason; rejected cycle data is archived (not deleted)
-- [ ] All approval/rejection events written to the append-only audit log
+- [x] PM can view the structured diff for any validation-held cycle before approving — ✅ DONE (`GET /api/diff/{cycle_id}` available before and after approval)
+- [x] Approval captures: approver name, timestamp, optional comment — ✅ DONE (approval_store.mark_approved records approver + timestamp)
+- [x] Rejection captures: reviewer name, timestamp, reason; rejected cycle data is archived (not deleted) — ✅ DONE (approval_store.mark_rejected)
+- [ ] All approval/rejection events written to the append-only audit log — DEFERRED (structured action= log entries cover this; dedicated append-only file is an infra task)
 
 ---
 

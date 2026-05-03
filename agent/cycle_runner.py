@@ -442,6 +442,9 @@ class CycleRunner:
         else:
             handler.apply_updates(all_cam_inputs)
             tasks_for_analysis = handler.parse()
+            # Phase 6.5 — generate human-auditable diff (before vs after)
+            from agent.ims_diff import generate_diff
+            generate_diff(tasks, tasks_for_analysis, all_cam_inputs, cycle_id)
             CycleRunner._export_ims_snapshot(cycle_id, self._ims_path)
             logger.info("action=ims_updated cycle=%s", cycle_id)
 

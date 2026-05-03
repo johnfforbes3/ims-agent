@@ -263,6 +263,24 @@ async def api_history():
     return JSONResponse(_load_json(_HISTORY_FILE) or [])
 
 
+@app.get("/api/diff/{cycle_id}", dependencies=[Depends(_require_api_key)])
+async def api_diff(cycle_id: str):
+    """
+    Phase 6.5 — Return the IMS field-change diff for a completed cycle.
+
+    Diff file is written by CycleRunner._run_inner() after apply_updates() succeeds.
+    Returns a list of change dicts, one per (task, field) pair that changed.
+    """
+    from agent.ims_diff import load_diff
+    diff = load_diff(cycle_id)
+    if diff is None:
+        return JSONResponse(
+            {"error": f"No diff found for cycle {cycle_id}"},
+            status_code=404,
+        )
+    return JSONResponse(diff)
+
+
 @app.get("/api/status", dependencies=[Depends(_require_api_key)])
 async def api_status():
     from agent.cycle_runner import CycleRunner

@@ -45,7 +45,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 293 tests
+pytest tests/ -v         # all 306 tests
 pytest tests/ -q         # quiet summary only
 ```
 
@@ -103,7 +103,7 @@ ims-agent/
 │       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
 │       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
 ├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
-├── tests/                      — pytest test suite (293 tests)
+├── tests/                      — pytest test suite (306 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 100-task AI Agent Server Rack IMS
 │   ├── dashboard_state.json    — Live dashboard state (updated each cycle)
@@ -147,7 +147,7 @@ ims-agent/
 
 **Phase 2 note:** Interview agent, data extraction, CAM communication management, and TTS/STT abstractions are fully implemented and tested. Real Teams/ACS voice calls are implemented as a stub pending Azure ACS credentials (tracked as TD-011); the acceptance test used the Claude-powered CAM simulator.
 
-**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 293 tests passing.
+**Phase 5 note:** RBAC (two-key model), per-IP rate limiting, `GET /metrics`, `POST /api/admin/purge`, data retention, structured JSON logging, on-prem LLM swap path (`LLM_BASE_URL`), and Docker production hardening are complete. 306 tests passing.
 
 **Tier 4 note:** ATLAS Scheduler bot published to M365 org catalog; full end-to-end Teams Chat relay loop verified with all 4 live CAM accounts. Proactive greeting, Graph relay, and trigger-cycle integration complete (TD-019 resolved).
 

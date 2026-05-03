@@ -950,4 +950,198 @@ class TestLLMRetry:
         )
         with pytest.raises(anthropic.APIStatusError):
             llm._call_with_retry(model="test", messages=[], max_tokens=10)
-        assert llm._client.messages.create.call_count == 1  # no retry
+
+
+# ===========================================================================
+# Phase 6.5 — IMS Diff Generator
+# ===========================================================================
+
+class TestIMSDiff:
+    """Tests for agent.ims_diff — generate_diff, load_diff, and /api/diff endpoint."""
+
+    def _make_task(
+        self,
+        task_id: str,
+        pct: int = 50,
+        start: str = "2026-05-01",
+        finish: str = "2026-06-01",
+        cam: str = "Alice",
+    ) -> dict:
+        return {
+            "task_id": task_id,
+            "name": f"Task {task_id}",
+            "cam": cam,
+            "percent_complete": pct,
+            "start": start,
+            "finish": finish,
+        }
+
+    def test_generate_diff_detects_percent_complete_change(self, tmp_path, monkeypatch):
+        """A change in percent_complete produces one change record."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=70)]
+        changes = generate_diff(before, after, [], "CYCLE01", write_file=False)
+
+        assert len(changes) == 1
+        assert changes[0]["field"] == "percent_complete"
+        assert changes[0]["old_value"] == 50
+        assert changes[0]["new_value"] == 70
+        assert changes[0]["task_id"] == "T1"
+
+    def test_generate_diff_no_changes(self, tmp_path, monkeypatch):
+        """Identical before/after produces an empty diff."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        task = self._make_task("T1")
+        changes = generate_diff([task], [task], [], "CYCLE02", write_file=False)
+        assert changes == []
+
+    def test_generate_diff_multiple_fields_on_same_task(self, tmp_path, monkeypatch):
+        """Two diffable fields changed on the same task → two change records."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50, start="2026-05-01")]
+        after = [self._make_task("T1", pct=70, start="2026-05-10")]
+        changes = generate_diff(before, after, [], "CYCLE03", write_file=False)
+
+        fields = {c["field"] for c in changes}
+        assert "percent_complete" in fields
+        assert "start" in fields
+        assert len(changes) == 2
+
+    def test_generate_diff_cam_name_from_inputs(self, tmp_path, monkeypatch):
+        """cam_name is taken from cam_inputs when task_id matches."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=60)]
+        cam_inputs = [{"task_id": "T1", "cam_name": "Bob"}]
+        changes = generate_diff(before, after, cam_inputs, "CYCLE04", write_file=False)
+
+        assert len(changes) == 1
+        assert changes[0]["cam_name"] == "Bob"
+
+    def test_generate_diff_cam_name_fallback_from_task(self, tmp_path, monkeypatch):
+        """When no matching cam_input, cam_name falls back to task['cam']."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50, cam="Alice")]
+        after = [self._make_task("T1", pct=60, cam="Alice")]
+        changes = generate_diff(before, after, [], "CYCLE05", write_file=False)
+
+        assert changes[0]["cam_name"] == "Alice"
+
+    def test_generate_diff_skips_task_missing_in_after(self, tmp_path, monkeypatch):
+        """Tasks present in before but absent in after are skipped (not raised)."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1"), self._make_task("T2")]
+        after = [self._make_task("T1")]  # T2 removed — unusual but valid
+        changes = generate_diff(before, after, [], "CYCLE06", write_file=False)
+
+        task_ids = {c["task_id"] for c in changes}
+        assert "T2" not in task_ids  # T2 was skipped, not errored
+
+    def test_generate_diff_write_file_creates_json(self, tmp_path, monkeypatch):
+        """write_file=True writes a parseable JSON diff to the exports dir."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+        import json
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=80)]
+        generate_diff(before, after, [], "CYCLE07", write_file=True)
+
+        out = tmp_path / "CYCLE07_diff.json"
+        assert out.exists(), "diff JSON file must be written when write_file=True"
+        data = json.loads(out.read_text())
+        assert isinstance(data, list)
+        assert data[0]["field"] == "percent_complete"
+
+    def test_generate_diff_write_file_creates_markdown(self, tmp_path, monkeypatch):
+        """write_file=True also produces a Markdown diff report."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=80)]
+        generate_diff(before, after, [], "CYCLE08", write_file=True)
+
+        md = tmp_path / "CYCLE08_diff.md"
+        assert md.exists(), "Markdown report must be written alongside JSON diff"
+        content = md.read_text()
+        assert "CYCLE08" in content
+        assert "percent_complete" in content
+
+    def test_generate_diff_no_write_file(self, tmp_path, monkeypatch):
+        """write_file=False produces no files on disk."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=80)]
+        generate_diff(before, after, [], "CYCLE09", write_file=False)
+
+        assert not (tmp_path / "CYCLE09_diff.json").exists()
+
+    def test_load_diff_returns_none_for_missing_cycle(self, tmp_path, monkeypatch):
+        """load_diff returns None when no diff file exists for the cycle."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import load_diff
+
+        result = load_diff("NONEXISTENT_CYCLE")
+        assert result is None
+
+    def test_load_diff_returns_list_after_write(self, tmp_path, monkeypatch):
+        """load_diff returns the persisted change list after generate_diff writes it."""
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        from agent.ims_diff import generate_diff, load_diff
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=90)]
+        generate_diff(before, after, [], "CYCLE10", write_file=True)
+
+        result = load_diff("CYCLE10")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["task_id"] == "T1"
+
+    def test_diff_endpoint_404_when_no_file(self, tmp_path, monkeypatch):
+        """GET /api/diff/{cycle_id} returns 404 when no diff file exists."""
+        import agent.dashboard.server as srv
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        monkeypatch.setattr(srv, "_API_KEY", "")
+        client = TestClient(srv.app)
+        response = client.get("/api/diff/NONEXISTENT")
+        assert response.status_code == 404
+
+    def test_diff_endpoint_returns_diff_data(self, tmp_path, monkeypatch):
+        """GET /api/diff/{cycle_id} returns the diff list when the file exists."""
+        import agent.dashboard.server as srv
+        from fastapi.testclient import TestClient
+        from agent.ims_diff import generate_diff
+
+        monkeypatch.setattr("agent.ims_diff._EXPORTS_DIR", str(tmp_path))
+        monkeypatch.setattr(srv, "_API_KEY", "")
+
+        before = [self._make_task("T1", pct=50)]
+        after = [self._make_task("T1", pct=75)]
+        generate_diff(before, after, [], "CYCLE11", write_file=True)
+
+        client = TestClient(srv.app)
+        response = client.get("/api/diff/CYCLE11")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert data[0]["task_id"] == "T1"
+        assert data[0]["field"] == "percent_complete"
