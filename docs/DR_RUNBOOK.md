@@ -266,3 +266,116 @@ For cloud backup, replace `cp -r` with `aws s3 sync` / `az storage blob upload-b
 ---
 
 *This runbook was written for Windows deployment. Adjust paths for Linux (use `/` separators, `source .venv/bin/activate`).*
+
+---
+
+## Section 9: Credential Rotation (SC.3.187)
+
+Rotate credentials immediately if any of the following occur:
+- A P1/P2 security incident is declared (see `docs/IR_PLAN.md`)
+- A credential is suspected of exposure (log review, audit alert)
+- Any team member with credential access departs
+- Proactively every 90 days (set `KEY_CREATED_AT` in `.env` to track age)
+
+The `GET /health` endpoint includes `key_age_days` and `key_age_warning: true`
+when `KEY_CREATED_AT` is older than 90 days.
+
+### 9.1 — Anthropic API Key
+
+1. Go to https://console.anthropic.com → **API Keys** → **Create Key**.
+2. Copy the new key.
+3. Update `.env`:
+   ```
+   ANTHROPIC_API_KEY=sk-ant-api03-<new-key>
+   KEY_CREATED_AT=<YYYY-MM-DD>
+   ```
+4. Restart the agent: `python main.py --serve` (hot-reload via `load_dotenv(override=True)` picks up the new key on the next LLM call without restart, but restart is recommended after a suspected breach).
+5. Revoke the old key in the Anthropic Console.
+
+### 9.2 — Dashboard API Keys
+
+1. Generate a new key:
+   ```
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+2. Update `.env`:
+   ```
+   DASHBOARD_API_KEY=<new-read-key>
+   DASHBOARD_ADMIN_KEY=<new-admin-key>
+   ```
+3. Distribute new keys to all API consumers (monitoring scripts, Grafana, CI).
+4. Restart the dashboard server to pick up the new values.
+
+### 9.3 — JWT Signing Secret (AUTH_SECRET_KEY)
+
+Rotating this key **immediately invalidates all outstanding JWTs**. All
+API clients must re-authenticate via `POST /api/auth/token`.
+
+1. Generate a new secret (minimum 32 bytes):
+   ```
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+2. Update `.env`:
+   ```
+   AUTH_SECRET_KEY=<new-hex-secret>
+   ```
+3. Restart the dashboard server.
+4. All existing Bearer tokens are now invalid. Clients must call
+   `POST /api/auth/token` with their `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET`
+   to obtain fresh tokens.
+
+### 9.4 — JWT Client Credentials (AUTH_CLIENT_ID / AUTH_CLIENT_SECRET)
+
+1. Choose a new `AUTH_CLIENT_SECRET` (minimum 24 chars):
+   ```
+   python -c "import secrets; print(secrets.token_urlsafe(24))"
+   ```
+2. Update `.env`:
+   ```
+   AUTH_CLIENT_ID=<client-id>
+   AUTH_CLIENT_SECRET=<new-secret>
+   ```
+3. Restart the dashboard server.
+4. Distribute the new secret to all JWT-using clients.
+
+### 9.5 — Teams Bot Client Secret
+
+1. Go to Azure Portal → **App Registrations** → select the IMS Agent bot app.
+2. **Certificates & secrets** → **New client secret** → set expiry → **Add**.
+3. Copy the new secret value (shown once).
+4. Update `.env`:
+   ```
+   TEAMS_BOT_CLIENT_SECRET=<new-secret>
+   ```
+5. Restart the agent.
+6. Delete the old secret in Azure Portal.
+
+### 9.6 — Slack Webhook URL
+
+1. Go to https://api.slack.com/apps → select your app → **Incoming Webhooks**.
+2. Deactivate the old webhook URL.
+3. Create a new webhook for the same channel.
+4. Update `.env`:
+   ```
+   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/<new-path>
+   ```
+5. The next `send_slack()` call picks up the new URL automatically (hot-reload).
+
+### 9.7 — Rotation Verification
+
+After any credential rotation, verify the system is operational:
+
+```bash
+# Health check — confirm key_age_warning is false after updating KEY_CREATED_AT
+curl http://localhost:9000/health
+
+# Trigger a test cycle (requires admin key or admin JWT)
+curl -X POST http://localhost:9000/api/trigger \
+     -H "X-Admin-Key: <new-admin-key>"
+
+# Confirm Slack notification arrives within 5 minutes
+```
+
+If any step fails, check logs for `action=audit_auth_failure` or
+`action=llm_exhausted_retries` events and address the root cause before
+declaring the rotation complete.

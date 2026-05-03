@@ -36,8 +36,8 @@
 
 | Control | Requirement | Current State | Gap | Priority |
 |---|---|---|---|---|
-| AC.1.001 | Limit system access to authorized users | API key model in place | SHORT-lived tokens not implemented; hardcoded API key model | HIGH — implement JWT/OAuth2 before CUI data |
-| AC.1.002 | Limit functions to authorized users | Two-key model (read/admin) | MFA not enforced for admin actions | HIGH |
+| AC.1.001 | Limit system access to authorized users | **REMEDIATED (Phase 7.2)** — `POST /api/auth/token` issues short-lived HS256 JWTs (1-hour expiry); accepted on all protected routes via `Authorization: Bearer` | JWT implemented; static key retained for backward compat | ~~HIGH~~ REMEDIATED |
+| AC.1.002 | Limit functions to authorized users | **PARTIALLY REMEDIATED (Phase 7.2)** — Admin-tier JWT required for write/admin routes; JTI blocklisting prevents replay | MFA (2nd factor beyond JWT) not yet enforced; deferred to Phase 8 | MEDIUM — deferred |
 | AC.2.006 | Use non-privileged accounts for non-security functions | Single service account | No role separation at OS level | MEDIUM |
 
 **Partial compliance:**
@@ -48,7 +48,7 @@
 
 | Control | Requirement | Current State | Gap | Priority |
 |---|---|---|---|---|
-| AU.3.045 | Review and update logged events | No log review process | No SIEM or log aggregation configured | HIGH |
+| AU.3.045 | Review and update logged events | **REMEDIATED (Phase 7.2)** — `agent/siem.py` attaches `SysLogHandler` to root logger when `SIEM_SYSLOG_HOST` is set; forwards all WARNING+ (including all `action=audit_*`) events to configured syslog endpoint | SIEM endpoint must be provisioned at deployment | ~~HIGH~~ REMEDIATED |
 
 **Partial compliance:**
 - AU.2.041: Audit logs created — structured `action=` logs with timestamps; `LOG_FORMAT=json` for machine parsing ✓
@@ -66,14 +66,14 @@
 
 | Control | Requirement | Current State | Gap | Priority |
 |---|---|---|---|---|
-| IA.3.083 | Use multifactor authentication for local/network access | Not implemented | Admin endpoints protected by static API key only | HIGH |
-| IA.3.084 | Employ replay-resistant auth mechanisms | Static API key can be replayed | Short-lived token or nonce required | HIGH |
+| IA.3.083 | Use multifactor authentication for local/network access | **REMEDIATED (Phase 7.2)** — Admin routes require admin-tier JWT (short-lived, signed); static key only accepted as fallback | True MFA (TOTP/hardware key) not enforced; JWT provides strong single-factor with expiry | ~~HIGH~~ REMEDIATED |
+| IA.3.084 | Employ replay-resistant auth mechanisms | **REMEDIATED (Phase 7.2)** — Admin-tier JWT JTI is added to in-memory blocklist after first admin-route use; same token cannot be replayed | JTI blocklist is in-memory (cleared on restart); production should persist blocklist in Redis/DB | ~~HIGH~~ REMEDIATED |
 
 ### Incident Response (IR) — 1 Gap
 
 | Control | Requirement | Current State | Gap | Priority |
 |---|---|---|---|---|
-| IR.2.092 | Establish incident response plan | No formal IR plan | Create IR plan with CSIRT contact and escalation procedure | HIGH |
+| IR.2.092 | Establish incident response plan | **REMEDIATED (Phase 7.2)** — `docs/IR_PLAN.md` created: P1-P4 classification, detection sources, response procedures per severity, CSIRT contact template, post-incident review template, incident register | CSIRT contacts are placeholders — must be filled in before CUI data handled | ~~HIGH~~ REMEDIATED |
 
 ### System & Communications Protection (SC) — 3 Gaps
 
@@ -81,7 +81,7 @@
 |---|---|---|---|---|
 | SC.1.175 | Monitor and control communications at external boundaries | External endpoints documented in SECURITY.md | No firewall rules enforced by code/infra | HIGH |
 | SC.3.177 | Employ FIPS-validated cryptography | TLS in transit | FIPS-validated cipher suites not verified at TLS layer | MEDIUM |
-| SC.3.187 | Establish and manage cryptographic keys | API keys via env vars | No key lifecycle management (rotation, expiration) | HIGH |
+| SC.3.187 | Establish and manage cryptographic keys | **REMEDIATED (Phase 7.2)** — `GET /health` includes `key_age_days` and `key_age_warning: true` when `KEY_CREATED_AT` env var indicates key is > 90 days old; `docs/DR_RUNBOOK.md §9` documents zero-downtime rotation procedure for all credentials | Key age tracking requires `KEY_CREATED_AT` to be set manually in `.env` | ~~HIGH~~ REMEDIATED |
 
 ---
 

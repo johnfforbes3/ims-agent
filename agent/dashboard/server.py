@@ -11,12 +11,15 @@ Serves:
   GET /api/status  → is a cycle currently running?
   POST /api/ask    → Phase 4 Q&A: answer a natural language question (rate-limited)
   POST /api/admin/purge → admin: delete cycle data older than retention window
+  POST /api/auth/token  → 7.2: issue short-lived JWT (client_id + client_secret)
 
-Authentication:
-  DASHBOARD_API_KEY  — required on all /api/* read routes.  Empty = auth disabled (dev).
-  DASHBOARD_ADMIN_KEY — required for write/admin routes (/api/trigger, /api/admin/purge).
-                        Falls back to DASHBOARD_API_KEY when not set.
-  Both keys are sent via X-API-Key / X-Admin-Key headers respectively.
+Authentication (7.2 — JWT takes precedence; legacy static keys still accepted):
+  Authorization: Bearer <token>  — JWT issued by /api/auth/token (preferred).
+      Read-tier token: accepted on all /api/* read routes.
+      Admin-tier token: required for write/admin routes; JTI is blocklisted
+        after first admin use (replay resistance per IA.3.084).
+  DASHBOARD_API_KEY  — legacy static key, X-API-Key header.  Empty = dev mode.
+  DASHBOARD_ADMIN_KEY — legacy admin key, X-Admin-Key header.
 """
 
 import collections
@@ -39,6 +42,10 @@ from pydantic import BaseModel
 load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
+
+# 7.2 — SIEM syslog forwarding (AU.3.045): attach handler at startup if configured.
+from agent.siem import configure_siem_logging as _configure_siem
+_configure_siem()
 
 _STATE_FILE = os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.json")
 _HISTORY_FILE = os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json")
@@ -64,14 +71,37 @@ async def _require_api_key(
     request: Request,
     api_key: str = Security(_api_key_header),
 ) -> None:
-    """Dependency: enforce X-API-Key when DASHBOARD_API_KEY is configured."""
+    """Dependency: enforce auth on read routes.
+
+    Accepts (in priority order):
+    1. ``Authorization: Bearer <jwt>`` — any valid read- or admin-tier token.
+    2. ``X-API-Key: <key>`` — legacy static key (backward compat).
+    3. No auth at all when DASHBOARD_API_KEY is empty (dev mode).
+    """
+    ip = request.client.host if request.client else "unknown"
+
+    # 1. Bearer JWT (7.2)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            from agent.auth import verify_token
+            verify_token(token)
+            return
+        except Exception as exc:
+            logger.warning(
+                "action=audit_auth_failure route=%s ip=%s reason=jwt_invalid error=%s",
+                request.url.path, ip, exc,
+            )
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # 2. Legacy static API key
     if not _API_KEY:
-        return  # auth disabled in local dev mode
+        return  # dev mode — no keys configured
     if api_key != _API_KEY:
         logger.warning(
             "action=audit_auth_failure route=%s ip=%s reason=invalid_api_key",
-            request.url.path,
-            request.client.host if request.client else "unknown",
+            request.url.path, ip,
         )
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
@@ -81,11 +111,45 @@ async def _require_admin_key(
     x_admin_key: str = Security(_admin_key_header),
     x_api_key: str = Security(_api_key_header),
 ) -> None:
-    """Dependency: enforce admin key for write/admin operations.
+    """Dependency: enforce admin auth on write/admin routes.
 
-    Effective admin key is DASHBOARD_ADMIN_KEY when set, falling back to
-    DASHBOARD_API_KEY.  If neither is configured (dev mode), allows all.
+    Accepts (in priority order):
+    1. ``Authorization: Bearer <jwt>`` — admin-tier token; JTI is blocklisted
+       after first use (replay resistance per IA.3.084).
+    2. ``X-Admin-Key`` / ``X-API-Key`` — legacy static keys (backward compat).
+    3. No auth when neither key is configured (dev mode).
     """
+    ip = request.client.host if request.client else "unknown"
+
+    # 1. Bearer JWT admin tier (7.2)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            from agent.auth import verify_token, is_jti_blocked, block_jti
+            claims = verify_token(token)
+            if claims.get("tier") != "admin":
+                raise HTTPException(status_code=403, detail="Admin-tier token required")
+            jti = claims.get("jti", "")
+            if jti and is_jti_blocked(jti):
+                logger.warning(
+                    "action=audit_auth_failure route=%s ip=%s reason=jti_replay",
+                    request.url.path, ip,
+                )
+                raise HTTPException(status_code=401, detail="Token already used (replay protection)")
+            if jti:
+                block_jti(jti)
+            return
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "action=audit_auth_failure route=%s ip=%s reason=jwt_invalid error=%s",
+                request.url.path, ip, exc,
+            )
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # 2. Legacy static admin key
     if not _API_KEY and not _ADMIN_KEY:
         return  # dev mode — no keys configured
     effective = _ADMIN_KEY if _ADMIN_KEY else _API_KEY
@@ -93,8 +157,7 @@ async def _require_admin_key(
         return
     logger.warning(
         "action=audit_auth_failure route=%s ip=%s reason=invalid_admin_key",
-        request.url.path,
-        request.client.host if request.client else "unknown",
+        request.url.path, ip,
     )
     raise HTTPException(status_code=401, detail="Admin key required")
 
@@ -123,6 +186,60 @@ def _check_rate_limit(ip: str) -> None:
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+
+# ---------------------------------------------------------------------------
+# 7.2 — JWT token issuance endpoint (AC.1.001 / IA.3.083 / IA.3.084)
+# ---------------------------------------------------------------------------
+
+class _TokenRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    tier: str = "read"   # "read" or "admin"
+
+
+@app.post("/api/auth/token")
+async def api_auth_token(body: _TokenRequest, request: Request):
+    """Issue a short-lived HS256 JWT.
+
+    Credentials (AUTH_CLIENT_ID / AUTH_CLIENT_SECRET) are validated server-
+    side.  The returned token is accepted on all protected routes via the
+    ``Authorization: Bearer <token>`` header.  Admin-tier tokens are one-
+    time-use on admin routes (JTI blocklisting).
+    """
+    from agent.auth import create_token, _client_id, _client_secret, _expiry_seconds
+
+    expected_id = _client_id()
+    expected_secret = _client_secret()
+    ip = request.client.host if request.client else "unknown"
+
+    if not expected_id or not expected_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="JWT auth not configured — set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET",
+        )
+
+    if body.client_id != expected_id or body.client_secret != expected_secret:
+        logger.warning(
+            "action=audit_auth_failure route=/api/auth/token ip=%s reason=invalid_credentials",
+            ip,
+        )
+        raise HTTPException(status_code=401, detail="Invalid client credentials")
+
+    if body.tier not in ("read", "admin"):
+        raise HTTPException(status_code=400, detail="tier must be 'read' or 'admin'")
+
+    try:
+        token = create_token(tier=body.tier)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    logger.info("action=token_issued tier=%s ip=%s", body.tier, ip)
+    return JSONResponse({
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": _expiry_seconds(),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +324,20 @@ async def health():
     state = _load_json(_STATE_FILE) or {}
     ims_last_write_at = state.get("completed_at") or state.get("started_at")
 
+    # 7.2 — Key age alert (SC.3.187): warn when ANTHROPIC_API_KEY is > 90 days old.
+    key_age_days: int | None = None
+    key_age_warning = False
+    key_created_at = os.getenv("KEY_CREATED_AT", "").strip()
+    if key_created_at:
+        try:
+            created = dt.datetime.fromisoformat(key_created_at)
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=dt.timezone.utc)
+            key_age_days = (dt.datetime.now(dt.timezone.utc) - created).days
+            key_age_warning = key_age_days > 90
+        except (ValueError, TypeError):
+            pass
+
     return JSONResponse({
         "status": "healthy",
         "uptime_seconds": round(time.monotonic() - _START_TIME),
@@ -216,6 +347,8 @@ async def health():
         "last_cycle_age_seconds": last_cycle_age_seconds,
         "deadman_alert": deadman_alert,
         "ims_last_write_at": ims_last_write_at,
+        "key_age_days": key_age_days,
+        "key_age_warning": key_age_warning,
     })
 
 
