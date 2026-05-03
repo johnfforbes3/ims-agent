@@ -172,8 +172,14 @@ class ReportGenerator:
                 cam_input = cam_map.get(str(t["task_id"]), {})
                 blocker = cam_input.get("blocker", "") or ""
                 exp = _expected_pct(t)
+                # Prefer the CAM-reported percentage when it differs from the IMS value.
+                # This happens when the CAM corrects a stale IMS entry during the interview
+                # (e.g., IMS shows 85% but CAM says the actual is 60%).  The cam_input's
+                # percent_complete comes directly from the interview capture.
+                cam_pct = cam_input.get("percent_complete")
+                actual_pct = cam_pct if cam_pct is not None else t["percent_complete"]
                 sections.append(
-                    f"| {t['cam']} | {t['name']} | {t['percent_complete']}% | "
+                    f"| {t['cam']} | {t['name']} | {actual_pct}% | "
                     f"~{exp}% | {blocker[:60]} |"
                 )
         else:

@@ -85,6 +85,12 @@ class GraphCAMResponder:
         # the responder's start time.  Without the lookback the greeting is
         # filtered as "already processed" and the interview stalls.
         self._last_check: datetime = datetime.now(timezone.utc) - timedelta(seconds=30)
+        # Track Teams message IDs we have already processed and responded to.
+        # This is the primary deduplication guard — timestamp-based filtering
+        # (_last_check) is unreliable because the same message can appear in
+        # consecutive poll windows when its createdDateTime equals the cutoff.
+        # Using IDs guarantees each bot message is relayed exactly once.
+        self._seen_message_ids: set[str] = set()
         self._token_cache = msal.SerializableTokenCache()
         self._load_token_cache()
         logger.info("action=responder_init cam=%s email=%s", cam_name, email)
@@ -193,7 +199,20 @@ class GraphCAMResponder:
         return None
 
     def _get_new_bot_messages(self, token: str, chat_id: str) -> list[dict]:
-        """Return bot messages posted after _last_check, oldest-first."""
+        """Return bot messages not yet processed, oldest-first.
+
+        Uses two complementary filters:
+        1. _last_check timestamp — quick pre-filter to skip old messages without
+           scanning the full seen-ID set on every poll.
+        2. _seen_message_ids — primary deduplication guard.  A message whose ID
+           is already in this set is skipped even if its timestamp is newer than
+           _last_check (handles Teams timestamp precision edge cases and cases
+           where _last_check advances due to the CAM's own replies).
+
+        After returning candidates, their IDs are added to _seen_message_ids so
+        the same message is never relayed more than once regardless of how many
+        poll cycles the message continues to appear in the API response window.
+        """
         headers = {"Authorization": f"Bearer {token}"}
         url = (
             f"{_GRAPH_BASE}/me/chats/{chat_id}/messages"
@@ -210,17 +229,36 @@ class GraphCAMResponder:
         cutoff = self._last_check
         new_bot = []
         for msg in reversed(msgs):  # oldest-first
+            msg_id = msg.get("id", "")
+            # Primary deduplication: skip any message we have already relayed
+            if msg_id and msg_id in self._seen_message_ids:
+                continue
             created_str = msg.get("createdDateTime", "")
             try:
                 created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
             except ValueError:
                 continue
+            # Secondary filter: skip messages older than the last check window.
+            # (Keeps the scan O(recent) rather than O(full history).)
             if created <= cutoff:
                 continue
             from_app = (msg.get("from") or {}).get("application") or {}
             if from_app.get("id") == _BOT_APP_ID:
                 new_bot.append(msg)
 
+        # Mark every candidate as seen BEFORE returning so that even if the
+        # caller fails or errors partway through the list, we do not re-process
+        # these messages on the next tick.
+        for msg in new_bot:
+            msg_id = msg.get("id", "")
+            if msg_id:
+                self._seen_message_ids.add(msg_id)
+                logger.debug(
+                    "action=message_seen cam=%s msg_id=%s", self.cam_name, msg_id
+                )
+
+        # Advance the timestamp watermark to avoid scanning the full history
+        # on every tick.  We use msgs[0] (newest, since the API sorts desc).
         if msgs:
             try:
                 latest_str = msgs[0].get("createdDateTime", "")

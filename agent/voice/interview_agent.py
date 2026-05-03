@@ -389,6 +389,37 @@ class InterviewAgent:
         return self._finalise_task_and_advance(self._current_pct)
 
     def _handle_confirm(self, norm: str, raw: str) -> AgentTurn:
+        # Keyword pre-check: detect correction language that the LLM classifier
+        # might misread as "affirmative" (e.g., "Almost — one correction on the
+        # risk side" looks partially affirmative but is actually a correction).
+        # When these phrases are detected, attempt correction extraction directly
+        # rather than trusting the general sentiment classifier.
+        _CORRECTION_PHRASES = (
+            "correction", "one thing", "almost", "not quite", "close but",
+            "except", "actually,", "worth flagging", "need to flag", "missed",
+            "also flagged", "not complete", "one more", "before we close",
+            "one small", "slight", "slight issue", "minor issue",
+        )
+        raw_lower = raw.lower()
+        correction_language_detected = any(ph in raw_lower for ph in _CORRECTION_PHRASES)
+
+        if correction_language_detected and self._confirm_retry_count < 2:
+            applied_corrections = self._extract_and_apply_correction(raw)
+            if applied_corrections:
+                self._confirm_retry_count += 1
+                logger.info(
+                    "action=confirm_correction_applied cam=%s retry=%d (keyword-triggered)",
+                    self._cam_name, self._confirm_retry_count,
+                )
+                flags_changed = any(c.get("field") == "risk_flag" for c in applied_corrections)
+                return self._re_request_confirmation(flags_changed=flags_changed)
+            # Extraction found nothing — correction keyword was likely incidental
+            # (e.g. "actually, that's all correct"). Fall through to normal classification.
+            logger.debug(
+                "action=confirm_keyword_false_positive cam=%s raw=%r",
+                self._cam_name, raw[:80],
+            )
+
         classification = _classify_cam_response(
             state="confirm",
             question="Does all that sound right?",
