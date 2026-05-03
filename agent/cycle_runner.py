@@ -110,11 +110,18 @@ class CycleRunner:
         start_time = datetime.now(timezone.utc)
         try:
             status = self._run_inner(cycle_id, status)
-            from agent.metrics import increment, set_value
+            from agent.metrics import increment, set_value, record_cycle_duration
             duration = round((datetime.now(timezone.utc) - start_time).total_seconds())
             increment("cycles_completed")
             set_value("last_cycle_id", cycle_id)
             set_value("last_cycle_duration_seconds", duration)
+            set_value("last_cycle_completed_at", datetime.now(timezone.utc).isoformat())
+            # CAM response rate SLI (0.0–1.0)
+            cams_total = status.get("cams_total", 0)
+            cams_responded = status.get("cams_responded", 0)
+            rate = (cams_responded / cams_total) if cams_total > 0 else None
+            set_value("last_cycle_cam_response_rate", rate)
+            record_cycle_duration(duration)
         except Exception as exc:
             logger.error(
                 "action=cycle_failed cycle_id=%s error=%s", cycle_id, exc, exc_info=True

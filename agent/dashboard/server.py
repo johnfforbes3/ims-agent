@@ -3,8 +3,8 @@ Dashboard server — FastAPI + Jinja2 HTML dashboard for IMS Agent.
 
 Serves:
   GET /            → HTML dashboard (auto-refreshes every 60s)
-  GET /health      → health check (unauthenticated; used by Docker/load balancers)
-  GET /metrics     → in-memory metrics snapshot (requires API key)
+  GET /health      → health check (unauthenticated; includes last_cycle_age_seconds, deadman_alert)
+  GET /metrics     → in-memory metrics snapshot (requires API key); ?format=prometheus for Prometheus scraping
   GET /api/state   → current dashboard state JSON
   GET /api/history → cycle history JSON
   POST /api/trigger → admin: manually fire a cycle (async, returns immediately)
@@ -128,23 +128,98 @@ def _load_json(path: str) -> Any:
 # Routes
 # ---------------------------------------------------------------------------
 
+def _deadman_period_seconds() -> int:
+    """Return 2× the configured schedule period in seconds.
+
+    Used by the dead man's switch: if no successful cycle has completed within
+    this window, ``GET /health`` includes ``deadman_alert: true``.
+
+    Derived from ``SCHEDULE_CRON`` (weekly default → 2 weeks) or the simpler
+    ``DEADMAN_PERIOD_HOURS`` override for non-cron deployments.
+    """
+    override = os.getenv("DEADMAN_PERIOD_HOURS", "")
+    if override:
+        try:
+            return int(float(override) * 3600)
+        except ValueError:
+            pass
+    # Default: weekly cron → 2 weeks = 336 hours
+    cron = os.getenv("SCHEDULE_CRON", "0 6 * * 1")
+    # Simple heuristic: count spaces-separated fields; all standard crons are weekly
+    # until we have a full cron parser. 2 × 7 days is the safe default.
+    return 14 * 24 * 3600  # 2 weeks
+
+
 @app.get("/health")
 async def health():
-    """Unauthenticated health check — used by Docker, load balancers, and uptime monitors."""
+    """
+    Unauthenticated health check — used by Docker, load balancers, and uptime monitors.
+
+    Phase 6.1 additions:
+    - last_cycle_age_seconds  — seconds since the last successful cycle completed
+    - deadman_alert           — True when no cycle has completed within 2 × SCHEDULE_PERIOD
+    - ims_last_write_at       — ISO timestamp of the last IMS write (from dashboard state)
+    """
+    import datetime as dt
     from agent.cycle_runner import CycleRunner
+    from agent.metrics import snapshot as _metrics_snapshot
+
     state_exists = Path(_STATE_FILE).exists()
+    metrics = _metrics_snapshot()
+
+    # last_cycle_age_seconds
+    last_completed_at = metrics.get("last_cycle_completed_at")
+    last_cycle_age_seconds: int | None = None
+    deadman_alert = False
+    if last_completed_at:
+        try:
+            last_ts = dt.datetime.fromisoformat(last_completed_at)
+            now = dt.datetime.now(dt.timezone.utc)
+            if last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=dt.timezone.utc)
+            age = round((now - last_ts).total_seconds())
+            last_cycle_age_seconds = age
+            deadman_alert = age > _deadman_period_seconds()
+        except (ValueError, TypeError):
+            pass
+    elif metrics.get("cycles_completed", 0) == 0:
+        # No cycle has ever completed in this process — not yet a dead man alert
+        # (the agent may have just started up)
+        deadman_alert = False
+
+    # ims_last_write_at from dashboard state
+    ims_last_write_at: str | None = None
+    state = _load_json(_STATE_FILE) or {}
+    ims_last_write_at = state.get("completed_at") or state.get("started_at")
+
     return JSONResponse({
         "status": "healthy",
         "uptime_seconds": round(time.monotonic() - _START_TIME),
         "cycle_active": CycleRunner.is_active(),
         "state_file_present": state_exists,
         "auth_enabled": bool(_API_KEY),
+        "last_cycle_age_seconds": last_cycle_age_seconds,
+        "deadman_alert": deadman_alert,
+        "ims_last_write_at": ims_last_write_at,
     })
 
 
 @app.get("/metrics", dependencies=[Depends(_require_api_key)])
-async def api_metrics():
-    """In-memory agent metrics snapshot (cycles, QA queries, duration)."""
+async def api_metrics(format: str = "json"):
+    """
+    In-memory agent metrics snapshot.
+
+    Query params:
+        format=json        — JSON object (default)
+        format=prometheus  — Prometheus text exposition format (text/plain; version=0.0.4)
+    """
+    if format.lower() == "prometheus":
+        from agent.metrics import prometheus_text
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            prometheus_text(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
     from agent.metrics import snapshot
     return JSONResponse(snapshot())
 

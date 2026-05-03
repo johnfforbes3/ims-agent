@@ -29,9 +29,13 @@ class TestMetrics:
                 "cycles_failed": 0,
                 "last_cycle_id": None,
                 "last_cycle_duration_seconds": None,
+                "last_cycle_completed_at": None,
+                "last_cycle_cam_response_rate": None,
                 "qa_queries_total": 0,
                 "qa_queries_direct": 0,
                 "qa_queries_llm": 0,
+                "_cycle_duration_history": [],
+                "_qa_latency_ms_history": [],
             })
 
     def test_increment(self):
@@ -492,7 +496,9 @@ class TestQAEngineMetrics:
             metrics._counters.update({
                 "cycles_completed": 0, "cycles_failed": 0,
                 "last_cycle_id": None, "last_cycle_duration_seconds": None,
+                "last_cycle_completed_at": None, "last_cycle_cam_response_rate": None,
                 "qa_queries_total": 0, "qa_queries_direct": 0, "qa_queries_llm": 0,
+                "_cycle_duration_history": [], "_qa_latency_ms_history": [],
             })
 
     def _make_state(self, tmp_path, **overrides):
@@ -544,3 +550,181 @@ class TestQAEngineMetrics:
         QAEngine().ask("What is the schedule health?")
         s = snapshot()
         assert s["qa_queries_total"] == 0
+
+
+# ===========================================================================
+# Phase 6.1 — Observability
+# ===========================================================================
+
+class TestObservability:
+    """6.1 — Prometheus format, extended /health, dead man's switch, SLI counters."""
+
+    @pytest.fixture(autouse=True)
+    def reset_metrics(self):
+        from agent import metrics
+        with metrics._lock:
+            metrics._counters.update({
+                "cycles_completed": 0,
+                "cycles_failed": 0,
+                "last_cycle_id": None,
+                "last_cycle_duration_seconds": None,
+                "last_cycle_completed_at": None,
+                "last_cycle_cam_response_rate": None,
+                "qa_queries_total": 0,
+                "qa_queries_direct": 0,
+                "qa_queries_llm": 0,
+                "_cycle_duration_history": [],
+                "_qa_latency_ms_history": [],
+            })
+        yield
+
+    # ------------------------------------------------------------------
+    # Prometheus text format
+    # ------------------------------------------------------------------
+
+    def test_prometheus_text_contains_counter_lines(self):
+        from agent.metrics import increment, prometheus_text
+        increment("cycles_completed", 3)
+        increment("cycles_failed", 1)
+        text = prometheus_text()
+        assert "ims_cycles_completed_total 3" in text
+        assert "ims_cycles_failed_total 1" in text
+
+    def test_prometheus_text_has_help_and_type_lines(self):
+        from agent.metrics import prometheus_text
+        text = prometheus_text()
+        assert "# HELP ims_cycles_completed_total" in text
+        assert "# TYPE ims_cycles_completed_total counter" in text
+
+    def test_prometheus_text_skips_none_values(self):
+        from agent.metrics import prometheus_text
+        # last_cycle_duration_seconds is None — must not appear
+        text = prometheus_text()
+        assert "ims_last_cycle_duration_seconds" not in text
+
+    def test_prometheus_text_includes_percentiles(self):
+        from agent.metrics import record_cycle_duration, prometheus_text
+        for d in [60, 90, 120, 200, 300]:
+            record_cycle_duration(d)
+        text = prometheus_text()
+        assert "ims_cycle_duration_p50_seconds" in text
+        assert "ims_cycle_duration_p95_seconds" in text
+
+    # ------------------------------------------------------------------
+    # Snapshot SLI fields
+    # ------------------------------------------------------------------
+
+    def test_snapshot_includes_new_phase61_fields(self):
+        from agent.metrics import snapshot
+        s = snapshot()
+        for key in ("last_cycle_completed_at", "last_cycle_cam_response_rate",
+                    "cycle_duration_p50_seconds", "cycle_duration_p95_seconds",
+                    "qa_latency_p50_ms", "qa_latency_p95_ms"):
+            assert key in s, f"Missing key: {key}"
+
+    def test_snapshot_percentiles_none_when_no_history(self):
+        from agent.metrics import snapshot
+        s = snapshot()
+        assert s["cycle_duration_p50_seconds"] is None
+        assert s["cycle_duration_p95_seconds"] is None
+
+    def test_record_cycle_duration_updates_percentiles(self):
+        from agent.metrics import record_cycle_duration, snapshot
+        for d in [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]:
+            record_cycle_duration(d)
+        s = snapshot()
+        # P50 of [100..1000] = 500 (10 values, index 4)
+        assert s["cycle_duration_p50_seconds"] == 500.0
+        # P95 of [100..1000] = 900 (index 8)
+        assert s["cycle_duration_p95_seconds"] == 900.0
+
+    def test_record_qa_latency_updates_percentiles(self):
+        from agent.metrics import record_qa_latency, snapshot
+        # 10 values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        for ms in range(10, 110, 10):
+            record_qa_latency(float(ms))
+        s = snapshot()
+        # P50: int(0.5 * 10) - 1 = 4 → value[4] = 50
+        assert s["qa_latency_p50_ms"] == 50.0
+        # P95: int(0.95 * 10) - 1 = 8 → value[8] = 90
+        assert s["qa_latency_p95_ms"] == 90.0
+
+    def test_ring_buffer_capped_at_20(self):
+        from agent import metrics
+        for i in range(30):
+            metrics.record_cycle_duration(float(i))
+        with metrics._lock:
+            assert len(metrics._counters["_cycle_duration_history"]) == 20
+
+    # ------------------------------------------------------------------
+    # Dead man's switch
+    # ------------------------------------------------------------------
+
+    def test_deadman_period_default_is_two_weeks(self, monkeypatch):
+        import agent.dashboard.server as srv
+        monkeypatch.delenv("DEADMAN_PERIOD_HOURS", raising=False)
+        monkeypatch.delenv("SCHEDULE_CRON", raising=False)
+        period = srv._deadman_period_seconds()
+        assert period == 14 * 24 * 3600
+
+    def test_deadman_period_override(self, monkeypatch):
+        import agent.dashboard.server as srv
+        monkeypatch.setenv("DEADMAN_PERIOD_HOURS", "48")
+        period = srv._deadman_period_seconds()
+        assert period == 48 * 3600
+
+    def test_health_no_deadman_when_recent_cycle(self, monkeypatch, tmp_path):
+        """No deadman_alert when last cycle was 1 hour ago."""
+        from datetime import datetime, timezone, timedelta
+        import agent.metrics as m
+        import agent.dashboard.server as srv
+
+        monkeypatch.setattr(srv, "_STATE_FILE", str(tmp_path / "nonexistent.json"))
+        monkeypatch.setenv("DEADMAN_PERIOD_HOURS", "24")
+        recent = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        with m._lock:
+            m._counters["last_cycle_completed_at"] = recent
+
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app)
+        r = client.get("/health")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["deadman_alert"] is False
+        assert data["last_cycle_age_seconds"] is not None
+        assert data["last_cycle_age_seconds"] < 7200  # less than 2h
+
+    def test_health_deadman_alert_when_stale_cycle(self, monkeypatch, tmp_path):
+        """deadman_alert=True when last cycle was 3 days ago and period=24h."""
+        from datetime import datetime, timezone, timedelta
+        import agent.metrics as m
+        import agent.dashboard.server as srv
+
+        monkeypatch.setattr(srv, "_STATE_FILE", str(tmp_path / "nonexistent.json"))
+        monkeypatch.setenv("DEADMAN_PERIOD_HOURS", "24")
+        stale = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        with m._lock:
+            m._counters["last_cycle_completed_at"] = stale
+
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app)
+        r = client.get("/health")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["deadman_alert"] is True
+
+    # ------------------------------------------------------------------
+    # CAM response rate SLI
+    # ------------------------------------------------------------------
+
+    def test_set_cam_response_rate(self):
+        from agent.metrics import set_value, snapshot
+        set_value("last_cycle_cam_response_rate", 0.8)
+        s = snapshot()
+        assert s["last_cycle_cam_response_rate"] == 0.8
+
+    def test_cam_response_rate_in_prometheus_text(self):
+        from agent.metrics import set_value, prometheus_text
+        set_value("last_cycle_cam_response_rate", 0.75)
+        text = prometheus_text()
+        assert "ims_cam_response_rate 0.75" in text

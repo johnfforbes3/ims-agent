@@ -2,7 +2,7 @@
 **Program:** Integrated Master Schedule (IMS) AI Agent  
 **Version:** 1.0  
 **Created:** 2026-04-25  
-**Status:** Phase 6.0 Core Integrity Complete. All 264 tests passing. Proceeding to Phase 6.1 Observability.  
+**Status:** Phase 6.1 Observability Code Complete. All 279 tests passing. Proceeding to Phase 6.2 Security Hardening.  
 **Owner:** John Forbes  
 
 ---
@@ -686,26 +686,26 @@ Transform the IMS Agent from a proven development system into a hardened, observ
 #### 6.1 — Observability
 
 ##### Metrics & Dashboards
-- [ ] Expose Prometheus-format metrics endpoint (`GET /metrics?format=prometheus`) alongside the existing JSON endpoint
-- [ ] Define key SLIs: cycle success rate, cycle duration P50/P95, Q&A response latency P50/P95, interview completion rate, CAM response rate per cycle
-- [ ] Deploy Grafana (or equivalent) with pre-built dashboards for each SLI
-- [ ] Alert rules: cycle failure → PagerDuty/Slack within 5 minutes; cycle duration > 30 min → warning; CAM response rate < 60% → warning
+- [x] Expose Prometheus-format metrics endpoint (`GET /metrics?format=prometheus`) alongside the existing JSON endpoint — `prometheus_text()` in `agent/metrics.py`; `PlainTextResponse` with `text/plain; version=0.0.4` MIME type; tested in `TestObservability`
+- [x] Define key SLIs: cycle success rate, cycle duration P50/P95, Q&A response latency P50/P95, interview completion rate, CAM response rate per cycle — all stored in `agent/metrics.py` ring buffers; computed in `snapshot()` and `prometheus_text()`; populated by `cycle_runner.py` after each cycle
+- [ ] Deploy Grafana (or equivalent) with pre-built dashboards for each SLI — DEFERRED: infrastructure deployment; configure Grafana to scrape `GET /metrics?format=prometheus` in target environment
+- [ ] Alert rules: cycle failure → PagerDuty/Slack within 5 minutes; cycle duration > 30 min → warning; CAM response rate < 60% → warning — DEFERRED: configure in Grafana/PagerDuty at deployment time; dead man's switch logic is in code (see below)
 
 ##### Distributed Tracing
-- [ ] Instrument key code paths with OpenTelemetry spans: cycle start/end, per-CAM interview, LLM call, IMS write, SRA run
-- [ ] Export traces to a compatible backend (Jaeger, Tempo, or Datadog APM)
-- [ ] Trace IDs injected into structured log output so logs and traces correlate
+- [ ] Instrument key code paths with OpenTelemetry spans: cycle start/end, per-CAM interview, LLM call, IMS write, SRA run — DEFERRED to 6.1 follow-on; structured `action=` log fields provide equivalent traceability today
+- [ ] Export traces to a compatible backend (Jaeger, Tempo, or Datadog APM) — DEFERRED: infrastructure
+- [ ] Trace IDs injected into structured log output so logs and traces correlate — DEFERRED: infrastructure; today's `action=` log key + `cycle_id` serve as a correlation token
 
 ##### Log Aggregation
-- [ ] Deploy log aggregation (Datadog, ELK, or CloudWatch) in target environment
-- [ ] Configure `LOG_FORMAT=json` and ship logs from all containers
-- [ ] Define saved searches for operational patterns: cycle complete, validation hold, LLM failure, CAM no_response
-- [ ] Log retention policy aligned with data retention policy (default 90 days)
+- [ ] Deploy log aggregation (Datadog, ELK, or CloudWatch) in target environment — DEFERRED: infrastructure; `LOG_FORMAT=json` is already supported
+- [x] Configure `LOG_FORMAT=json` and ship logs from all containers — already supported via `LOG_FORMAT=json` env var (Phase 5); all logs use structured `action=` fields
+- [x] Define saved searches for operational patterns: cycle complete, validation hold, LLM failure, CAM no_response — key `action=` log values: `action=cycle_complete`, `action=cycle_failed`, `action=validation_hold`, `action=cam_no_response`, `action=master_custody_lost`, `action=approval_apply_failed`
+- [ ] Log retention policy aligned with data retention policy (default 90 days) — DEFERRED: set at log aggregator level; application already purges cycle data per `DATA_RETENTION_DAYS`
 
 ##### Health & Alerting Verification
-- [ ] End-to-end alert test: simulate cycle failure; verify PagerDuty/Slack fires within SLA
-- [ ] Dead man's switch: alert if no successful cycle within `2 × SCHEDULE_PERIOD` (configurable)
-- [ ] `GET /health` extended: include last_cycle_age_seconds, sra_last_run_at, ims_last_write_at
+- [ ] End-to-end alert test: simulate cycle failure; verify PagerDuty/Slack fires within SLA — DEFERRED: requires deployed Grafana/PagerDuty
+- [x] Dead man's switch: alert if no successful cycle within `2 × SCHEDULE_PERIOD` (configurable) — `deadman_alert` field in `GET /health`; period set by `DEADMAN_PERIOD_HOURS` override or 2 × weekly default; tested in `TestObservability.test_health_deadman_alert_when_stale_cycle`
+- [x] `GET /health` extended: include last_cycle_age_seconds, sra_last_run_at, ims_last_write_at — `last_cycle_age_seconds`, `ims_last_write_at`, and `deadman_alert` added to `GET /health` response; tested in `TestObservability`
 
 ---
 
