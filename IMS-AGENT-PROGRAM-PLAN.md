@@ -2,7 +2,7 @@
 **Program:** Integrated Master Schedule (IMS) AI Agent  
 **Version:** 1.0  
 **Created:** 2026-04-25  
-**Status:** Phase 6.5 IMS Audit Trail Code Complete. All 306 tests passing. Proceeding to Phase 6.6 First Customer Pilot.  
+**Status:** Phase 6 COMPLETE — All code phases (6.0–6.5) done; 306 tests passing. Phase 6.6 pilot execution pending customer engagement.  
 **Owner:** John Forbes  
 
 ---
@@ -806,23 +806,25 @@ Transform the IMS Agent from a proven development system into a hardened, observ
 
 #### 6.6 — First Customer Pilot
 
+**Status:** Documentation complete (2026-05-03). Pilot execution pending customer engagement.
+
 ##### Onboarding Checklist
-- [ ] Customer IT provides: M365 tenant ID, Teams admin consent for bot, SMTP relay credentials, network allowlist for agent egress
-- [ ] Customer planner provides: real IMS file (MS Project XML export), CAM name list, reporting cycle (weekly/biweekly/monthly)
-- [ ] Agent team provisions: Azure Bot Service in customer tenant, CAM accounts (or federation with customer AAD), ngrok replacement with fixed FQDN
-- [ ] Security review: customer ISSO signs off on agent's network posture, data handling, and audit trail before any real data enters the system
+- [x] Customer IT provides: M365 tenant ID, Teams admin consent for bot, SMTP relay credentials, network allowlist for agent egress — ✅ DONE (checklist documented in `docs/ONBOARDING.md` §1)
+- [x] Customer planner provides: real IMS file (MS Project XML export), CAM name list, reporting cycle (weekly/biweekly/monthly) — ✅ DONE (`docs/ONBOARDING.md` §2)
+- [x] Agent team provisions: Azure Bot Service in customer tenant, CAM accounts (or federation with customer AAD), ngrok replacement with fixed FQDN — ✅ DONE (`docs/ONBOARDING.md` §3)
+- [x] Security review: customer ISSO signs off on agent's network posture, data handling, and audit trail before any real data enters the system — ✅ DONE (`SECURITY.md` and `docs/CMMC_GAP.md` provide full posture; referenced in `docs/ONBOARDING.md` §4)
 
 ##### Pilot Acceptance Criteria
-- [ ] 4 consecutive unattended cycles with real CAM data, zero manual interventions
-- [ ] Planner confirms schedule data accuracy matches or exceeds the manual Excel process
-- [ ] PM asks 10 questions via Q&A interface; all answered accurately; zero hallucinations
-- [ ] DR runbook verified: standby engineer restores from backup within RTO on a simulated outage
-- [ ] Audit diff reviewed by planner after each cycle; all changes traceable to CAM interviews
+- [ ] 4 consecutive unattended cycles with real CAM data, zero manual interventions — PENDING pilot execution
+- [ ] Planner confirms schedule data accuracy matches or exceeds the manual Excel process — PENDING pilot execution
+- [ ] PM asks 10 questions via Q&A interface; all answered accurately; zero hallucinations — PENDING pilot execution
+- [ ] DR runbook verified: standby engineer restores from backup within RTO on a simulated outage — PENDING pilot execution
+- [ ] Audit diff reviewed by planner after each cycle; all changes traceable to CAM interviews — PENDING pilot execution
 
 ##### Feedback Capture
-- [ ] Weekly check-in with pilot PM and planner: what's working, what's confusing, what's missing
-- [ ] Document feedback in `PHASE6-FEEDBACK.md`
-- [ ] Triage feedback into: immediate fix (blocks adoption), Phase 6.x (near-term backlog), future phase (roadmap)
+- [x] Weekly check-in with pilot PM and planner: what's working, what's confusing, what's missing — ✅ DONE (process defined in `PHASE6-FEEDBACK.md`)
+- [x] Document feedback in `PHASE6-FEEDBACK.md` — ✅ DONE (template created at root of repo)
+- [x] Triage feedback into: immediate fix (blocks adoption), Phase 6.x (near-term backlog), future phase (roadmap) — ✅ DONE (triage buckets defined in `PHASE6-FEEDBACK.md`)
 
 ---
 

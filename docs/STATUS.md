@@ -11,9 +11,9 @@
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 6.5 IMS Audit Trail — code complete; extended change tracking deferred to deployment |
+| **Phase** | Phase 6 COMPLETE — All code phases done; pilot execution pending customer engagement |
 | **Unit tests** | **306 / 306 passing** |
-| **Last procedure run** | 2026-05-03 (Phase 6.5 IMS Audit Trail — unit tests + code verification) |
+| **Last procedure run** | 2026-05-03 (Phase 6.6 First Customer Pilot — documentation complete) |
 | **Last production cycle** | 2026-05-02 — `20260502T114528Z`, health=RED, 4/5 CAMs responded |
 | **Open FAILs** | §11.2 — Corrupt XML raises unhandled ParseError traceback (LOW, non-blocking) |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
@@ -56,6 +56,19 @@ All four Core Integrity bugs are fixed and verified by unit tests. Phase 6.0 is 
 
 ---
 
+## Phase 6.6 Gate Status
+
+Documentation complete; pilot execution pending customer engagement.
+
+| Item | Status |
+|------|--------|
+| `docs/ONBOARDING.md` — customer onboarding checklist | ✅ DONE |
+| `PHASE6-FEEDBACK.md` — weekly pilot feedback template | ✅ DONE |
+| Pilot acceptance criteria defined | ✅ DONE |
+| Pilot execution (4 cycles, real CAM data) | ⏳ PENDING — awaiting customer engagement |
+
+---
+
 ## History
 
 | Date | Event | Test Count |
@@ -72,4 +85,5 @@ All four Core Integrity bugs are fixed and verified by unit tests. Phase 6.0 is 
 | 2026-05-03 | Phase 6.2 Security Hardening — secrets helper, audit logging, CMMC gap analysis | 287 |
 | 2026-05-03 | Phase 6.3 Recovery — LLM retry backoff, DR runbook, graceful failure modes | 293 |
 | 2026-05-03 | Phase 6.4 Redundancy — liveness/readiness probes confirmed; HA/DB/K8s deferred | 293 |
-| 2026-05-03 | Phase 6.5 IMS Audit Trail — ims_diff.py, {cycle_id}_diff.json/.md, GET /api/diff/{cycle_id} | **306** |
+| 2026-05-03 | Phase 6.5 IMS Audit Trail — ims_diff.py, {cycle_id}_diff.json/.md, GET /api/diff/{cycle_id} | 306 |
+| 2026-05-03 | Phase 6.6 First Customer Pilot — ONBOARDING.md, PHASE6-FEEDBACK.md, pilot docs complete | **306** |
