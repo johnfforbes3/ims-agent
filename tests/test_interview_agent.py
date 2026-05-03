@@ -571,3 +571,43 @@ class TestConversationalContext:
         assert agent.state == InterviewState.CONFIRM
         agent.process("no")   # flat denial #3 → cap reached, close
         assert agent.state == InterviewState.COMPLETE
+
+    def test_milestone_no_count_skips_repeated_risk_question(self):
+        """After 2 NO answers for the same milestone, the risk question is suppressed
+        for subsequent tasks — avoids asking the same question 5+ times."""
+        from unittest.mock import patch
+
+        # Three tasks, all behind schedule, all with the same nearest milestone
+        tasks = [
+            _make_task("T1", "Task One", pct=0, behind=True),
+            _make_task("T2", "Task Two", pct=0, behind=True),
+            _make_task("T3", "Task Three", pct=0, behind=True),
+        ]
+        agent = InterviewAgent("Alice", tasks, expected_pcts={"T1": 90, "T2": 90, "T3": 90})
+
+        # Patch _nearest_milestone_name to always return "Milestone A"
+        with patch.object(agent, "_nearest_milestone_name", return_value="Milestone A"):
+            agent.start()
+            agent.process("yes")           # greeting
+
+            # Task 1: behind, no blocker explicitly given → fast-path captures
+            agent.process("0")             # pct → behind, asks for blocker
+            agent.process("blocked on vendor")  # blocker → risk question asked
+            assert agent.state == InterviewState.AWAITING_RISK_FLAG
+            agent.process("no")            # NO #1 → no_count=1
+
+            # Task 2: behind → blocker → risk question still asked (count=1 < 2)
+            agent.process("0")
+            agent.process("waiting on parts")
+            assert agent.state == InterviewState.AWAITING_RISK_FLAG
+            agent.process("no")            # NO #2 → no_count=2
+
+            # Task 3: behind → blocker → risk question SKIPPED (count >= 2)
+            # State should advance directly to TASK_INTRO or CONFIRM, not AWAITING_RISK_FLAG
+            agent.process("0")
+            agent.process("waiting on approval")
+            assert agent.state != InterviewState.AWAITING_RISK_FLAG, (
+                "risk question should be suppressed after 2 NO answers for the same milestone"
+            )
+            # Risk flag should be auto-set to False
+            assert agent._results[2].risk_flag is False

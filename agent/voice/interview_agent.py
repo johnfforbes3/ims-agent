@@ -160,6 +160,10 @@ class InterviewAgent:
         # Track milestones already asked about — stores the risk answer so behind-schedule
         # tasks reuse the same YES/NO rather than re-asking or auto-flagging True
         self._flagged_milestones: dict[str, bool] = {}
+        # Count of consecutive NO answers per milestone — once a milestone has been
+        # denied ≥ 2 times in this session, stop asking about it (avoids the "you've
+        # asked me this 6 times" UX problem when many tasks share the same milestone).
+        self._milestone_no_count: dict[str, int] = {}
         # Last confirmation message text — stored so correction prompts have full context
         self._last_confirmation_text: str = ""
         # Pending one-liner to prepend to the next task intro when the CAM asks a question
@@ -297,11 +301,12 @@ class InterviewAgent:
             milestone_hint = self._nearest_milestone_name()
             if self._current_blocker:
                 # Blocker already captured — go straight to risk question, or skip if the
-                # milestone is already confirmed AT RISK (True).  We do NOT skip for a prior
-                # NO answer: a different task may have its own independent risk even though a
-                # previous task under the same milestone was not a risk.
+                # milestone is already confirmed AT RISK (True) or has been denied ≥ 2 times.
                 if self._flagged_milestones.get(milestone_hint) is True:
                     self._current_risk_flag = True
+                    return self._finalise_task_and_advance(pct)
+                if self._milestone_no_count.get(milestone_hint, 0) >= 2:
+                    self._current_risk_flag = False
                     return self._finalise_task_and_advance(pct)
                 return self._agent_turn(
                     f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
@@ -317,13 +322,18 @@ class InterviewAgent:
         # On track percentage-wise — but if a blocker was mentioned, still ask about risk.
         # A task can be "on schedule" (e.g. 0% with 0% expected) yet have a blocker that
         # threatens future milestones (e.g. vendor delay, dependency not started).
-        # We do NOT apply _flagged_milestones deduplication here: on-track tasks may have
-        # independent blockers for the same milestone (e.g. different vendor dependencies),
-        # so each deserves its own risk assessment rather than inheriting a prior NO answer.
+        # We apply _flagged_milestones True-dedup and milestone_no_count threshold here
+        # to avoid asking the same question many times in the same session.
         if self._current_blocker:
             milestone_hint = self._nearest_milestone_name()
             if classification.get("cam_question"):
                 self._cam_question_note = _cam_question_ack()
+            if self._flagged_milestones.get(milestone_hint) is True:
+                self._current_risk_flag = True
+                return self._finalise_task_and_advance(self._current_pct)
+            if self._milestone_no_count.get(milestone_hint, 0) >= 2:
+                self._current_risk_flag = False
+                return self._finalise_task_and_advance(self._current_pct)
             return self._agent_turn(
                 f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
                 InterviewState.AWAITING_RISK_FLAG,
@@ -345,10 +355,13 @@ class InterviewAgent:
         if classification.get("cam_question"):
             self._cam_question_note = _cam_question_ack()
         milestone_hint = self._nearest_milestone_name()
-        # Only skip the risk question when the milestone is already confirmed AT RISK.
-        # A prior NO answer does not prevent subsequent tasks from being real risks.
+        # Skip the risk question if the milestone is already confirmed AT RISK (auto-flag
+        # True) or has been denied ≥ 2 times in this session (avoid repetitive asking).
         if self._flagged_milestones.get(milestone_hint) is True:
             self._current_risk_flag = True
+            return self._finalise_task_and_advance(self._current_pct)
+        if self._milestone_no_count.get(milestone_hint, 0) >= 2:
+            self._current_risk_flag = False
             return self._finalise_task_and_advance(self._current_pct)
         return self._agent_turn(
             f"Got it. Could that put {milestone_hint} at risk?",
@@ -374,6 +387,14 @@ class InterviewAgent:
         # Record this milestone's risk answer — behind-schedule tasks that hit the same
         # milestone later reuse this answer (True/False) instead of re-asking
         self._flagged_milestones[milestone] = is_risk
+        if not is_risk:
+            self._milestone_no_count[milestone] = self._milestone_no_count.get(milestone, 0) + 1
+            if self._milestone_no_count[milestone] >= 2:
+                logger.info(
+                    "action=milestone_no_threshold_reached milestone=%s no_count=%d"
+                    " — will skip risk question for subsequent tasks",
+                    milestone, self._milestone_no_count[milestone],
+                )
 
         if is_risk:
             self._current_risk_flag = True

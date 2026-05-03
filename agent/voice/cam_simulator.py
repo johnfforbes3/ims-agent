@@ -257,6 +257,9 @@ class CAMSimulator:
             role = "Agent" if turn["role"] == "user" else p.cam_name
             history_lines.append(f"{role}: {turn['content']}")
 
+        # List tasks that are explicitly flagged as schedule risks in seeded data
+        seeded_risk_ids = set(p.seeded_risks.keys())
+
         return (
             f"You are: {p.cam_name}, {p.role}\n"
             f"Communication style: {p.communication_style}\n\n"
@@ -267,4 +270,10 @@ class CAMSimulator:
               "earlier in this conversation, do not re-explain it in full. "
               "Reference it briefly (e.g. 'same RF spec issue I mentioned') "
               "and move on.\n\n"
+            + (f"Schedule risk guidance: Only the tasks explicitly marked '| RISK:' above "
+               f"are true schedule risks from your perspective. When the agent asks whether "
+               f"a task 'puts a milestone at risk', answer YES only for those tasks. "
+               f"For all other tasks, answer no — a blocker or slow progress alone does not "
+               f"make it a schedule risk unless it appears in your RISK list above.\n\n"
+               if seeded_risk_ids else "")
         )
