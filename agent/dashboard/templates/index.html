@@ -412,7 +412,57 @@
       &nbsp;|&nbsp;
       <strong>CAMs:</strong> <span id="cp-cams">{{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}</span>
     </p>
+    <!-- Per-CAM live progress pills — updated by _updateCycleCard() via AJAX -->
+    <div id="cp-cam-progress" style="margin-top:8px;font-size:12px;line-height:2"></div>
   </div>
+
+  <!-- What Changed (7.4.1) -->
+  <details class="card" id="what-changed-panel">
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#1a73e8">
+      🔄 What Changed — IMS Diff Viewer
+    </summary>
+    <div style="margin-top:12px">
+      <label style="font-size:12px;color:#555">Cycle ID:
+        <input id="diff-cycle-input" type="text"
+               value="{{ state.get('cycle_id', '') }}"
+               style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
+      </label>
+      <button class="btn btn-primary" onclick="loadDiff()" style="margin-left:8px;padding:4px 12px;font-size:12px">Load</button>
+      <span id="diff-status" style="font-size:11px;color:#888;margin-left:8px"></span>
+      <div id="diff-table-container" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+  </details>
+
+  <!-- Change History (7.4.2) -->
+  <details class="card" id="change-history-panel">
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#1a73e8">
+      📋 Change History — Cumulative Diff
+    </summary>
+    <div style="margin-top:12px">
+      <span style="font-size:12px;color:#555">From cycle:</span>
+      <input id="ch-from" type="text" placeholder="earliest (leave blank for all)"
+             style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
+      <span style="font-size:12px;color:#555;margin-left:8px">To:</span>
+      <input id="ch-to" type="text" placeholder="latest (leave blank for all)"
+             style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
+      <button class="btn btn-primary" onclick="loadChanges()" style="margin-left:8px;padding:4px 12px;font-size:12px">Load</button>
+      <a id="ch-csv-link" href="#" style="display:none;margin-left:8px;font-size:12px">⬇ CSV</a>
+      <span id="ch-status" style="font-size:11px;color:#888;margin-left:8px"></span>
+      <div id="ch-table-container" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+  </details>
+
+  <!-- Baseline Drift (7.4.3) -->
+  <details class="card" id="baseline-drift-panel">
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#b06000">
+      📐 Baseline Drift Report
+    </summary>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="loadBaselineDrift()" style="padding:4px 12px;font-size:12px">Load</button>
+      <span id="bd-status" style="font-size:11px;color:#888;margin-left:8px"></span>
+      <div id="bd-table-container" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+  </details>
 
 </div><!-- /container -->
 
@@ -463,10 +513,105 @@
             if (cell) cell.innerHTML = _statusHtml[liveStatus] || cell.innerHTML;
           }
         }
+
+        // ── Per-CAM progress pills (7.4.1) ────────────────────────
+        const pills = Object.entries(camLive).map(([name, st]) => {
+          const icon = st === 'complete' ? '✓' : st === 'no_answer' ? '✗' : '⏳';
+          const col  = st === 'complete' ? '#1e8e3e' : st === 'no_answer' ? '#d93025' : '#f9ab00';
+          return `<span style="border:1px solid ${col};color:${col};border-radius:12px;`
+               + `padding:1px 10px;margin:2px;display:inline-block">${icon} ${name}</span>`;
+        }).join(' ');
+        const prog = document.getElementById('cp-cam-progress');
+        if (prog) prog.innerHTML = pills;
       }
     } else {
       card.style.display = 'none';
     }
+  }
+
+  // ── What Changed (7.4.1) — load single-cycle diff ────────────────────────
+  async function loadDiff() {
+    const cycleId = document.getElementById('diff-cycle-input').value.trim();
+    const status  = document.getElementById('diff-status');
+    const container = document.getElementById('diff-table-container');
+    if (!cycleId) { status.textContent = 'Enter a cycle ID.'; return; }
+    status.textContent = 'Loading…';
+    try {
+      const data = await fetch(`/api/diff/${encodeURIComponent(cycleId)}`).then(r => r.json());
+      if (data.error) { status.textContent = data.error; container.innerHTML = ''; return; }
+      if (!Array.isArray(data) || data.length === 0) {
+        status.textContent = 'No changes recorded for this cycle.';
+        container.innerHTML = '';
+        return;
+      }
+      status.textContent = `${data.length} change(s)`;
+      container.innerHTML = '<table><thead><tr>'
+        + '<th>Task</th><th>CAM</th><th>Field</th><th>Old</th><th>New</th>'
+        + '</tr></thead><tbody>'
+        + data.map(c => `<tr><td>${c.task_name||c.task_id}</td><td>${c.cam_name||'—'}</td>`
+            + `<td>${c.field}</td><td style="color:#888">${c.old_value??'—'}</td>`
+            + `<td><strong>${c.new_value??'—'}</strong></td></tr>`).join('')
+        + '</tbody></table>';
+    } catch (e) { status.textContent = 'Error: ' + e; }
+  }
+
+  // ── Change History (7.4.2) — cumulative diff across a cycle range ─────────
+  async function loadChanges() {
+    const from = document.getElementById('ch-from').value.trim();
+    const to   = document.getElementById('ch-to').value.trim();
+    const status = document.getElementById('ch-status');
+    const container = document.getElementById('ch-table-container');
+    const csvLink   = document.getElementById('ch-csv-link');
+    status.textContent = 'Loading…';
+    let url = '/api/changes';
+    const params = new URLSearchParams();
+    if (from) params.set('from_cycle', from);
+    if (to)   params.set('to_cycle', to);
+    if ([...params].length) url += '?' + params;
+    try {
+      const data = await fetch(url).then(r => r.json());
+      if (data.error) { status.textContent = data.error; container.innerHTML = ''; return; }
+      const changes = data.changes || [];
+      status.textContent = `${data.total_changes} net change(s) across ${data.from_cycle} → ${data.to_cycle}`;
+      csvLink.href = url + (url.includes('?') ? '&' : '?') + 'format=csv';
+      csvLink.style.display = '';
+      if (!changes.length) { container.innerHTML = '<p class="empty">No changes in range.</p>'; return; }
+      container.innerHTML = '<table><thead><tr>'
+        + '<th>Task</th><th>CAM</th><th>Field</th><th>Old</th><th>New</th><th>Hops</th><th>Cycles</th>'
+        + '</tr></thead><tbody>'
+        + changes.map(c => `<tr><td>${c.task_name||c.task_id}</td><td>${c.cam_name||'—'}</td>`
+            + `<td>${c.field}</td><td style="color:#888">${c.old_value??'—'}</td>`
+            + `<td><strong>${c.new_value??'—'}</strong></td><td>${c.hop_count}</td>`
+            + `<td style="font-size:11px;color:#888">${(c.contributing_cycle_ids||[]).join(', ')}</td></tr>`).join('')
+        + '</tbody></table>';
+    } catch (e) { status.textContent = 'Error: ' + e; }
+  }
+
+  // ── Baseline Drift (7.4.3) ────────────────────────────────────────────────
+  async function loadBaselineDrift() {
+    const status = document.getElementById('bd-status');
+    const container = document.getElementById('bd-table-container');
+    status.textContent = 'Loading…';
+    try {
+      const data = await fetch('/api/baseline-drift').then(r => r.json());
+      if (data.error) { status.textContent = `Baseline: ${data.error}`; container.innerHTML = ''; return; }
+      const drift = data.task_drift || [];
+      const baseline = data.baseline_cycle_id || '?';
+      status.textContent = `Baseline: ${baseline} | ${drift.length} task(s) drifted`;
+      if (!drift.length) { container.innerHTML = '<p class="empty">No drift from baseline.</p>'; return; }
+      container.innerHTML = '<table><thead><tr>'
+        + '<th>Task</th><th>CAM</th><th>Baseline Finish</th><th>Current Finish</th><th>Slip (days)</th><th>Δ%</th>'
+        + '</tr></thead><tbody>'
+        + drift.map(t => {
+            const slip = t.finish_slip_days;
+            const col  = slip >= 30 ? '#d93025' : slip >= 14 ? '#f9ab00' : '#333';
+            return `<tr><td>${t.name||t.task_id}${t.is_milestone?' ⛳':''}</td><td>${t.cam||'—'}</td>`
+              + `<td style="color:#888">${t.baseline_finish||'—'}</td><td>${t.current_finish||'—'}</td>`
+              + `<td style="color:${col};font-weight:bold">${slip!=null?slip:'—'}</td>`
+              + `<td style="color:${(t.pct_delta||0)<0?'#d93025':'#1e8e3e'}">${(t.pct_delta||0)>0?'+':''}${t.pct_delta||0}%</td></tr>`;
+          }).join('')
+        + '</tbody></table>';
+    } catch (e) { status.textContent = 'Error: ' + e; }
   }
 
   async function _poll() {

@@ -11,9 +11,9 @@
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 6 COMPLETE — 314 tests passing; Phase 7 + Phase 8 planned (see IMS-AGENT-PROGRAM-PLAN.md) |
-| **Unit tests** | **314 / 314 passing** |
-| **Last procedure run** | 2026-05-03 (§4.2a + §11.2 bug fixes — 314 tests passing) |
+| **Phase** | Phase 7.4 COMPLETE — 359 tests passing; TD-009/TD-016 resolved; Phase 7.5 next |
+| **Unit tests** | **359 / 359 passing** |
+| **Last procedure run** | 2026-05-03 (Phase 7.4 platform enhancements — 359 tests passing) |
 | **Last production cycle** | 2026-05-03 — `20260503T191337Z`, health=RED, 5/5 CAMs responded (Teams chat relay) |
 | **Open FAILs** | None |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
@@ -76,10 +76,10 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 
 | Sub-phase | Description | Status |
 |-----------|-------------|--------|
-| **7.1** | Technical Debt Sprint (TD-001/002/003/013/014/015/021 + LOW items) | ⏳ Ready to start — no external dependencies |
+| **7.1** | Technical Debt Sprint (TD-001/002/003/013/014/015/021 + LOW items) | ✅ COMPLETE — 336 tests |
 | **7.2** | Security & Compliance (JWT auth, MFA, IR plan, SIEM, key lifecycle) | ⏳ Ready to start — no external dependencies |
 | **7.3** | Infrastructure & Observability (Grafana, log aggregation, backup automation, DR test) | ⏳ Awaiting deployment platform decision |
-| **7.4** | Platform Enhancements (live dashboard, cumulative diff, baseline drift, Q&A cache) | ⏳ Starts after 7.1 complete |
+| **7.4** | Platform Enhancements (live dashboard, cumulative diff, baseline drift, Q&A cache) | ✅ COMPLETE — 359 tests |
 | **7.5** | First Customer Pilot Execution (4 cycles, real data, acceptance criteria) | ⏳ Blocked on customer engagement |
 | **8.1** | Real Teams/ACS Voice Integration | ⏳ Backlog — post-pilot |
 | **8.2** | Multi-Tenant / Multi-Program Support | ⏳ Backlog — post-pilot |
@@ -108,3 +108,5 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 | 2026-05-03 | Phase 6.6 First Customer Pilot — ONBOARDING.md, PHASE6-FEEDBACK.md, pilot docs complete | **306** |
 | 2026-05-03 | Bug fixes §4.2a + §11.2 — os.replace retry loop; corrupt XML ValueError; 8 new tests | **314** |
 | 2026-05-03 | Phase 7 + Phase 8 planned — multi-phase roadmap written to IMS-AGENT-PROGRAM-PLAN.md | **314** |
+| 2026-05-03 | Phase 7.1 Technical Debt Sprint — TD-001/002/003/005/007/013/014/015/018/021 resolved | **336** |
+| 2026-05-03 | Phase 7.4 Platform Enhancements — per-CAM dashboard pills, cumulative diff, baseline drift, Q&A TTL cache, cycle report diff/drift sections; TD-009/TD-016 resolved | **359** |

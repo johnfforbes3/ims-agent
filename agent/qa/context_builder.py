@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,16 @@ logger = logging.getLogger(__name__)
 
 _STATE_FILE = Path(os.getenv("DASHBOARD_STATE_FILE", "data/dashboard_state.json"))
 _HISTORY_FILE = Path(os.getenv("CYCLE_HISTORY_FILE", "data/cycle_history.json"))
+
+# TD-016: 30-second TTL cache for load_state() / load_history().
+# Invalidated early when the underlying file's mtime changes.
+_STATE_CACHE: dict[str, Any] | None = None
+_STATE_CACHE_AT: float = 0.0       # time.monotonic() when cache was filled
+_STATE_CACHE_MTIME: float = 0.0    # st_mtime when cache was filled
+_HISTORY_CACHE: list[dict] | None = None
+_HISTORY_CACHE_AT: float = 0.0
+_HISTORY_CACHE_MTIME: float = 0.0
+_CACHE_TTL_S: float = 30.0
 
 
 # ---------------------------------------------------------------------------
@@ -63,21 +74,54 @@ def detect_intent(question: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def load_state() -> dict[str, Any]:
+    """Load dashboard state, using a 30-second TTL cache (TD-016).
+
+    The cache is invalidated early when ``dashboard_state.json``'s mtime
+    changes — so a freshly completed cycle is always visible within one poll.
+    """
+    global _STATE_CACHE, _STATE_CACHE_AT, _STATE_CACHE_MTIME
     if not _STATE_FILE.exists():
         logger.warning("action=state_missing path=%s", _STATE_FILE)
         return {}
     try:
-        return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        mtime = _STATE_FILE.stat().st_mtime
+        now = time.monotonic()
+        if (
+            _STATE_CACHE is not None
+            and mtime == _STATE_CACHE_MTIME
+            and (now - _STATE_CACHE_AT) < _CACHE_TTL_S
+        ):
+            return _STATE_CACHE
+        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        _STATE_CACHE = data
+        _STATE_CACHE_AT = now
+        _STATE_CACHE_MTIME = mtime
+        logger.debug("action=state_cache_miss path=%s", _STATE_FILE)
+        return data
     except Exception as exc:
         logger.error("action=state_load_error error=%s", exc)
         return {}
 
 
 def load_history() -> list[dict]:
+    """Load cycle history, using a 30-second TTL cache (TD-016)."""
+    global _HISTORY_CACHE, _HISTORY_CACHE_AT, _HISTORY_CACHE_MTIME
     if not _HISTORY_FILE.exists():
         return []
     try:
-        return json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
+        mtime = _HISTORY_FILE.stat().st_mtime
+        now = time.monotonic()
+        if (
+            _HISTORY_CACHE is not None
+            and mtime == _HISTORY_CACHE_MTIME
+            and (now - _HISTORY_CACHE_AT) < _CACHE_TTL_S
+        ):
+            return _HISTORY_CACHE
+        data = json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
+        _HISTORY_CACHE = data
+        _HISTORY_CACHE_AT = now
+        _HISTORY_CACHE_MTIME = mtime
+        return data
     except Exception:
         return []
 

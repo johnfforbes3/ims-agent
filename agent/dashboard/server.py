@@ -281,6 +281,118 @@ async def api_diff(cycle_id: str):
     return JSONResponse(diff)
 
 
+@app.get("/api/changes", dependencies=[Depends(_require_api_key)])
+async def api_changes(
+    from_cycle: str | None = None,
+    to_cycle: str | None = None,
+    format: str = "json",
+):
+    """
+    7.4.2 — Cumulative change report across a range of cycles.
+
+    Query params:
+        from_cycle  (optional) earliest cycle ID to include; defaults to the
+                    oldest diff file in data/ims_exports/
+        to_cycle    (optional) latest cycle ID to include; defaults to the newest
+        format      "json" (default) or "csv"
+    """
+    from agent.ims_diff import merge_diffs
+    import glob as _glob
+
+    exports_dir = os.path.join(os.getenv("DATA_DIR", "data"), "ims_exports")
+
+    # Determine from/to defaults from available diff files
+    diff_files = sorted(_glob.glob(os.path.join(exports_dir, "*_diff.json")))
+    if not diff_files:
+        return JSONResponse({"error": "No diff files found"}, status_code=404)
+
+    all_ids = [os.path.basename(f)[: -len("_diff.json")] for f in diff_files]
+    resolved_from = from_cycle or all_ids[0]
+    resolved_to = to_cycle or all_ids[-1]
+
+    merged = merge_diffs(resolved_from, resolved_to)
+
+    if format.lower() == "csv":
+        import io
+        import csv as _csv
+        buf = io.StringIO()
+        writer = _csv.DictWriter(buf, fieldnames=[
+            "task_id", "task_name", "cam_name", "field",
+            "old_value", "new_value", "hop_count", "contributing_cycle_ids",
+        ])
+        writer.writeheader()
+        for row in merged:
+            row["contributing_cycle_ids"] = "|".join(row.get("contributing_cycle_ids", []))
+            writer.writerow(row)
+        from starlette.responses import PlainTextResponse
+        return PlainTextResponse(
+            buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=changes.csv"},
+        )
+
+    return JSONResponse({
+        "from_cycle": resolved_from,
+        "to_cycle": resolved_to,
+        "total_changes": len(merged),
+        "changes": merged,
+    })
+
+
+@app.get("/api/baseline-drift", dependencies=[Depends(_require_api_key)])
+async def api_baseline_drift():
+    """
+    7.4.3 — Baseline drift report.
+
+    Compares the current IMS task list (from dashboard_state.json) against
+    the baseline snapshot identified by BASELINE_CYCLE_ID env var, or the
+    oldest available snapshot in data/ims_exports/.
+
+    Returns per-task slip in calendar days, pct-complete delta, tasks
+    added/removed since baseline, and milestones slipped > BASELINE_DRIFT_ALERT_DAYS.
+    """
+    from agent.ims_diff import compute_baseline_drift
+    from agent.qa.context_builder import load_state
+
+    state = load_state()
+    # Use milestones + tasks_behind as a proxy for current task list; combine
+    # them into minimal task dicts with the fields compute_baseline_drift needs.
+    milestones = state.get("milestones", [])
+    tasks_behind = state.get("tasks_behind", [])
+
+    current_tasks: list[dict] = []
+    seen: set[str] = set()
+    for m in milestones:
+        tid = str(m.get("task_id", ""))
+        if tid and tid not in seen:
+            seen.add(tid)
+            current_tasks.append({
+                "task_id": tid,
+                "name": m.get("milestone_name", tid),
+                "cam": "",
+                "finish": m.get("p50_date"),
+                "baseline_finish": m.get("baseline_date"),
+                "percent_complete": 100 if m.get("prob_on_baseline", 0) >= 1.0 else 0,
+                "is_milestone": True,
+            })
+    for t in tasks_behind:
+        tid = str(t.get("task_id", ""))
+        if tid and tid not in seen:
+            seen.add(tid)
+            current_tasks.append({
+                "task_id": tid,
+                "name": t.get("task_name", tid),
+                "cam": t.get("cam_name", ""),
+                "finish": None,
+                "baseline_finish": None,
+                "percent_complete": t.get("percent_complete", 0),
+                "is_milestone": False,
+            })
+
+    result = compute_baseline_drift(current_tasks)
+    return JSONResponse(result)
+
+
 @app.get("/api/status", dependencies=[Depends(_require_api_key)])
 async def api_status():
     from agent.cycle_runner import CycleRunner

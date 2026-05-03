@@ -283,7 +283,8 @@ class CycleRunner:
 
         rg = ReportGenerator()
         report_path = rg.generate(
-            tasks_updated, cp_result, sra_results, cam_inputs, synthesis
+            tasks_updated, cp_result, sra_results, cam_inputs, synthesis,
+            cycle_id=cycle_id,
         )
 
         logger.info(
@@ -444,8 +445,9 @@ class CycleRunner:
             handler.apply_updates(all_cam_inputs)
             tasks_for_analysis = handler.parse()
             # Phase 6.5 — generate human-auditable diff (before vs after)
-            from agent.ims_diff import generate_diff
+            from agent.ims_diff import generate_diff, save_snapshot
             generate_diff(tasks, tasks_for_analysis, all_cam_inputs, cycle_id)
+            save_snapshot(cycle_id, tasks_for_analysis)  # 7.4.3 baseline drift
             CycleRunner._export_ims_snapshot(cycle_id, self._ims_path)
             logger.info("action=ims_updated cycle=%s", cycle_id)
 
@@ -481,7 +483,8 @@ class CycleRunner:
 
         rg = ReportGenerator()
         report_path = rg.generate(
-            tasks_for_analysis, cp_result, sra_results, all_cam_inputs, synthesis
+            tasks_for_analysis, cp_result, sra_results, all_cam_inputs, synthesis,
+            cycle_id=cycle_id,
         )
         status["report_path"] = report_path
         logger.info("action=report_generated cycle=%s path=%s", cycle_id, report_path)

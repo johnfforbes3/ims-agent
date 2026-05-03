@@ -16,6 +16,7 @@ engineer vernacular.
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,12 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
+
+# TD-009: inter-call delay to avoid hammering the Anthropic API.
+# Read at call time so that changes to .env take effect without restart.
+def _call_delay_s() -> float:
+    """Return the configured inter-call delay in seconds (default 200 ms)."""
+    return int(os.getenv("SIMULATOR_CALL_DELAY_MS", "200")) / 1000.0
 
 
 _SIMULATOR_SYSTEM_PROMPT = """You are roleplaying as a defense program engineer on a \
@@ -215,6 +222,11 @@ class CAMSimulator:
         )
         context = self._build_context()
         full_prompt = f"{context}\n\nAgent just said: {agent_utterance!r}\n\nRespond as {self._persona.cam_name}:"
+
+        # TD-009: throttle successive API calls to avoid rate limiting.
+        delay = _call_delay_s()
+        if delay > 0:
+            time.sleep(delay)
 
         response = self._llm.ask(full_prompt, context="")
         # Strip any prefixes like "Carol Smith: " that Claude might add

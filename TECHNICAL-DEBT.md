@@ -72,12 +72,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-009 — No rate limiting on CAM simulator API calls
-**File:** `agent/voice/cam_simulator.py` — `respond()`  
-**Severity:** Medium (cost risk)  
-**Description:** Each CAM turn calls the Anthropic API synchronously with no throttling. A 5-CAM × 10-task interview cycle with blockers/risk descriptions generates ~80-120 API calls. At scale (20+ CAMs), this could be expensive and could hit API rate limits mid-cycle.  
-**Why deferred:** Not a concern at Phase 2 demo scale.  
-**Suggested fix:** Add configurable inter-call sleep (`SIMULATOR_CALL_DELAY_MS` env var, default 200ms). For production, batch non-dependent tasks using async calls. Consider caching persona context as a system prompt with the Anthropic API's prompt caching feature to reduce token costs.
+### TD-009 — No rate limiting on CAM simulator API calls — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.4 sprint  
+**File:** `agent/voice/cam_simulator.py` — `respond()`, `_call_delay_s()`  
+**Description:** Added `_call_delay_s()` helper that reads `SIMULATOR_CALL_DELAY_MS` env var at call time (hot-reload, default 200 ms). `CAMSimulator.respond()` calls `_call_delay_s()` and applies `time.sleep(delay)` before each Anthropic API call when the delay is > 0. Setting `SIMULATOR_CALL_DELAY_MS=0` disables throttling entirely. Covered by `TestSimulatorRateLimit` (3 tests: sleep called with configured delay, zero delay skips sleep, hot-reload reads env at call time).
 
 ---
 
@@ -134,12 +132,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 4
 
-### TD-016 — Q&A context builder loads full state on every query; no caching
+### TD-016 — Q&A context builder loads full state on every query; no caching — **RESOLVED**
+**Resolved:** 2026-05-03 — Phase 7.4 sprint  
 **File:** `agent/qa/context_builder.py` — `load_state()`, `load_history()`  
-**Severity:** Low  
-**Description:** Every call to `build_context()` reads and JSON-parses `dashboard_state.json` and `cycle_history.json` from disk. At current scale (~50 KB combined) this is negligible. At production scale with many concurrent Slack/dashboard queries this adds unnecessary I/O per request.  
-**Why deferred:** No observable performance issue at MVP scale.  
-**Suggested fix:** Cache state in a module-level variable with a TTL (e.g., 30s). Invalidate cache when `_STATE_FILE` modification time changes. One decorator or `functools.lru_cache` variant with a time key.
+**Description:** Added module-level cache globals (`_STATE_CACHE`, `_STATE_CACHE_AT`, `_STATE_CACHE_MTIME`, `_HISTORY_CACHE`, etc.) with a `_CACHE_TTL_S = 30.0` second TTL. Both `load_state()` and `load_history()` check mtime equality against the cached value first — if the file was updated (different `st_mtime`), the cache is immediately invalidated regardless of TTL. A freshly completed cycle is always visible within one poll. Covered by `TestContextBuilderCache` (3 tests: second call within TTL returns cache, cache invalidated on mtime change, missing file returns {}).
 
 ---
 
