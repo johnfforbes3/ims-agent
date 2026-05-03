@@ -60,15 +60,24 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 _admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 
 
-async def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
+async def _require_api_key(
+    request: Request,
+    api_key: str = Security(_api_key_header),
+) -> None:
     """Dependency: enforce X-API-Key when DASHBOARD_API_KEY is configured."""
     if not _API_KEY:
         return  # auth disabled in local dev mode
     if api_key != _API_KEY:
+        logger.warning(
+            "action=audit_auth_failure route=%s ip=%s reason=invalid_api_key",
+            request.url.path,
+            request.client.host if request.client else "unknown",
+        )
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 async def _require_admin_key(
+    request: Request,
     x_admin_key: str = Security(_admin_key_header),
     x_api_key: str = Security(_api_key_header),
 ) -> None:
@@ -82,6 +91,11 @@ async def _require_admin_key(
     effective = _ADMIN_KEY if _ADMIN_KEY else _API_KEY
     if x_admin_key == effective or x_api_key == effective:
         return
+    logger.warning(
+        "action=audit_auth_failure route=%s ip=%s reason=invalid_admin_key",
+        request.url.path,
+        request.client.host if request.client else "unknown",
+    )
     raise HTTPException(status_code=401, detail="Admin key required")
 
 
@@ -102,6 +116,7 @@ def _check_rate_limit(ip: str) -> None:
         cutoff = now - 3600.0
         _rate_limiter[ip] = [t for t in _rate_limiter[ip] if t > cutoff]
         if len(_rate_limiter[ip]) >= _QA_RATE_LIMIT:
+            logger.warning("action=audit_rate_limit_exceeded ip=%s limit=%d", ip, _QA_RATE_LIMIT)
             raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
         _rate_limiter[ip].append(now)
 
@@ -255,7 +270,7 @@ async def api_status():
 
 
 @app.post("/api/trigger", dependencies=[Depends(_require_admin_key)])
-async def api_trigger():
+async def api_trigger(request: Request):
     """Admin: fire a cycle immediately in a background thread."""
     from agent.cycle_runner import CycleRunner
     if CycleRunner.is_active():
@@ -263,16 +278,24 @@ async def api_trigger():
     runner = CycleRunner(ims_path=_IMS_PATH, mode=os.getenv("CALL_TRANSPORT", "simulated"))
     thread = threading.Thread(target=runner.run, daemon=True, name="manual_cycle")
     thread.start()
-    logger.info("action=manual_trigger_api")
+    logger.info(
+        "action=audit_admin_trigger ip=%s transport=%s",
+        request.client.host if request.client else "unknown",
+        os.getenv("CALL_TRANSPORT", "simulated"),
+    )
     return JSONResponse({"status": "triggered", "message": "Cycle started in background"})
 
 
 @app.post("/api/admin/purge", dependencies=[Depends(_require_admin_key)])
-async def api_admin_purge():
+async def api_admin_purge(request: Request):
     """Admin: delete cycle status JSONs and IMS snapshots older than the retention window."""
     from agent.cycle_runner import CycleRunner
     deleted = CycleRunner.purge_old_data()
-    logger.info("action=manual_purge deleted=%s", deleted)
+    logger.info(
+        "action=audit_admin_purge ip=%s deleted=%s",
+        request.client.host if request.client else "unknown",
+        deleted,
+    )
     return JSONResponse({"status": "ok", "deleted": deleted})
 
 
@@ -293,7 +316,11 @@ class _ApprovalDecision(BaseModel):
 
 
 @app.post("/api/approvals/{cycle_id}/approve", dependencies=[Depends(_require_admin_key)])
-async def api_approve(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision()):
+async def api_approve(
+    cycle_id: str,
+    request: Request,
+    body: _ApprovalDecision = _ApprovalDecision(),
+):
     """
     Approve a held IMS write.
 
@@ -308,7 +335,11 @@ async def api_approve(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision
         raise HTTPException(status_code=409, detail=f"Cycle {cycle_id} is already {record['status']}")
 
     approver = body.approver or "dashboard"
-    logger.info("action=approval_api cycle=%s approver=%s", cycle_id, approver)
+    logger.info(
+        "action=audit_admin_approve cycle=%s approver=%s ip=%s",
+        cycle_id, approver,
+        request.client.host if request.client else "unknown",
+    )
 
     # Apply in a background thread so the HTTP response returns immediately.
     # apply_approved() owns the mark_approved() call — don't call it here.

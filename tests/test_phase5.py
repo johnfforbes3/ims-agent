@@ -728,3 +728,109 @@ class TestObservability:
         set_value("last_cycle_cam_response_rate", 0.75)
         text = prometheus_text()
         assert "ims_cam_response_rate 0.75" in text
+
+
+# ===========================================================================
+# Phase 6.2 — Security Hardening
+# ===========================================================================
+
+class TestSecretsHelper:
+    """6.2 — get_secret() vault-ready pattern."""
+
+    def test_reads_from_env(self, monkeypatch):
+        monkeypatch.setenv("IMS_TEST_SECRET", "my_value")
+        from agent.secrets import get_secret
+        assert get_secret("IMS_TEST_SECRET") == "my_value"
+
+    def test_returns_default_when_not_set(self, monkeypatch):
+        monkeypatch.delenv("IMS_TEST_SECRET_MISSING", raising=False)
+        from agent.secrets import get_secret
+        assert get_secret("IMS_TEST_SECRET_MISSING", default="fallback") == "fallback"
+
+    def test_returns_empty_string_when_not_set_and_no_default(self, monkeypatch):
+        monkeypatch.delenv("IMS_TEST_SECRET_MISSING", raising=False)
+        from agent.secrets import get_secret
+        assert get_secret("IMS_TEST_SECRET_MISSING") == ""
+
+    def test_reads_at_call_time_not_import_time(self, monkeypatch):
+        """Rotation: value should reflect env state at call time."""
+        import agent.secrets as sec
+        monkeypatch.setenv("IMS_ROTATION_TEST", "v1")
+        assert sec.get_secret("IMS_ROTATION_TEST") == "v1"
+        monkeypatch.setenv("IMS_ROTATION_TEST", "v2")
+        assert sec.get_secret("IMS_ROTATION_TEST") == "v2"
+
+
+class TestAuditLogging:
+    """6.2 — admin endpoints emit structured audit log entries."""
+
+    def test_admin_trigger_emits_audit_log(self, monkeypatch, caplog):
+        import logging
+        import agent.dashboard.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "")
+        monkeypatch.setattr(srv, "_ADMIN_KEY", "")
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app, raise_server_exceptions=False)
+
+        with patch("agent.cycle_runner.CycleRunner.is_active", return_value=False), \
+             patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start = MagicMock()
+            with caplog.at_level(logging.INFO, logger="agent.dashboard.server"):
+                r = client.post("/api/trigger")
+
+        assert r.status_code == 200
+        assert any("audit_admin_trigger" in record.message for record in caplog.records)
+
+    def test_admin_purge_emits_audit_log(self, monkeypatch, caplog):
+        import logging
+        import agent.dashboard.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "")
+        monkeypatch.setattr(srv, "_ADMIN_KEY", "")
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app, raise_server_exceptions=False)
+
+        with patch("agent.cycle_runner.CycleRunner.purge_old_data",
+                   return_value={"cycle_status": 0, "snapshots": 0}):
+            with caplog.at_level(logging.INFO, logger="agent.dashboard.server"):
+                r = client.post("/api/admin/purge")
+
+        assert r.status_code == 200
+        assert any("audit_admin_purge" in record.message for record in caplog.records)
+
+    def test_auth_failure_emits_audit_warning(self, monkeypatch, caplog):
+        import logging
+        import agent.dashboard.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "valid-key")
+        monkeypatch.setattr(srv, "_ADMIN_KEY", "")
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app, raise_server_exceptions=False)
+
+        with caplog.at_level(logging.WARNING, logger="agent.dashboard.server"):
+            r = client.get("/api/state", headers={"X-API-Key": "wrong-key"})
+
+        assert r.status_code == 401
+        assert any("audit_auth_failure" in record.message for record in caplog.records)
+
+    def test_rate_limit_exceeded_emits_audit_warning(self, monkeypatch, caplog):
+        import logging
+        import agent.dashboard.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "")
+        monkeypatch.setattr(srv, "_ADMIN_KEY", "")
+        monkeypatch.setattr(srv, "_QA_RATE_LIMIT", 1)
+        srv._rate_limiter.clear()
+        from fastapi.testclient import TestClient
+        client = TestClient(srv.app, raise_server_exceptions=False)
+
+        state = {
+            "cycle_id": "c1", "schedule_health": "GREEN",
+            "critical_path_task_ids": [], "milestones": [],
+            "top_risks": "risk1", "recommended_actions": "",
+            "narrative": "", "tasks_behind": [], "cam_response_status": {},
+        }
+        with patch("agent.qa.context_builder.load_state", return_value=state):
+            client.post("/api/ask", json={"question": "What is the schedule health?"})
+            with caplog.at_level(logging.WARNING, logger="agent.dashboard.server"):
+                r = client.post("/api/ask", json={"question": "What is the schedule health?"})
+
+        assert r.status_code == 429
+        assert any("audit_rate_limit_exceeded" in record.message for record in caplog.records)
