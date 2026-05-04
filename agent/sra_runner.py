@@ -26,15 +26,25 @@ _MEDIUM_RISK_THRESHOLD = float(os.getenv("SRA_MEDIUM_RISK_THRESHOLD", "0.75"))
 class SRARunner:
     """Runs Monte Carlo SRA on a parsed task list."""
 
-    def __init__(self, tasks: list[dict[str, Any]], seed: int | None = None) -> None:
+    def __init__(
+        self,
+        tasks: list[dict[str, Any]],
+        seed: int | None = None,
+        eac_dates: dict[str, str] | None = None,
+    ) -> None:
         """
         Args:
             tasks: Parsed task list from IMSFileHandler.parse().
             seed: Optional random seed for reproducible results.
+            eac_dates: Optional mapping of task_id → ISO date string "YYYY-MM-DD".
+                       When present for a task, the EAC date overrides the linear
+                       remaining-duration estimate and becomes the centre (P50) of
+                       the triangular distribution for that task's slip.
         """
         self._tasks = tasks
         self._task_map = {t["task_id"]: t for t in tasks}
         self._seed = seed
+        self._eac_dates: dict[str, str] = eac_dates or {}
 
     def run(self) -> list[dict[str, Any]]:
         """
@@ -104,7 +114,21 @@ class SRARunner:
             return 0.0
         visited.add(task_id)
 
-        remaining = task["duration_days"] * (1 - task["percent_complete"] / 100.0)
+        # Determine remaining duration.
+        # If a CAM-provided EAC date exists, use (eac_date - today) as the P50
+        # centre of the distribution instead of the linear (1-pct) * duration estimate.
+        eac_date_str = self._eac_dates.get(task_id)
+        if eac_date_str:
+            try:
+                eac_dt = datetime.strptime(eac_date_str, "%Y-%m-%d")
+                remaining = max(0.0, (eac_dt - datetime.now()).days)
+                logger.debug("action=sra_eac_override task=%s eac=%s remaining_days=%.1f",
+                             task_id, eac_date_str, remaining)
+            except ValueError:
+                remaining = task["duration_days"] * (1 - task["percent_complete"] / 100.0)
+        else:
+            remaining = task["duration_days"] * (1 - task["percent_complete"] / 100.0)
+
         if remaining <= 0:
             slip = 0.0
         else:

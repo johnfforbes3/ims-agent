@@ -272,7 +272,12 @@ class CycleRunner:
         mark_approved(cycle_id, approver=approver)
 
         cp_result = calculate_critical_path(tasks_updated)
-        sra_results = SRARunner(tasks_updated, seed=None).run()
+        eac_dates_approval = {
+            str(inp["task_id"]): inp["eac_date"]
+            for inp in cam_inputs
+            if inp.get("eac_date")
+        }
+        sra_results = SRARunner(tasks_updated, seed=None, eac_dates=eac_dates_approval).run()
         health, rationale = compute_health(sra_results, cp_result, tasks_updated)
 
         llm = LLMInterface()
@@ -461,8 +466,15 @@ class CycleRunner:
             cycle_id, len(cp_result.get("critical_path", [])),
         )
 
-        sra_results = SRARunner(tasks_for_analysis, seed=None).run()
-        logger.info("action=sra_done cycle=%s milestones=%d", cycle_id, len(sra_results))
+        # Extract CAM-provided EAC dates to anchor the SRA distribution centres
+        eac_dates = {
+            str(inp["task_id"]): inp["eac_date"]
+            for inp in all_cam_inputs
+            if inp.get("eac_date")
+        }
+        sra_results = SRARunner(tasks_for_analysis, seed=None, eac_dates=eac_dates).run()
+        logger.info("action=sra_done cycle=%s milestones=%d eac_overrides=%d",
+                    cycle_id, len(sra_results), len(eac_dates))
 
         # Deterministic health — no LLM flip-flopping
         health, health_rationale = compute_health(sra_results, cp_result, tasks_for_analysis)

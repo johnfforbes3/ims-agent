@@ -156,7 +156,9 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 50})
         agent.start()
         agent.process("yes")           # greeting
-        turn = agent.process("50")     # percent — on track
+        agent.process("50")            # percent — on track → AWAITING_EAC_DATE
+        assert agent.state == InterviewState.AWAITING_EAC_DATE
+        turn = agent.process("still on track")  # EAC date → on track, no blocker
         # Should jump straight to confirm/close, not ask for blocker
         assert agent.state in (
             InterviewState.CONFIRM, InterviewState.COMPLETE, InterviewState.TASK_INTRO
@@ -167,8 +169,9 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        turn = agent.process("30")     # behind — should ask for blocker
-        assert agent.state == InterviewState.AWAITING_BLOCKER
+        agent.process("30")            # behind → AWAITING_EAC_DATE
+        assert agent.state == InterviewState.AWAITING_EAC_DATE
+        turn = agent.process("end of next month")  # EAC date → AWAITING_BLOCKER
         assert agent.state == InterviewState.AWAITING_BLOCKER
 
     def test_blocker_asks_risk_flag(self):
@@ -176,7 +179,8 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")            # pct — behind
+        agent.process("30")            # pct — behind → AWAITING_EAC_DATE
+        agent.process("end of month")  # EAC date → AWAITING_BLOCKER
         turn = agent.process("waiting on vendor parts")   # blocker
         assert agent.state == InterviewState.AWAITING_RISK_FLAG
 
@@ -185,7 +189,8 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")            # pct → AWAITING_EAC_DATE
+        agent.process("mid next month") # EAC date → AWAITING_BLOCKER
         agent.process("vendor delay")
         turn = agent.process("yes")    # risk flag = yes
         assert agent.state == InterviewState.AWAITING_RISK_DESC
@@ -195,7 +200,8 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                       # pct → AWAITING_EAC_DATE
+        agent.process("end of next month")        # EAC date → AWAITING_BLOCKER
         agent.process("waiting on vendor")
         agent.process("yes")           # risk flag
         agent.process("vendor lead time extended 3 weeks")  # risk desc
@@ -207,7 +213,8 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                 # pct → AWAITING_EAC_DATE
+        agent.process("mid june")           # EAC date → AWAITING_BLOCKER
         agent.process("license contention")
         agent.process("no")            # no risk flag
         if agent.state == InterviewState.CONFIRM:
@@ -226,7 +233,8 @@ class TestStateMachineHappyPath:
         agent = InterviewAgent("Bob", [task], expected_pcts={"1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                 # pct → AWAITING_EAC_DATE
+        agent.process("end of next month")  # EAC date → AWAITING_BLOCKER
         agent.process("waiting on parts")
         agent.process("yes")           # risk
         agent.process("Supplier lead time extended")
@@ -281,7 +289,8 @@ class TestEdgeCases:
         agent.start()
         agent.process("yes")
         for i in range(1, 4):
-            agent.process("50")        # all on track
+            agent.process("50")               # pct → AWAITING_EAC_DATE (1-99%)
+            agent.process("still on track")   # EAC date → finalise, next task
         # All three should be captured
         assert len(agent.results) == 3
 
@@ -301,7 +310,8 @@ class TestEdgeCases:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")                  # pct → AWAITING_EAC_DATE
+        agent.process("still on track")      # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
         agent.process("yes that's right")
         assert agent.state == InterviewState.COMPLETE
@@ -313,7 +323,8 @@ class TestEdgeCases:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")              # pct → AWAITING_EAC_DATE
+        agent.process("on track")        # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
         agent.process("no")          # flat denial #1 → re-ask
         assert agent.state == InterviewState.CONFIRM
@@ -330,7 +341,8 @@ class TestEdgeCases:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")              # pct → AWAITING_EAC_DATE
+        agent.process("on track")        # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
         agent.process("No, T1 is 75%, not 50%")
         # LLM may succeed (→ CONFIRM for re-confirmation) or fail (→ COMPLETE gracefully)
@@ -342,7 +354,8 @@ class TestEdgeCases:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")              # pct → AWAITING_EAC_DATE
+        agent.process("on track")        # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
         agent.process("no problem, looks good")
         assert agent.state == InterviewState.COMPLETE
@@ -380,17 +393,18 @@ class TestConversationalContext:
         task = _make_task("T1", "Behind Task", pct=30)
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 80})
         agent.start()
-        agent.process("yes")           # greeting response
-        agent.process("30")            # pct — behind schedule
-        agent.process("vendor delay")  # blocker
-        agent.process("yes")           # risk flag
+        agent.process("yes")              # greeting response
+        agent.process("30")              # pct — behind → AWAITING_EAC_DATE
+        agent.process("end of next month")  # EAC date → AWAITING_BLOCKER
+        agent.process("vendor delay")    # blocker
+        agent.process("yes")             # risk flag
         agent.process("need 3 more weeks")  # risk description
 
         transcript = agent.transcript
         agents = [t for t in transcript if t.speaker == "agent"]
         cams = [t for t in transcript if t.speaker == "cam"]
-        assert len(cams) == 5, f"Expected 5 CAM turns, got {len(cams)}"
-        assert len(agents) >= 4, f"Expected ≥4 agent turns, got {len(agents)}"
+        assert len(cams) == 6, f"Expected 6 CAM turns, got {len(cams)}"
+        assert len(agents) >= 5, f"Expected ≥5 agent turns, got {len(agents)}"
 
     def test_transcript_records_cam_corrections(self):
         """CAM corrections in the CONFIRM state must appear in the transcript."""
@@ -398,7 +412,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")              # pct → AWAITING_EAC_DATE
+        agent.process("on track")        # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
 
         pre_count = len(agent.transcript)
@@ -416,7 +431,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")              # pct → AWAITING_EAC_DATE
+        agent.process("end of june")     # EAC date → AWAITING_BLOCKER
         agent.process("vendor delay")
         agent.process("no")   # no risk flag — will jump to confirm
 
@@ -432,7 +448,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                    # pct → AWAITING_EAC_DATE
+        agent.process("end of next month")     # EAC date → AWAITING_BLOCKER
         agent.process("waiting on GPU allocation")
         agent.process("no")   # no risk flag → confirm
         assert agent.state == InterviewState.CONFIRM
@@ -453,7 +470,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                    # pct → AWAITING_EAC_DATE
+        agent.process("end of next month")     # EAC date → AWAITING_BLOCKER
         agent.process("waiting on GPU allocation")
         agent.process("no")   # no risk flag
         assert agent.state == InterviewState.CONFIRM
@@ -473,7 +491,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
         agent.start()
         agent.process("yes")
-        agent.process("30")
+        agent.process("30")                    # pct → AWAITING_EAC_DATE
+        agent.process("end of next month")     # EAC date → AWAITING_BLOCKER
         agent.process("waiting on GPU allocation")
         agent.process("no")
         assert agent.state == InterviewState.CONFIRM
@@ -562,7 +581,8 @@ class TestConversationalContext:
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()
         agent.process("yes")
-        agent.process("50")
+        agent.process("50")              # pct → AWAITING_EAC_DATE
+        agent.process("on track")        # EAC date → CONFIRM
         assert agent.state == InterviewState.CONFIRM
 
         agent.process("no")   # flat denial #1 → re-ask

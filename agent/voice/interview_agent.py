@@ -58,6 +58,7 @@ class InterviewState(Enum):
     GREETING = "greeting"
     TASK_INTRO = "task_intro"
     AWAITING_PCT = "awaiting_pct"
+    AWAITING_EAC_DATE = "awaiting_eac_date"
     AWAITING_BLOCKER = "awaiting_blocker"
     AWAITING_RISK_FLAG = "awaiting_risk_flag"
     AWAITING_RISK_DESC = "awaiting_risk_desc"
@@ -79,6 +80,8 @@ class TaskResult:
     risk_description: str
     status: str                  # "captured" | "no_response" | "skipped"
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    eac_date: str | None = None  # ISO "YYYY-MM-DD" projected completion, or None
+    eac_uncertain: bool = False  # True when CAM said "I don't know" → use linear SRA
 
     def to_cam_input_dict(self) -> dict[str, Any]:
         """Convert to the Phase 1 CAM input dict format."""
@@ -90,6 +93,8 @@ class TaskResult:
             "risk_flag": self.risk_flag,
             "risk_description": self.risk_description,
             "timestamp": self.timestamp,
+            "eac_date": self.eac_date,
+            "eac_uncertain": self.eac_uncertain,
         }
 
 
@@ -157,6 +162,8 @@ class InterviewAgent:
         self._current_blocker: str = ""
         self._current_risk_flag: bool = False
         self._current_risk_desc: str = ""
+        self._current_eac_date: str | None = None
+        self._current_eac_uncertain: bool = False
         # Track milestones already asked about — stores the risk answer so behind-schedule
         # tasks reuse the same YES/NO rather than re-asking or auto-flagging True
         self._flagged_milestones: dict[str, bool] = {}
@@ -216,14 +223,15 @@ class InterviewAgent:
         normalised = utterance.strip().lower()
 
         dispatch = {
-            InterviewState.GREETING:           self._handle_greeting,
-            InterviewState.TASK_INTRO:         self._handle_task_intro,
-            InterviewState.AWAITING_PCT:       self._handle_pct,
-            InterviewState.AWAITING_BLOCKER:   self._handle_blocker,
-            InterviewState.AWAITING_RISK_FLAG: self._handle_risk_flag,
-            InterviewState.AWAITING_RISK_DESC: self._handle_risk_desc,
-            InterviewState.CONFIRM:            self._handle_confirm,
-            InterviewState.CLOSING:            self._handle_closing,
+            InterviewState.GREETING:            self._handle_greeting,
+            InterviewState.TASK_INTRO:          self._handle_task_intro,
+            InterviewState.AWAITING_PCT:        self._handle_pct,
+            InterviewState.AWAITING_EAC_DATE:   self._handle_eac_date,
+            InterviewState.AWAITING_BLOCKER:    self._handle_blocker,
+            InterviewState.AWAITING_RISK_FLAG:  self._handle_risk_flag,
+            InterviewState.AWAITING_RISK_DESC:  self._handle_risk_desc,
+            InterviewState.CONFIRM:             self._handle_confirm,
+            InterviewState.CLOSING:             self._handle_closing,
         }
         handler = dispatch.get(self._state)
         if handler is None:
@@ -297,15 +305,19 @@ class InterviewAgent:
             logger.info("action=blocker_auto_captured cam=%s task=%s",
                         self._cam_name, task["task_id"])
 
-        if pct < expected - 10:  # Meaningfully behind schedule
+        if classification.get("cam_question"):
+            self._cam_question_note = _cam_question_ack()
+
+        # For in-progress tasks (1–99%) ask for a projected completion date before
+        # continuing to the blocker / risk questions.  0% (not started) and 100%
+        # (complete) skip this step — there is no meaningful forecast to collect.
+        if 1 <= pct <= 99:
+            return self._ask_eac_date()
+
+        # 0% — not started, fall straight through to blocker / risk path below
+        if pct < expected - 10:
             milestone_hint = self._nearest_milestone_name()
             if self._current_blocker:
-                # Blocker already captured — go straight to risk question, or skip if the
-                # milestone is already confirmed AT RISK (True) or has been denied ≥ 2 times.
-                # When the milestone is already at risk, skip the question but set this task's
-                # risk_flag=False — the milestone risk is already captured; we don't want to
-                # auto-flag every subsequent blocked task as an independent risk (that creates
-                # a flood of True flags that the CAM has to correct in CONFIRM).
                 if self._flagged_milestones.get(milestone_hint) is True:
                     self._current_risk_flag = False
                     return self._finalise_task_and_advance(pct)
@@ -316,26 +328,15 @@ class InterviewAgent:
                     f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
                     InterviewState.AWAITING_RISK_FLAG,
                 )
-            if classification.get("cam_question"):
-                self._cam_question_note = _cam_question_ack()
             return self._agent_turn(
                 f"Got it, {pct}%. What's the main thing holding that up?",
                 InterviewState.AWAITING_BLOCKER,
             )
 
-        # On track percentage-wise — but if a blocker was mentioned, still ask about risk.
-        # A task can be "on schedule" (e.g. 0% with 0% expected) yet have a blocker that
-        # threatens future milestones (e.g. vendor delay, dependency not started).
-        # We apply _flagged_milestones True-dedup and milestone_no_count threshold here
-        # to avoid asking the same question many times in the same session.
+        # On track (and pct is 0 or 100)
         if self._current_blocker:
             milestone_hint = self._nearest_milestone_name()
-            if classification.get("cam_question"):
-                self._cam_question_note = _cam_question_ack()
             if self._flagged_milestones.get(milestone_hint) is True:
-                # Milestone already at risk — skip the question, default this task's
-                # risk_flag to False (milestone risk is already captured; no need to
-                # auto-flag every blocked task as an independent schedule risk).
                 self._current_risk_flag = False
                 return self._finalise_task_and_advance(self._current_pct)
             if self._milestone_no_count.get(milestone_hint, 0) >= 2:
@@ -346,7 +347,120 @@ class InterviewAgent:
                 InterviewState.AWAITING_RISK_FLAG,
             )
 
-        # On track and no blocker — finalise without further follow-up
+        # On track, no blocker (pct 100 falls here most often) — finalise
+        return self._finalise_task_and_advance(pct)
+
+    def _ask_eac_date(self) -> AgentTurn:
+        """Ask the CAM for their projected completion date for the current task."""
+        import random
+        task = self._current_task
+        pct = self._current_pct or 0
+        expected = self._get_expected_pct()
+        planned_finish = task.get("finish")
+        spoken_name = _spoken_task_name(task["name"])
+
+        if planned_finish:
+            if hasattr(planned_finish, "strftime"):
+                # Cross-platform: strip leading zeros manually
+                planned_str = f"{planned_finish.month}/{planned_finish.day}"
+            else:
+                planned_str = str(planned_finish)[:10]
+        else:
+            planned_str = None
+
+        behind = pct < expected - 10
+
+        if behind:
+            if planned_str:
+                options = [
+                    f"Got it, {pct}%. The plan had that done by {planned_str} — when do you think you'll wrap it up?",
+                    f"Got it. Planned finish was {planned_str} — what's your forecast now?",
+                    f"Got it, {pct}%. Given where you are, when do you see {spoken_name} finishing?",
+                ]
+            else:
+                options = [
+                    f"Got it, {pct}%. When do you think you'll have that wrapped up?",
+                    f"Got it. What's your best estimate for finishing {spoken_name}?",
+                    f"Got it, {pct}%. When do you see that one completing?",
+                ]
+        else:
+            if planned_str:
+                options = [
+                    f"Got it, {pct}%. Still on track to finish by {planned_str}?",
+                    f"Got it. The plan has that done by {planned_str} — still looking good?",
+                    f"Good — still expecting to wrap {spoken_name} up by {planned_str}?",
+                ]
+            else:
+                options = [
+                    f"Got it, {pct}%. Still on track to hit your planned finish?",
+                    f"Got it. Any change to your expected finish date for that one?",
+                    f"Good — still looking on track for your planned completion?",
+                ]
+
+        text = random.choice(options)
+        return self._agent_turn(text, InterviewState.AWAITING_EAC_DATE)
+
+    def _handle_eac_date(self, norm: str, raw: str) -> AgentTurn:
+        """Handle CAM's response to the EAC date question, then continue to blocker/risk."""
+        task = self._current_task
+        planned_finish = task.get("finish")
+        planned_str = (
+            planned_finish.strftime("%Y-%m-%d")
+            if planned_finish and hasattr(planned_finish, "strftime")
+            else None
+        )
+
+        eac_date, eac_uncertain = _classify_eac_date(
+            response=raw,
+            planned_finish_iso=planned_str,
+            conversation_history=self._transcript,
+        )
+        self._current_eac_date = eac_date
+        self._current_eac_uncertain = eac_uncertain
+
+        if eac_date:
+            logger.info("action=eac_date_captured cam=%s task=%s eac=%s",
+                        self._cam_name, task["task_id"], eac_date)
+        elif eac_uncertain:
+            logger.info("action=eac_date_uncertain cam=%s task=%s",
+                        self._cam_name, task["task_id"])
+
+        # Now run the blocker / risk decision that _handle_pct() deferred to here
+        pct = self._current_pct or 0
+        expected = self._get_expected_pct()
+        milestone_hint = self._nearest_milestone_name()
+
+        if pct < expected - 10:  # Behind schedule
+            if self._current_blocker:
+                if self._flagged_milestones.get(milestone_hint) is True:
+                    self._current_risk_flag = False
+                    return self._finalise_task_and_advance(pct)
+                if self._milestone_no_count.get(milestone_hint, 0) >= 2:
+                    self._current_risk_flag = False
+                    return self._finalise_task_and_advance(pct)
+                return self._agent_turn(
+                    f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
+                    InterviewState.AWAITING_RISK_FLAG,
+                )
+            return self._agent_turn(
+                "What's the main thing holding that up?",
+                InterviewState.AWAITING_BLOCKER,
+            )
+
+        # On track percentage-wise
+        if self._current_blocker:
+            if self._flagged_milestones.get(milestone_hint) is True:
+                self._current_risk_flag = False
+                return self._finalise_task_and_advance(pct)
+            if self._milestone_no_count.get(milestone_hint, 0) >= 2:
+                self._current_risk_flag = False
+                return self._finalise_task_and_advance(pct)
+            return self._agent_turn(
+                f"Got it — noted that blocker. Could that put {milestone_hint} at risk?",
+                InterviewState.AWAITING_RISK_FLAG,
+            )
+
+        # On track, no blocker — finalise
         return self._finalise_task_and_advance(pct)
 
     def _handle_blocker(self, norm: str, raw: str) -> AgentTurn:
@@ -586,6 +700,10 @@ class InterviewAgent:
                             res.blocker = new_value
                             logger.info("action=correction_applied task=%s field=blocker updated", task_id)
                             applied.append({"task_id": task_id, "field": field})
+                        elif field == "eac_date" and isinstance(new_value, str):
+                            res.eac_date = new_value
+                            logger.info("action=correction_applied task=%s field=eac_date updated", task_id)
+                            applied.append({"task_id": task_id, "field": field})
                         break
 
             if applied:
@@ -712,6 +830,8 @@ class InterviewAgent:
             risk_flag=self._current_risk_flag,
             risk_description=self._current_risk_desc,
             status="captured",
+            eac_date=self._current_eac_date,
+            eac_uncertain=self._current_eac_uncertain,
         )
         self._results.append(result)
         logger.info("action=task_captured cam=%s task_id=%s pct=%s risk=%s",
@@ -840,6 +960,8 @@ class InterviewAgent:
         self._current_blocker = ""
         self._current_risk_flag = False
         self._current_risk_desc = ""
+        self._current_eac_date = None
+        self._current_eac_uncertain = False
         self._retry_count = 0
 
     def _get_expected_pct(self) -> int:
@@ -1114,6 +1236,10 @@ def _format_task_results(results: list[TaskResult], tasks: list[dict]) -> str:
         line = f"  {r.task_id} ({name}): {r.percent_complete}% complete, {risk_str}"
         if r.blocker:
             line += f", blocker: {r.blocker[:80]}"
+        if r.eac_date:
+            line += f", forecast: {r.eac_date}"
+        elif r.eac_uncertain:
+            line += ", forecast: uncertain"
         lines.append(line)
     return "\n".join(lines)
 
@@ -1198,8 +1324,8 @@ Return ONLY a JSON object:
   "corrections": [
     {{
       "task_id": "<task ID exactly as it appears in the conversation, e.g. AI-07, SE-03, NET-11>",
-      "field": "percent_complete" | "risk_flag" | "risk_description" | "blocker",
-      "new_value": <corrected value — integer for percent_complete, boolean for risk_flag, string for others>,
+      "field": "percent_complete" | "risk_flag" | "risk_description" | "blocker" | "eac_date",
+      "new_value": <corrected value — integer for percent_complete, boolean for risk_flag, ISO date string for eac_date, string for others>,
       "note": "<one sentence description of what changed>"
     }}
   ]
@@ -1219,6 +1345,80 @@ Rules:
 - Use the exact task ID format from the conversation (e.g. "AI-07", "NET-11" — not "AI7", "ai-07", or bare numbers)
 - Task IDs in this program use the format: 2-4 letters, hyphen, 2-3 digits (e.g. AI-07, NET-11, SE-03, DOC-08)
 - Do not invent corrections — only extract what the CAM explicitly stated"""
+
+
+_EAC_DATE_PROMPT = """\
+You are the NLU layer for ATLAS, an automated program schedule interview agent.
+The agent just asked a CAM (Control Account Manager) when they expect to finish a task.
+Extract the projected completion date from their response and return a JSON object.
+
+Today's date: {today}
+Planned (baseline) finish date for this task: {planned_finish}
+
+RECENT CONVERSATION:
+{history}
+
+CAM'S RESPONSE:
+{response}
+
+Return ONLY a JSON object:
+{{
+  "eac_date": "<ISO date YYYY-MM-DD, or null>",
+  "eac_uncertain": <true if the CAM cannot give any estimate>
+}}
+
+Rules:
+- If the CAM gives an explicit date (e.g. "May 15th", "end of June", "around the 20th"),
+  convert it to ISO format YYYY-MM-DD relative to today ({today}).
+- If the CAM says "end of [month]", use the last calendar day of that month.
+- If the CAM says "next week" or "in two weeks", count from today.
+- If the CAM says they are on track, on schedule, or confirms the planned date is still good,
+  return the planned finish as the eac_date: "{planned_finish}".
+- If the CAM says they don't know, aren't sure, can't say, or need to check, set
+  eac_uncertain=true and eac_date=null.
+- If the planned finish is null/unknown and the CAM says "on track", return eac_date=null, eac_uncertain=false.
+- Never invent a date the CAM did not describe — if truly unclear, set eac_uncertain=true."""
+
+
+def _classify_eac_date(
+    response: str,
+    planned_finish_iso: str | None,
+    conversation_history: list | None = None,
+) -> tuple[str | None, bool]:
+    """Use an LLM to extract a projected completion date from a CAM utterance.
+
+    Returns:
+        (eac_date, eac_uncertain)
+        eac_date:     ISO string "YYYY-MM-DD" or None
+        eac_uncertain: True when the CAM said they don't know
+    """
+    try:
+        from agent.llm_interface import LLMInterface
+        llm = LLMInterface()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        history_str = _format_transcript_for_llm(conversation_history or [], max_turns=8)
+        prompt = _EAC_DATE_PROMPT.format(
+            today=today_str,
+            planned_finish=planned_finish_iso or "unknown",
+            history=history_str,
+            response=response,
+        )
+        raw = llm.ask(prompt, context="").strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw.strip())
+        eac_date = result.get("eac_date") or None
+        eac_uncertain = bool(result.get("eac_uncertain", False))
+        # Validate ISO format if a date was returned
+        if eac_date:
+            datetime.strptime(eac_date, "%Y-%m-%d")
+        logger.debug("action=eac_date_classify eac_date=%s uncertain=%s", eac_date, eac_uncertain)
+        return eac_date, eac_uncertain
+    except Exception as exc:
+        logger.warning("action=eac_date_classify_failed error=%s — defaulting uncertain", exc)
+        # Safe fallback: treat as uncertain so SRA uses linear estimate
+        return None, True
 
 
 def _classify_cam_response(

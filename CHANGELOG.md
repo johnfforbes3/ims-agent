@@ -4,6 +4,45 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 7.3 (partial) — EAC Date Interview Collection (2026-05-03)
+
+**Summary:** CAM interviews now collect projected completion dates (EAC dates) for all in-progress tasks (1–99% complete). EAC dates anchor the SRA Monte Carlo distribution and surface in the report as CAM Forecast + Δ Days columns. 404 tests passing (+29 new).
+
+### Added
+
+- **`InterviewState.AWAITING_EAC_DATE`** — New FSM state inserted between `AWAITING_PCT` and `AWAITING_BLOCKER`/`CONFIRM` for tasks at 1–99% completion.
+- **`InterviewAgent._ask_eac_date()`** — Context-sensitive question phrasing: on-track tasks get a lightweight confirmation ("Still on track for 5/29?"); behind tasks get an open-ended forecast question ("When do you think you'll wrap that up?").
+- **`InterviewAgent._handle_eac_date()`** — Classifies CAM's EAC response via LLM, sets `_current_eac_date` / `_current_eac_uncertain`, then routes to blocker/risk decision logic.
+- **`_EAC_DATE_PROMPT`** — LLM prompt handling absolute dates, relative dates ("end of next week"), "on schedule" → baseline finish, and uncertain responses.
+- **`_classify_eac_date()`** — LLM-backed date extractor returning `(eac_date: str | None, eac_uncertain: bool)`. Fallback returns `(None, True)` on LLM failure.
+- **`TaskResult.eac_date`** — Optional ISO date string field (default `None`).
+- **`TaskResult.eac_uncertain`** — Bool flag (default `False`) set when CAM cannot estimate.
+- **`SRARunner(eac_dates=...)`** — New parameter mapping `task_id → ISO date`. When present, uses `(eac_date - today).days` as remaining duration instead of `(1 - pct) * duration_days`. EAC date becomes the P50 centre of the triangular distribution.
+- **Report "CAM Forecast" and "Δ Days" columns** — Tasks Behind Schedule table extended with CAM-provided forecast date and slippage vs. baseline (e.g. `+14d`, `0d`, `uncertain`, `—`).
+- **`tests/test_eac_date.py`** — 29 new tests across 5 suites: `TestEACDateStateMachine`, `TestTaskResultEACFields`, `TestEACDateCapturedInResults`, `TestClassifyEACDate`, `TestSRARunnerEACDates`, `TestReportGeneratorEACColumns`.
+
+### Changed
+
+- **`InterviewAgent._handle_pct()`** — For 1–99% tasks, branches to `_ask_eac_date()` after capturing pct; blocker/risk decision logic moved into `_handle_eac_date()`.
+- **`InterviewAgent._reset_task_state()`** — Clears `_current_eac_date` and `_current_eac_uncertain` on each task transition.
+- **`InterviewAgent._finalise_task_and_advance()`** — Passes `eac_date` and `eac_uncertain` to `TaskResult`.
+- **`InterviewAgent._flag_no_response_and_advance()`** — TaskResult created with `eac_date=None, eac_uncertain=False` for no-response tasks.
+- **`TaskResult.to_cam_input_dict()`** — Includes `eac_date` and `eac_uncertain` in output dict.
+- **`_format_task_results()`** — Correction context summary includes EAC date/uncertain status for LLM correction prompts.
+- **`_extract_and_apply_correction()`** — Handles `field == "eac_date"` corrections from CAM.
+- **`_CONFIRM_CORRECTION_PROMPT`** — Lists `eac_date` as a correctable field.
+- **`cycle_runner._run_inner()`** — Extracts `eac_dates` dict from `all_cam_inputs` and passes to `SRARunner`.
+- **`cycle_runner.apply_approved()`** — Same EAC date extraction for approval re-analysis path.
+- **57 existing interview agent tests** — Updated to insert EAC date response step where 1–99% tasks are exercised.
+
+### Metrics
+
+- Total tests: **404** (all passing)
+- New tests: **29** in `tests/test_eac_date.py`
+- Phases complete: 7.1, 7.2, 7.4; 7.3 EAC date done (infra items awaiting deployment platform)
+
+---
+
 ## Phase 7.2 — Security & Compliance Hardening (2026-05-03)
 
 **Summary:** CMMC Level 2 gap remediation — 6 HIGH-priority controls resolved. JWT Bearer auth replaces static-key-only model. 375 tests passing.

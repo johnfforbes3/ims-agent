@@ -174,8 +174,8 @@ class ReportGenerator:
         ]
         blocker_details: list[tuple[str, str]] = []  # (task_name, full_blocker) for appendix
         if behind:
-            sections.append("| CAM | Task | Actual % | Expected % | Blocker |")
-            sections.append("|---|---|---|---|---|")
+            sections.append("| CAM | Task | Actual % | Expected % | CAM Forecast | Δ Days | Blocker |")
+            sections.append("|---|---|---|---|---|---|---|")
             for t in sorted(behind, key=lambda x: _expected_pct(x) - x["percent_complete"], reverse=True):
                 cam_input = cam_map.get(str(t["task_id"]), {})
                 blocker = cam_input.get("blocker", "") or ""
@@ -186,14 +186,40 @@ class ReportGenerator:
                 # percent_complete comes directly from the interview capture.
                 cam_pct = cam_input.get("percent_complete")
                 actual_pct = cam_pct if cam_pct is not None else t["percent_complete"]
-                # TD-007: Truncate to first sentence or 120 chars in table cell (TD-007).
+                # EAC date and slippage columns
+                eac_date_str = cam_input.get("eac_date")
+                eac_uncertain = cam_input.get("eac_uncertain", False)
+                if eac_date_str:
+                    forecast_cell = eac_date_str
+                    baseline_finish = t.get("finish")
+                    if baseline_finish:
+                        try:
+                            eac_dt = datetime.strptime(eac_date_str, "%Y-%m-%d")
+                            slip = int((eac_dt - baseline_finish).days)
+                            if slip > 0:
+                                delta_cell = f"+{slip}d"
+                            elif slip < 0:
+                                delta_cell = f"{slip}d"
+                            else:
+                                delta_cell = "0d"
+                        except (ValueError, TypeError):
+                            delta_cell = "—"
+                    else:
+                        delta_cell = "—"
+                elif eac_uncertain:
+                    forecast_cell = "uncertain"
+                    delta_cell = "—"
+                else:
+                    forecast_cell = "—"
+                    delta_cell = "—"
+                # TD-007: Truncate to first sentence or 120 chars in table cell.
                 # The full text is collected for the appendix below.
                 cell_blocker, was_truncated = _truncate_blocker(blocker)
                 if was_truncated:
                     blocker_details.append((t["name"], blocker))
                 sections.append(
                     f"| {t['cam']} | {t['name']} | {actual_pct}% | "
-                    f"~{exp}% | {cell_blocker} |"
+                    f"~{exp}% | {forecast_cell} | {delta_cell} | {cell_blocker} |"
                 )
         else:
             sections.append("_No tasks behind schedule._")
