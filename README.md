@@ -2,7 +2,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 7.2 COMPLETE — JWT auth, SIEM syslog, IR plan, CMMC gap remediation. 375 tests passing.**
+**Current status: Phase 7.3 (partial) — EAC date interview collection complete. 404 tests passing.**
 
 ---
 
@@ -45,7 +45,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 375 tests
+pytest tests/ -v         # all 404 tests
 pytest tests/ -q         # quiet summary only
 ```
 
@@ -99,7 +99,7 @@ ims-agent/
 │   │   ├── qa_engine.py        — Q&A engine (direct + LLM-routed)
 │   │   └── ims_tools.py        — Anthropic tool_use handlers for raw IMS queries
 │   └── voice/
-│       ├── interview_agent.py      — Conversation state machine (11 states)
+│       ├── interview_agent.py      — Conversation state machine (12 states)
 │       ├── cam_simulator.py        — Claude-powered CAM simulator (dev/test)
 │       ├── stt_engine.py           — STT abstraction (Whisper / mock)
 │       ├── tts_engine.py           — TTS abstraction (ElevenLabs / Azure / mock)
@@ -107,7 +107,7 @@ ims-agent/
 │       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
 │       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
 ├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
-├── tests/                      — pytest test suite (375 tests)
+├── tests/                      — pytest test suite (404 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 100-task AI Agent Server Rack IMS
 │   ├── ims_master/             — Timestamped .mpp master (source of truth)
@@ -158,13 +158,15 @@ ims-agent/
 | 6.0–6.6 | Core Integrity, Observability, Security, IMS Audit Trail, Pilot Docs | ✅ Complete | 2026-05-03 |
 | 7.1 | Technical Debt Sprint | ✅ Complete — 336 tests | 2026-05-03 |
 | 7.4 | Platform Enhancements | ✅ Complete — 359 tests | 2026-05-03 |
-| **7.2** | **Security & Compliance (CMMC Level 2)** | ✅ **Complete — 375 tests** | 2026-05-03 |
-| 7.3 | Infrastructure & Observability (Grafana, log aggregation) | ⏳ Awaiting deployment platform | — |
+| 7.2 | Security & Compliance (CMMC Level 2) | ✅ Complete — 375 tests | 2026-05-03 |
+| **7.3** | **EAC Date Interview Collection** | ✅ **Complete — 404 tests** (infra items awaiting deployment) | 2026-05-03 |
 | 7.5 | First Customer Pilot Execution | ⏳ Awaiting customer engagement | — |
 
 **Phase 6 note:** 4 Core Integrity bugs fixed; Prometheus metrics + extended `/health`; secrets hardening + CMMC gap analysis; LLM retry backoff + DR runbook; IMS audit trail (`ims_diff.py`, per-cycle diff JSON/Markdown, `GET /api/diff/{cycle_id}`); customer onboarding docs.
 
 **Phase 7.2 note:** JWT auth (`POST /api/auth/token`, HS256, 1-hour expiry), JTI replay blocklist (CMMC IA.3.084), read/admin tier separation, key age alert in `GET /health` (CMMC SC.3.187), SIEM syslog (`agent/siem.py`, CMMC AU.3.045), formal incident response plan (`docs/IR_PLAN.md`), credential rotation procedures (`docs/DR_RUNBOOK.md §9`). 6 HIGH CMMC gaps remediated. 375 tests passing.
+
+**Phase 7.3 note:** New `AWAITING_EAC_DATE` interview state collects CAM-provided projected finish dates for all 1–99% tasks. LLM date extractor (`_classify_eac_date`) resolves absolute dates, relative dates, "on schedule", and uncertain responses. `SRARunner(eac_dates=...)` overrides remaining-duration estimates with CAM EAC dates. Cycle report "Tasks Behind Schedule" table expanded with CAM Forecast and Δ Days columns. 29 new tests in `test_eac_date.py`. Grafana/log-aggregation infra items deferred to deployment platform.
 
 **Phase 7.4 note:** Per-CAM dashboard progress pills, cumulative diff (`GET /api/changes`), baseline drift alert (`GET /api/baseline-drift`), Q&A 30s TTL cache (TD-016), `SIMULATOR_CALL_DELAY_MS` rate limiting (TD-009), cycle report IMS Diff Summary and Baseline Drift Alert sections.
 

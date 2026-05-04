@@ -1,11 +1,22 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 7.2 Security & Compliance  
+**Test Procedure Version:** Phase 7.3 EAC Date Interview Collection  
 **Executed:** 2026-05-03  
 **Tester:** Claude (automated — unit tests)  
 **Environment:** Windows 11, Python 3.13.3  
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
-**Overall Result:** **PASS** — 375/375 unit tests passing; JWT auth, JTI blocklist, key age alert, SIEM syslog all verified; **zero open FAILs**
+**Overall Result:** **PASS** — 404/404 unit tests passing; EAC date FSM state, LLM date extraction, SRA override, and report columns all verified; **zero open FAILs**
+
+---
+
+> **2026-05-03 (Phase 7.3 — EAC Date Interview Collection)**  
+> New `AWAITING_EAC_DATE` state inserted between `AWAITING_PCT` and `AWAITING_BLOCKER` for 1–99% tasks.  
+> `_classify_eac_date()` resolves absolute dates, relative dates, "on schedule" → baseline finish, and uncertain → `(None, True)`.  
+> `TaskResult` extended with `eac_date: str | None` and `eac_uncertain: bool`.  
+> `SRARunner(eac_dates=dict)` overrides remaining-duration with `(eac_date − today).days` when CAM date provided.  
+> Cycle report "Tasks Behind Schedule" table expanded to 7 columns: CAM Forecast and Δ Days added.  
+> 57 existing `test_interview_agent.py` tests updated to supply EAC date response for 1–99% tasks.  
+> Unit test count: **404/404 passed** (+29 from `test_eac_date.py`; up from 375).
 
 ---
 

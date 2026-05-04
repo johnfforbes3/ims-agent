@@ -97,7 +97,7 @@ agent.py    simulator  interface.py
 | `llm_interface.py` | **Single entry point for ALL Anthropic API calls.** Never call the SDK directly from other modules. Provides: `synthesize()`, `classify_cam_response()`, `ask()`, `ask_with_tools()`. Routes to local Ollama if `LLM_BASE_URL` is set. |
 | `file_handler.py` | IMS XML parsing (`parse()`) and write-back (`apply_updates()`). Reads/writes MSPDI XML format. Atomic in-place write via `os.replace(tmp, target)`. Caches parsed tree; call `parse()` again after write to refresh. |
 | `critical_path.py` | CPM calculation. Returns `critical_path` (ordered task ID list), `total_float` (per-task dict), `project_float_days` (scalar), `near_critical` (task IDs with float < 5 days). |
-| `sra_runner.py` | Monte Carlo SRA engine. N=1000 simulations (configurable). Per-milestone: P50/P80/P95 dates and `prob_on_baseline`. |
+| `sra_runner.py` | Monte Carlo SRA engine. N=1000 simulations (configurable). Per-milestone: P50/P80/P95 dates and `prob_on_baseline`. Accepts optional `eac_dates` dict (task_id → ISO date string) to override remaining-duration estimates with CAM-provided EAC dates. |
 | `cycle_runner.py` | Orchestrates one full cycle: lock → interview → validate → write → analyze → synthesize → report → distribute → purge. Owns the cycle lock to prevent concurrent runs. |
 | `cycle_state.py` | Cycle state persistence. Reads/writes `reports/cycles/{cycle_id}_status.json`. |
 | `scheduler.py` | APScheduler cron wrapper. Fires `CycleRunner.run()` on the configured schedule. |
@@ -138,7 +138,7 @@ agent.py    simulator  interface.py
 
 | File | Responsibility |
 |------|---------------|
-| `interview_agent.py` | **Conversation state machine.** 11 states. Handles all NLU via LLM classifier. Tracks per-milestone risk history to avoid repetitive questions. See [Section 4](#4-interview-state-machine). |
+| `interview_agent.py` | **Conversation state machine.** 12 states. Handles all NLU via LLM classifier. Tracks per-milestone risk history to avoid repetitive questions. Collects CAM-provided EAC dates (`AWAITING_EAC_DATE` state) for in-progress tasks. See [Section 4](#4-interview-state-machine). |
 | `cam_simulator.py` | Claude-powered CAM simulator for dev/test. **Not part of production.** Feeds realistic responses into `InterviewAgent.process()`. |
 | `teams_chat_connector.py` | `ChatInterviewManager` singleton + `ChatInterviewSession`. Manages active Teams chat interviews. `_bf_send()` sends messages via Bot Framework REST. See [Section 5](#5-teams-chat-architecture). |
 | `teams_connector.py` | `TeamsACSConnector` — Azure ACS voice connector stub. Raises `NotImplementedError` (pending ACS credentials, TD-011). `TeamsGraphConnector` — joins Teams meetings via Graph Communications API for voice demo (Tier 3). |
@@ -245,6 +245,7 @@ CycleRunner._release_lock()
 | `GREETING` | Initial state. `start()` sends the opening greeting and transitions to `TASK_INTRO`. |
 | `TASK_INTRO` | Introduces the current task to the CAM. Transitions to `AWAITING_PCT`. |
 | `AWAITING_PCT` | Waiting for percent complete. LLM classifier extracts a number 0–100. |
+| `AWAITING_EAC_DATE` | **Phase 7.3.** Asked for all 1–99% tasks. "When do you expect to finish?" LLM date extractor resolves absolute dates, relative dates ("end of next week"), "on schedule" (use baseline finish), and uncertain responses. Stores `eac_date` (ISO string) and `eac_uncertain` (bool) on `TaskResult`. Skipped for 0% and 100% tasks. |
 | `AWAITING_BLOCKER` | Asked when task is behind expected progress. Waiting for free-text blocker description. |
 | `AWAITING_RISK_FLAG` | Asked when task has a blocker. "Could this put [milestone] at risk?" Yes/No. |
 | `AWAITING_RISK_DESC` | Asked when risk flag is YES. Waiting for risk description. |
@@ -282,17 +283,19 @@ _milestone_no_count: dict[str, int]    # milestone_name → count of NO answers
 ```
 start()
   └─► GREETING
-        └─► TASK_INTRO           (_handle_greeting processes CAM's ready signal)
-              └─► AWAITING_PCT   (_introduce_current_task fires automatically)
-                    ├─► [on-track] CONFIRM     (skip BLOCKER+RISK)
-                    └─► [behind]  AWAITING_BLOCKER
-                                    └─► AWAITING_RISK_FLAG
-                                          ├─► [YES] AWAITING_RISK_DESC
-                                          │           └─► CONFIRM
-                                          └─► [NO]  CONFIRM
-                                                      └─► [next task] TASK_INTRO
-                                                      └─► [all done]  CLOSING
-                                                                        └─► COMPLETE
+        └─► TASK_INTRO               (_handle_greeting processes CAM's ready signal)
+              └─► AWAITING_PCT       (_introduce_current_task fires automatically)
+                    ├─► [0% or 100%] CONFIRM / AWAITING_BLOCKER  (skip EAC date)
+                    └─► [1–99%]      AWAITING_EAC_DATE           (NEW — Phase 7.3)
+                                        ├─► [on-track] CONFIRM     (skip BLOCKER+RISK)
+                                        └─► [behind]  AWAITING_BLOCKER
+                                                        └─► AWAITING_RISK_FLAG
+                                                              ├─► [YES] AWAITING_RISK_DESC
+                                                              │           └─► CONFIRM
+                                                              └─► [NO]  CONFIRM
+                                                                          └─► [next task] TASK_INTRO
+                                                                          └─► [all done]  CLOSING
+                                                                                            └─► COMPLETE
 ```
 
 ### Risk Question Suppression Logic
@@ -630,7 +633,7 @@ pytest tests/ -k "interview"  # filter by keyword
 pytest tests/ --tb=short      # short tracebacks on failure
 ```
 
-**Current count:** 375 tests (all passing as of 2026-05-03)
+**Current count:** 404 tests (all passing as of 2026-05-03)
 
 ### Test File Map
 
@@ -653,6 +656,7 @@ pytest tests/ --tb=short      # short tracebacks on failure
 | `test_phase5.py` | RBAC, rate limiting, metrics (JSON + Prometheus), purge, health endpoint, IMS diff, observability |
 | `test_phase74.py` | Phase 7.4 — per-CAM dashboard pills, cumulative diff, baseline drift, Q&A TTL cache, simulator rate limiting, diff/drift report sections |
 | `test_security.py` | Phase 7.2 — JWT token endpoint, Bearer auth, admin JTI blocklist, key age alert, SIEM handler configuration |
+| `test_eac_date.py` | Phase 7.3 — `AWAITING_EAC_DATE` state transitions, `TaskResult.eac_date`/`eac_uncertain` fields, `_classify_eac_date` LLM extraction, `SRARunner(eac_dates=...)` override, report CAM Forecast/Δ Days columns |
 
 ### Test Fixtures (`tests/conftest.py`)
 
