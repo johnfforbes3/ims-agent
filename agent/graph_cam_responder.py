@@ -132,6 +132,17 @@ class GraphCAMResponder:
                 return
 
         new_msgs = self._get_new_bot_messages(token, self._chat_id)
+        if len(new_msgs) > 1:
+            # Guard against burst: if multiple new messages arrived between polls,
+            # only respond to the LAST one (most recent question from the bot).
+            # Earlier messages were already marked seen by _get_new_bot_messages;
+            # responding to all of them produces stacked/stray CAM responses.
+            logger.info(
+                "action=burst_throttle cam=%s skipped=%d kept=1",
+                self.cam_name,
+                len(new_msgs) - 1,
+            )
+            new_msgs = new_msgs[-1:]
         for msg in new_msgs:
             raw = _strip_html(msg.get("body", {}).get("content", ""))
             if not raw:

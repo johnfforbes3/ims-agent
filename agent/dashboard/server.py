@@ -22,7 +22,9 @@ Authentication (7.2 — JWT takes precedence; legacy static keys still accepted)
   DASHBOARD_ADMIN_KEY — legacy admin key, X-Admin-Key header.
 """
 
+import asyncio
 import collections
+import dataclasses
 import json
 import logging
 import os
@@ -34,7 +36,7 @@ from typing import Any
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -936,12 +938,33 @@ async def bot_messages(request: Request):
             except Exception as _e:
                 logger.debug("action=session_persist_failed error=%s", _e)
 
+        # Relay bus for live listen-in panel
+        from agent.voice.interview_relay import InterviewRelayBus as _RelayBus
+        _relay = _RelayBus.get()
+        _sid = str(id(session))
+
         if not session.started:
             # First contact — send the opening greeting
             greeting = session.start()
             _bf_reply(service_url, conversation_id, activity_id, greeting)
             logger.info("action=interview_started cam=%s user=%s", session.cam_name, user_id[:8])
+            # Register session and push bot greeting event
+            _relay.register_session(session.email or user_email, session.cam_name, _sid)
+            _relay.push_bot_turn(
+                cam_name=session.cam_name,
+                cam_email=session.email or user_email,
+                text=greeting,
+                session_id=_sid,
+                synthesize=True,
+            )
         else:
+            # Push incoming CAM message first (so listen-in panel shows it before bot reply)
+            _relay.push_cam_turn(
+                cam_name=session.cam_name,
+                cam_email=session.email or user_email,
+                text=message_text,
+                session_id=_sid,
+            )
             _bf_typing(service_url, conversation_id)
             if session.is_done:
                 # Interview already finished — handle final wrap-up message gracefully
@@ -949,24 +972,40 @@ async def bot_messages(request: Request):
                     ack = session.accept_final_message(message_text)
                     _bf_reply(service_url, conversation_id, activity_id, ack)
                     logger.info("action=grace_reply_sent cam=%s", session.cam_name)
+                    _relay.push_bot_turn(
+                        cam_name=session.cam_name,
+                        cam_email=session.email or user_email,
+                        text=ack,
+                        session_id=_sid,
+                        synthesize=True,
+                    )
                 else:
                     # Grace period expired — clean up and let the default "no interview" path
                     # handle any further messages
                     manager.remove_session(user_id)
+                    _relay.unregister_session(session.email or user_email)
                     logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
                     first_name = session.cam_name.split()[0]
-                    _bf_reply(
-                        service_url, conversation_id, activity_id,
+                    closing = (
                         f"Hey {first_name} — I think we already wrapped up earlier. "
-                        f"You're all set! I'll be in touch for the next cycle.",
+                        f"You're all set! I'll be in touch for the next cycle."
                     )
+                    _bf_reply(service_url, conversation_id, activity_id, closing)
             else:
                 # Normal mid-interview message
                 next_msg = session.process(message_text)
                 if next_msg:
                     _bf_reply(service_url, conversation_id, activity_id, next_msg)
+                    _relay.push_bot_turn(
+                        cam_name=session.cam_name,
+                        cam_email=session.email or user_email,
+                        text=next_msg,
+                        session_id=_sid,
+                        synthesize=True,
+                    )
                 if session.is_done:
                     logger.info("action=interview_complete cam=%s user=%s", session.cam_name, user_id[:8])
+                    _relay.unregister_session(session.email or user_email)
                     # Keep session alive for grace period — do NOT remove yet
 
         return JSONResponse({"status": "ok"})
@@ -1011,6 +1050,17 @@ async def internal_cam_message(request: Request):
 
         logger.info("action=relay_received email=%s text_len=%d", email, len(text))
 
+        # Push CAM response to the listen-in relay bus
+        from agent.voice.interview_relay import InterviewRelayBus as _RelayBus
+        _relay = _RelayBus.get()
+        _sid = str(id(session))
+        _relay.push_cam_turn(
+            cam_name=session.cam_name,
+            cam_email=email,
+            text=text,
+            session_id=_sid,
+        )
+
         if session.service_url and session.conversation_id:
             _bf_typing(session.service_url, session.conversation_id)
 
@@ -1020,10 +1070,15 @@ async def internal_cam_message(request: Request):
                 ack = session.accept_final_message(text)
                 if ack and session.service_url and session.conversation_id:
                     _bf_send(session.service_url, session.conversation_id, ack)
+                    _relay.push_bot_turn(
+                        cam_name=session.cam_name, cam_email=email,
+                        text=ack, session_id=_sid, synthesize=True,
+                    )
                 logger.info("action=relay_grace_period_ack email=%s", email)
             else:
                 # Grace window expired — remove stale session
                 manager.remove_session_by_email(email)
+                _relay.unregister_session(email)
                 logger.info("action=relay_stale_session_removed email=%s", email)
             return JSONResponse({"status": "ok"})
 
@@ -1031,10 +1086,15 @@ async def internal_cam_message(request: Request):
 
         if next_msg and session.service_url and session.conversation_id:
             _bf_send(session.service_url, session.conversation_id, next_msg)
+            _relay.push_bot_turn(
+                cam_name=session.cam_name, cam_email=email,
+                text=next_msg, session_id=_sid, synthesize=True,
+            )
             logger.info("action=relay_question_sent email=%s", email)
 
         if session.is_done:
             logger.info("action=relay_interview_complete email=%s", email)
+            _relay.unregister_session(email)
             # Keep session alive for grace period; it will be cleaned up when
             # the grace window expires on the next message or explicit removal.
 
@@ -1043,6 +1103,110 @@ async def internal_cam_message(request: Request):
     except Exception as exc:
         logger.error("action=relay_error error=%s", exc, exc_info=True)
         return JSONResponse({"status": "error", "detail": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Live interview listen-in endpoints (Phase 9.2 — voice)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/interview-sessions")
+async def api_interview_sessions():
+    """
+    List active (in-progress) CAM interview sessions.
+
+    Returns a JSON array of session objects:
+      [{cam_email, cam_name, started_at, session_id}, ...]
+
+    Used by the dashboard listen-in panel to show who is being interviewed.
+    """
+    from agent.voice.interview_relay import InterviewRelayBus
+    return JSONResponse(InterviewRelayBus.get().active_sessions())
+
+
+@app.get("/api/interview-stream")
+async def api_interview_stream(request: Request):
+    """
+    Server-Sent Events (SSE) stream of live interview turn events.
+
+    Each event is a JSON-encoded InterviewEvent:
+      data: {"seq":N, "event_id":"...", "speaker":"bot"|"cam",
+             "cam_name":"...", "cam_email":"...", "text":"...",
+             "has_audio": true|false, "timestamp": 1234567.89, ...}
+
+    On connect, the last 30 events are replayed so the listener sees context.
+    A ": keepalive" comment is sent every 15 s when idle.
+
+    Optional query param ?since=N — skip events with seq < N.
+    """
+    from agent.voice.interview_relay import InterviewRelayBus
+
+    bus = InterviewRelayBus.get()
+
+    # Allow caller to supply a starting seq to resume after reconnect
+    try:
+        since_param = request.query_params.get("since")
+        start_seq = int(since_param) if since_param else max(0, bus.current_seq - 30)
+    except (TypeError, ValueError):
+        start_seq = max(0, bus.current_seq - 30)
+
+    async def event_generator():
+        seq = start_seq
+        # Backfill: events already in the bus since start_seq
+        for ev in bus.events_since(seq, limit=50):
+            seq = ev.seq + 1
+            yield f"data: {json.dumps(dataclasses.asdict(ev))}\n\n"
+
+        # Stream new events as they arrive (poll every 300 ms)
+        idle_ticks = 0
+        while True:
+            try:
+                disconnected = await request.is_disconnected()
+            except Exception:
+                disconnected = True
+            if disconnected:
+                break
+
+            new_events = bus.events_since(seq, limit=20)
+            if new_events:
+                idle_ticks = 0
+                for ev in new_events:
+                    seq = ev.seq + 1
+                    yield f"data: {json.dumps(dataclasses.asdict(ev))}\n\n"
+            else:
+                idle_ticks += 1
+                if idle_ticks % 50 == 0:   # ~15 s keepalive
+                    yield ": keepalive\n\n"
+                await asyncio.sleep(0.3)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.get("/api/interview-audio/{event_id}")
+async def api_interview_audio(event_id: str):
+    """
+    Serve the TTS audio clip for a specific interview event.
+
+    The relay bus generates audio asynchronously after each bot turn.
+    If audio isn't ready yet (TTS still running) the client should retry
+    after a short delay (the listen-in panel retries up to 3 times).
+
+    Returns 200 audio/mpeg (MP3) on success, 404 if not found/not ready.
+    """
+    from agent.voice.interview_relay import InterviewRelayBus
+    from fastapi import HTTPException
+    from fastapi.responses import Response as _Resp
+    audio = InterviewRelayBus.get().get_audio(event_id)
+    if audio is None:
+        raise HTTPException(status_code=404, detail="Audio not ready or not found")
+    return _Resp(content=audio, media_type="audio/mpeg")
 
 
 # ---------------------------------------------------------------------------
