@@ -1109,6 +1109,78 @@ async def internal_cam_message(request: Request):
 # Live interview listen-in endpoints (Phase 9.2 — voice)
 # ---------------------------------------------------------------------------
 
+@app.get("/api/voices")
+async def api_voices():
+    """
+    List available ElevenLabs voices and the current CAM voice assignments.
+
+    Returns:
+      {
+        "tts_configured": bool,
+        "atlas_voice_id": str,
+        "cam_voice_pool": [str, ...],
+        "cam_assignments": {"email": "voice_id", ...},
+        "available_voices": [{"voice_id": str, "name": str, "labels": {...}}, ...]
+      }
+
+    available_voices is populated by querying the ElevenLabs API; empty list
+    if TTS is not configured or the query fails.
+    """
+    from agent.voice.interview_relay import (
+        InterviewRelayBus, _ATLAS_VOICE_ID, _CAM_VOICE_POOL
+    )
+    from agent.voice.tts_engine import tts_configured as _tts_ok
+
+    bus = InterviewRelayBus.get()
+    available: list[dict] = []
+
+    if _tts_ok():
+        try:
+            from agent.voice.tts_engine import _ELEVENLABS_KEY, _ELEVENLABS_AVAILABLE
+            if _ELEVENLABS_AVAILABLE and _ELEVENLABS_KEY:
+                from elevenlabs.client import ElevenLabs as _EL
+                _client = _EL(api_key=_ELEVENLABS_KEY)
+                resp = _client.voices.get_all()
+                available = [
+                    {
+                        "voice_id": v.voice_id,
+                        "name": v.name,
+                        "labels": v.labels or {},
+                    }
+                    for v in resp.voices
+                ]
+        except Exception as _exc:
+            logger.debug("action=voices_list_failed error=%s", _exc)
+
+    return JSONResponse({
+        "tts_configured": _tts_ok(),
+        "atlas_voice_id": _ATLAS_VOICE_ID,
+        "cam_voice_pool": _CAM_VOICE_POOL,
+        "cam_assignments": bus.cam_voice_assignments(),
+        "available_voices": available,
+    })
+
+
+@app.get("/api/interview-recent")
+async def api_interview_recent(n: int = 30):
+    """
+    Return the last N interview events as a plain JSON array (no SSE).
+
+    Used by the listen-in panel to backfill the transcript on connect
+    WITHOUT triggering audio prefetch for historical turns.  Audio is
+    only pre-fetched for events that arrive via the live SSE stream.
+
+    Returns: {"seq": <current_seq>, "events": [...]}
+    """
+    from agent.voice.interview_relay import InterviewRelayBus
+    bus = InterviewRelayBus.get()
+    events = bus.recent_events(min(n, 100))
+    return JSONResponse({
+        "seq": bus.current_seq,
+        "events": [dataclasses.asdict(ev) for ev in events],
+    })
+
+
 @app.get("/api/interview-sessions")
 async def api_interview_sessions():
     """
@@ -1212,6 +1284,21 @@ async def api_interview_audio(event_id: str):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def _startup_voice_validation() -> None:
+    """Validate CAM voice pool against ElevenLabs account at server start."""
+    try:
+        from agent.voice.interview_relay import validate_cam_voice_pool
+        warnings = validate_cam_voice_pool()
+        if warnings:
+            for w in warnings:
+                logger.warning("voice_pool_warning: %s", w)
+        else:
+            logger.info("action=voice_pool_ok msg='all CAM voices validated'")
+    except Exception as exc:
+        logger.warning("action=voice_pool_skip reason=%s", exc)
+
 
 def serve(host: str = "0.0.0.0", port: int | None = None) -> None:
     uvicorn.run(app, host=host, port=port or _PORT, log_level="warning")

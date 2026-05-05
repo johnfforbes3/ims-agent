@@ -308,9 +308,6 @@
     .chat-chip:hover { background: rgba(31,111,235,0.2); }
 
     /* ── Live Interview Listen-In ────────────────────────────────────────── */
-    .listenin-header {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
-    }
     .listenin-sessions {
       display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
     }
@@ -323,58 +320,88 @@
       width: 7px; height: 7px; border-radius: 50%; background: #3fb950;
       animation: livepulse 1.2s ease-in-out infinite;
     }
-    @keyframes livepulse {
-      0%,100% { opacity: 1; } 50% { opacity: 0.3; }
-    }
+    @keyframes livepulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
     .listenin-session-pill.idle {
-      background: rgba(125,133,144,0.1); border-color: #30363d; color: #7d8590;
+      background: rgba(125,133,144,0.08); border-color: #30363d; color: #484f58;
     }
-    .listenin-session-pill.idle .live-dot { background: #484f58; animation: none; }
+    .listenin-session-pill.idle .live-dot { background: #30363d; animation: none; }
+
+    /* Speaking indicator */
+    .listenin-speaking-row {
+      display: none; align-items: center; gap: 10px;
+      padding: 7px 12px; margin-bottom: 8px;
+      background: rgba(88,166,255,0.06); border-radius: 8px;
+      border: 1px solid rgba(88,166,255,0.15);
+    }
+    .listenin-speaking-row.visible { display: flex; }
+    .listenin-speaking-row.cam-speaking {
+      background: rgba(63,185,80,0.06); border-color: rgba(63,185,80,0.2);
+    }
+    .speaking-bars {
+      display: flex; align-items: flex-end; gap: 2px; height: 16px;
+    }
+    .speaking-bars span {
+      display: inline-block; width: 3px; background: #58a6ff; border-radius: 2px;
+      animation: speakbar 0.8s ease-in-out infinite;
+    }
+    .listenin-speaking-row.cam-speaking .speaking-bars span { background: #3fb950; }
+    .speaking-bars span:nth-child(1) { height: 5px;  animation-delay: 0.0s; }
+    .speaking-bars span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+    .speaking-bars span:nth-child(3) { height: 9px;  animation-delay: 0.2s; }
+    .speaking-bars span:nth-child(4) { height: 14px; animation-delay: 0.15s; }
+    .speaking-bars span:nth-child(5) { height: 6px;  animation-delay: 0.05s; }
+    @keyframes speakbar {
+      0%,100% { transform: scaleY(0.4); opacity: 0.6; }
+      50%      { transform: scaleY(1);   opacity: 1;   }
+    }
+    .speaking-label { font-size: 12px; color: #7d8590; }
+    .speaking-label strong { color: #e6edf3; }
+
     .listenin-transcript {
-      max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+      max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
       padding: 12px; background: #0d1117; border-radius: 8px;
       border: 1px solid #21262d;
     }
-    .listenin-turn {
-      display: flex; flex-direction: column; gap: 2px;
-      max-width: 85%;
-    }
-    .listenin-turn.bot  { align-self: flex-start; }
-    .listenin-turn.cam  { align-self: flex-end; }
+    .listenin-turn { display: flex; flex-direction: column; gap: 3px; max-width: 82%; }
+    .listenin-turn.bot { align-self: flex-start; }
+    .listenin-turn.cam { align-self: flex-end; }
     .listenin-bubble {
-      padding: 9px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5;
+      padding: 10px 15px; border-radius: 16px; font-size: 13px; line-height: 1.55;
     }
-    .listenin-turn.bot  .listenin-bubble {
+    .listenin-turn.bot .listenin-bubble {
       background: #1c2128; border: 1px solid #30363d; color: #c9d1d9;
       border-bottom-left-radius: 4px;
     }
-    .listenin-turn.cam  .listenin-bubble {
-      background: rgba(31,111,235,0.12); border: 1px solid rgba(88,166,255,0.25);
+    .listenin-turn.cam .listenin-bubble {
+      background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.2);
       color: #e6edf3; border-bottom-right-radius: 4px;
     }
-    .listenin-meta {
-      font-size: 10px; color: #484f58; padding: 0 4px;
+    .listenin-turn.playing .listenin-bubble {
+      border-color: #58a6ff; box-shadow: 0 0 0 1px rgba(88,166,255,0.15);
     }
+    .listenin-turn.cam.playing .listenin-bubble {
+      border-color: #3fb950; box-shadow: 0 0 0 1px rgba(63,185,80,0.15);
+    }
+    .listenin-meta { font-size: 10px; color: #484f58; padding: 0 4px; }
     .listenin-turn.cam .listenin-meta { text-align: right; }
-    .listenin-audio-btn {
-      margin-left: 8px; font-size: 10px; padding: 2px 7px;
-      border-radius: 10px; border: 1px solid #30363d;
-      background: transparent; color: #58a6ff; cursor: pointer;
-      vertical-align: middle;
+    .listenin-turn.historical .listenin-bubble { opacity: 0.65; }
+    .hist-badge {
+      display: inline-block; font-size: 9px; background: #21262d;
+      border: 1px solid #30363d; border-radius: 3px; padding: 0 3px;
+      color: #484f58; margin-left: 4px; vertical-align: middle;
     }
-    .listenin-audio-btn:hover { background: rgba(88,166,255,0.1); }
-    .listenin-audio-btn.playing { color: #3fb950; border-color: #3fb950; }
     .listenin-empty {
-      text-align: center; padding: 30px; color: #484f58; font-size: 13px;
+      text-align: center; padding: 32px 20px; color: #484f58; font-size: 13px;
     }
     .listenin-controls {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
     }
-    .listenin-status { font-size: 11px; color: #7d8590; }
+    .listenin-status { font-size: 11px; color: #7d8590; flex: 1; }
     .listenin-autoplay-toggle {
       display: flex; align-items: center; gap: 6px; font-size: 12px; color: #7d8590;
-      margin-left: auto; cursor: pointer;
+      cursor: pointer; white-space: nowrap;
     }
+    .listenin-vol { font-size: 11px; color: #7d8590; display: flex; align-items: center; gap: 6px; }
 
     /* ── Scrollbars ──────────────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -777,20 +804,30 @@
           ■ Disconnect
         </button>
         <button class="btn btn-ghost btn-sm" onclick="listenInClear()" title="Clear transcript">✕ Clear</button>
-        <span class="listenin-status" id="listenin-status">Not connected</span>
+        <span class="listenin-status" id="listenin-status">Not connected — will auto-connect when panel opens</span>
         <label class="listenin-autoplay-toggle">
           <input type="checkbox" id="listenin-autoplay" checked style="accent-color:#58a6ff">
           Auto-play audio
         </label>
+        <label class="listenin-vol" title="Playback volume">
+          🔊 <input type="range" id="listenin-volume" min="0" max="1" step="0.05" value="0.85"
+                     style="width:70px;accent-color:#58a6ff" title="Volume">
+        </label>
+      </div>
+
+      <!-- Speaking indicator (shown during audio playback) -->
+      <div class="listenin-speaking-row" id="listenin-speaking-row">
+        <div class="speaking-bars">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="speaking-label"><strong id="speaking-name">ATLAS</strong> is speaking…</div>
       </div>
 
       <!-- Live transcript -->
       <div class="listenin-transcript" id="listenin-transcript">
         <div class="listenin-empty" id="listenin-empty">
-          Connect to start listening. Bot questions will appear on the left; CAM replies on the right.
-          <br><span style="font-size:11px;color:#30363d;margin-top:4px;display:block">
-            Audio playback requires ElevenLabs API key configured in the server environment.
-          </span>
+          Opens automatically — ATLAS questions appear on the left, CAM replies on the right.
+          Audio plays as a natural conversation when ElevenLabs is configured.
         </div>
       </div>
 
@@ -1173,172 +1210,263 @@
       .replace(/\n/g, '<br>');
   }
 
-  // ── Live Interview Listen-In ───────────────────────────────────────────────
-  let _listenEvt    = null;      // EventSource handle
-  let _listenSeq    = 0;         // cursor for ?since= reconnect
-  let _currentAudio = null;      // HTMLAudioElement being played
-  let _audioQueue   = [];        // pending event_ids to play
-  let _audioPlaying = false;     // serialise playback
+  // ── Live Interview Listen-In — Phase 9.4 ─────────────────────────────────
+  // Architecture: backfill (transcript-only) vs live (with audio).
+  //
+  // On panel open:
+  //   1. Fetch /api/interview-recent  → render last 30 turns as transcript
+  //      (NO audio prefetch — avoids browser freeze from 30+ concurrent fetches)
+  //   2. Connect SSE from current_seq → only NEW turns get audio prefetch + play
+  //
+  // This means: if you open the panel mid-interview you hear the live turns.
+  // Historical turns are shown as read-only text.
 
-  // Poll active sessions every 5 s and update the session pills
+  let _listenEvt    = null;    // EventSource handle
+  let _listenSeq    = 0;       // cursor for ?since= reconnect
+  let _currentAudio = null;    // active HTMLAudioElement
+  let _audioPlaying = false;   // serialise playback across turns
+  let _audioQueue   = [];      // [{event_id, cam_name, speaker}, ...]
+  let _seenEventIds = new Set(); // dedup guard across backfill + live
+
+  // Pre-fetch cache: event_id → Promise<Blob|null>
+  // Only populated for LIVE events (not backfill) to avoid browser overload.
+  const _audioPending = new Map();
+
+  // ---------------------------------------------------------------------------
+  // Pre-fetch pipeline
+  // ---------------------------------------------------------------------------
+
+  function _prefetch(event_id) {
+    if (_audioPending.has(event_id)) return _audioPending.get(event_id);
+    // Retry up to 16 × 200 ms = 3.2 s total — covers ElevenLabs generation time
+    const p = (async () => {
+      for (let i = 0; i < 16; i++) {
+        try {
+          const r = await fetch(`/api/interview-audio/${encodeURIComponent(event_id)}`);
+          if (r.ok) return r.blob();
+        } catch (_) {}
+        if (i < 15) await new Promise(res => setTimeout(res, 200));
+      }
+      return null;  // no audio after 3.2 s — skip, text-only turn
+    })();
+    _audioPending.set(event_id, p);
+    return p;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Speaking indicator
+  // ---------------------------------------------------------------------------
+
+  function _showSpeaking(name, speaker) {
+    const row = document.getElementById('listenin-speaking-row');
+    if (!row) return;
+    document.getElementById('speaking-name').textContent = name;
+    row.classList.toggle('cam-speaking', speaker === 'cam');
+    row.classList.add('visible');
+  }
+  function _hideSpeaking() {
+    const row = document.getElementById('listenin-speaking-row');
+    if (row) row.classList.remove('visible');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audio playback queue (strictly serialised)
+  // ---------------------------------------------------------------------------
+
+  async function _drainAudioQueue() {
+    if (_audioPlaying || !_audioQueue.length) return;
+    _audioPlaying = true;
+
+    while (_audioQueue.length) {
+      const { event_id, cam_name, speaker } = _audioQueue.shift();
+      const displayName = speaker === 'bot' ? 'ATLAS' : cam_name;
+
+      _showSpeaking(displayName, speaker);
+      // Highlight the active turn bubble
+      const turnEl = document.querySelector(`[data-event-id="${event_id}"]`);
+      if (turnEl) turnEl.classList.add('playing');
+
+      // Await the pre-fetch (usually already resolved by now)
+      const blob = await (_audioPending.get(event_id) || _prefetch(event_id));
+      _audioPending.delete(event_id);
+
+      if (blob) {
+        const vol = parseFloat(document.getElementById('listenin-volume')?.value ?? 0.85);
+        await new Promise(resolve => {
+          const url   = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.volume = Math.max(0, Math.min(1, vol));
+          _currentAudio = audio;
+          audio.onended = () => { URL.revokeObjectURL(url); _currentAudio = null; resolve(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.play().catch(() => resolve());
+        });
+      }
+
+      // Remove playing highlight
+      if (turnEl) turnEl.classList.remove('playing');
+
+      // Natural conversational pause between turns
+      await new Promise(r => setTimeout(r, 380));
+    }
+
+    _hideSpeaking();
+    _audioPlaying = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transcript rendering
+  // ---------------------------------------------------------------------------
+
+  // _appendTurn(ev, {live}) — live=true → prefetch audio; false → transcript only
+  function _appendTurn(ev, { live = true } = {}) {
+    if (_seenEventIds.has(ev.event_id)) return; // deduplicate
+    _seenEventIds.add(ev.event_id);
+
+    const box = document.getElementById('listenin-transcript');
+    const empty = document.getElementById('listenin-empty');
+    if (empty) empty.remove();
+
+    const isBot  = ev.speaker === 'bot';
+    const label  = isBot ? 'ATLAS' : escapeHtml(ev.cam_name || ev.cam_email);
+    const ts     = new Date(ev.timestamp * 1000)
+                     .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const turn = document.createElement('div');
+    turn.className = `listenin-turn ${ev.speaker}${live ? '' : ' historical'}`;
+    turn.dataset.eventId = ev.event_id;
+    turn.innerHTML = `
+      <div class="listenin-bubble">${escapeHtml(ev.text)}</div>
+      <div class="listenin-meta">${label} · ${ts}${live ? '' : ' <span class="hist-badge">history</span>'}</div>`;
+    box.appendChild(turn);
+    box.scrollTop = box.scrollHeight;
+
+    if (live) {
+      // Pre-fetch audio immediately — audio for live turns is usually
+      // already stored on server by the time SSE fires.
+      _prefetch(ev.event_id);
+
+      // Queue for auto-play
+      if (document.getElementById('listenin-autoplay').checked) {
+        _audioQueue.push({ event_id: ev.event_id, cam_name: ev.cam_name, speaker: ev.speaker });
+        _drainAudioQueue();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SSE connection
+  // ---------------------------------------------------------------------------
+
+  async function listenInConnect() {
+    if (_listenEvt) { _listenEvt.close(); _listenEvt = null; }
+
+    document.getElementById('listenin-connect-btn').style.display    = 'none';
+    document.getElementById('listenin-disconnect-btn').style.display = '';
+    _setListenStatus('Loading history…');
+
+    // ── Phase 1: backfill recent turns as transcript-only (no audio) ──────
+    let startSeq = _listenSeq;
+    try {
+      const resp = await fetch('/api/interview-recent?n=30');
+      if (resp.ok) {
+        const { seq, events } = await resp.json();
+        // Only backfill if we haven't already seen events (fresh connect)
+        if (_listenSeq === 0 && events.length) {
+          events.forEach(ev => _appendTurn(ev, { live: false }));
+        }
+        startSeq = Math.max(startSeq, seq);   // connect SSE from current seq
+        _listenSeq = startSeq;
+      }
+    } catch (_) { /* network error — skip backfill */ }
+
+    // ── Phase 2: connect SSE from current seq, live events only ───────────
+    _setListenStatus('Connecting…');
+    const url = `/api/interview-stream?since=${_listenSeq}`;
+    _listenEvt = new EventSource(url);
+
+    _listenEvt.onopen = () => {
+      _setListenStatus('🟢 Connected — listening live');
+      document.getElementById('listenin-panel').open = true;
+    };
+
+    _listenEvt.onmessage = e => {
+      try {
+        const ev = JSON.parse(e.data);
+        _listenSeq = Math.max(_listenSeq, (ev.seq || 0) + 1);
+        _appendTurn(ev, { live: true });  // audio prefetch + queue
+      } catch (_) {}
+    };
+
+    _listenEvt.onerror = () => {
+      _setListenStatus('⚠️ Reconnecting…');
+    };
+  }
+
+  function listenInDisconnect() {
+    if (_listenEvt) { _listenEvt.close(); _listenEvt = null; }
+    document.getElementById('listenin-connect-btn').style.display    = '';
+    document.getElementById('listenin-disconnect-btn').style.display = 'none';
+    if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+    _hideSpeaking();
+    _setListenStatus('Disconnected');
+  }
+
+  function listenInClear() {
+    document.getElementById('listenin-transcript').innerHTML =
+      `<div class="listenin-empty" id="listenin-empty">Transcript cleared — waiting for next turn…</div>`;
+    _audioQueue = [];
+    _audioPending.clear();
+    _seenEventIds.clear();
+  }
+
+  function _setListenStatus(msg) {
+    const el = document.getElementById('listenin-status');
+    if (el) el.textContent = msg;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session pills (poll every 5 s)
+  // ---------------------------------------------------------------------------
+
   function _refreshListeninSessions() {
     fetch('/api/interview-sessions')
       .then(r => r.json())
       .then(sessions => {
-        const container = document.getElementById('listenin-sessions');
-        const badge     = document.getElementById('listenin-session-badge');
+        const c = document.getElementById('listenin-sessions');
+        const b = document.getElementById('listenin-session-badge');
         if (!sessions.length) {
-          container.innerHTML = `<span class="listenin-session-pill idle">
+          c.innerHTML = `<span class="listenin-session-pill idle">
             <span class="live-dot"></span>No active interviews</span>`;
-          badge.style.display = 'none';
+          b.style.display = 'none';
           return;
         }
-        badge.textContent   = sessions.length;
-        badge.style.display = '';
-        container.innerHTML = sessions.map(s =>
+        b.textContent   = sessions.length;
+        b.style.display = '';
+        c.innerHTML = sessions.map(s =>
           `<span class="listenin-session-pill">
-            <span class="live-dot"></span>
-            ${escapeHtml(s.cam_name || s.cam_email)}
+            <span class="live-dot"></span>${escapeHtml(s.cam_name || s.cam_email)}
           </span>`
         ).join('');
       })
       .catch(() => {});
   }
 
-  // Render one interview turn bubble
-  function _appendTurn(ev) {
-    const box = document.getElementById('listenin-transcript');
-    // Remove placeholder
-    const empty = document.getElementById('listenin-empty');
-    if (empty) empty.remove();
+  // ---------------------------------------------------------------------------
+  // Auto-connect when panel is opened
+  // ---------------------------------------------------------------------------
 
-    const isBot = ev.speaker === 'bot';
-    const time  = new Date(ev.timestamp * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const label = isBot ? 'ATLAS' : escapeHtml(ev.cam_name || ev.cam_email);
-
-    const audioBtn = (ev.has_audio && isBot)
-      ? `<button class="listenin-audio-btn" id="audiobtn-${escapeHtml(ev.event_id)}"
-           onclick="listenInPlayAudio('${escapeHtml(ev.event_id)}',this)" title="Play audio">▶ Audio</button>`
-      : '';
-
-    const turn = document.createElement('div');
-    turn.className = `listenin-turn ${ev.speaker}`;
-    turn.dataset.eventId = ev.event_id;
-    turn.innerHTML = `
-      <div class="listenin-bubble">${escapeHtml(ev.text)}${audioBtn}</div>
-      <div class="listenin-meta">${label} · ${time}</div>`;
-    box.appendChild(turn);
-    box.scrollTop = box.scrollHeight;
-
-    // Auto-play bot audio if enabled and key is ready
-    if (ev.has_audio && isBot && document.getElementById('listenin-autoplay').checked) {
-      _audioQueue.push(ev.event_id);
-      _drainAudioQueue();
-    }
-  }
-
-  // Check if event_id has audio ready yet; retry up to 3 times with backoff
-  async function _fetchAudioWithRetry(event_id, retries = 3, delayMs = 700) {
-    for (let i = 0; i < retries; i++) {
-      const resp = await fetch(`/api/interview-audio/${encodeURIComponent(event_id)}`);
-      if (resp.ok) return resp.blob();
-      if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
-    }
-    return null;
-  }
-
-  async function _drainAudioQueue() {
-    if (_audioPlaying || !_audioQueue.length) return;
-    _audioPlaying = true;
-    while (_audioQueue.length) {
-      const event_id = _audioQueue.shift();
-      const blob = await _fetchAudioWithRetry(event_id);
-      if (!blob) { _audioPlaying = false; return; }
-      await new Promise(resolve => {
-        const url  = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        _currentAudio = audio;
-        // Mark button as playing
-        const btn = document.getElementById(`audiobtn-${event_id}`);
-        if (btn) btn.classList.add('playing');
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          if (btn) btn.classList.remove('playing');
-          _currentAudio = null;
-          resolve();
-        };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.play().catch(() => resolve());
-      });
-    }
-    _audioPlaying = false;
-  }
-
-  // Manual play button
-  async function listenInPlayAudio(event_id, btn) {
-    if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
-    btn.textContent = '⏳';
-    const blob = await _fetchAudioWithRetry(event_id);
-    if (!blob) { btn.textContent = '✗'; return; }
-    const url   = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    _currentAudio = audio;
-    btn.classList.add('playing');
-    audio.onended = () => { URL.revokeObjectURL(url); btn.classList.remove('playing'); btn.textContent = '▶ Audio'; };
-    audio.onerror = () => { URL.revokeObjectURL(url); btn.textContent = '✗'; };
-    audio.play().catch(() => { btn.textContent = '✗'; });
-  }
-
-  // SSE connection
-  function listenInConnect() {
-    if (_listenEvt) { _listenEvt.close(); _listenEvt = null; }
-
-    const url = `/api/interview-stream?since=${_listenSeq}`;
-    _listenEvt = new EventSource(url);
-
-    document.getElementById('listenin-connect-btn').style.display = 'none';
-    document.getElementById('listenin-disconnect-btn').style.display = '';
-    document.getElementById('listenin-status').textContent = 'Connecting…';
-
-    _listenEvt.onopen = () => {
-      document.getElementById('listenin-status').textContent = '🟢 Connected — listening';
-      // Open the panel if collapsed
-      document.getElementById('listenin-panel').open = true;
-    };
-
-    _listenEvt.onmessage = (e) => {
-      try {
-        const ev = JSON.parse(e.data);
-        _listenSeq = Math.max(_listenSeq, (ev.seq || 0) + 1);
-        _appendTurn(ev);
-      } catch (_) {}
-    };
-
-    _listenEvt.onerror = () => {
-      document.getElementById('listenin-status').textContent = '🔴 Disconnected — retrying…';
-      // Browser auto-reconnects EventSource; update UI but don't close
-    };
-  }
-
-  function listenInDisconnect() {
-    if (_listenEvt) { _listenEvt.close(); _listenEvt = null; }
-    document.getElementById('listenin-connect-btn').style.display = '';
-    document.getElementById('listenin-disconnect-btn').style.display = 'none';
-    document.getElementById('listenin-status').textContent = 'Disconnected';
-    if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
-  }
-
-  function listenInClear() {
-    const box = document.getElementById('listenin-transcript');
-    box.innerHTML = `<div class="listenin-empty" id="listenin-empty">
-      Transcript cleared. Waiting for next interview turn…</div>`;
-    _audioQueue = [];
-  }
-
-  // Start polling sessions and wire DOMContentLoaded
   document.addEventListener('DOMContentLoaded', () => {
     _refreshListeninSessions();
     setInterval(_refreshListeninSessions, 5000);
+
+    // Auto-connect when user expands the panel
+    const panel = document.getElementById('listenin-panel');
+    if (panel) {
+      panel.addEventListener('toggle', e => {
+        if (e.target.open && !_listenEvt) listenInConnect();
+      });
+    }
   });
 </script>
 

@@ -110,8 +110,9 @@ def test_push_cam_turn(fresh_bus):
     bus = fresh_bus
     ev = bus.push_cam_turn("Alice", "alice@example.com", "I'm on track")
     assert ev.speaker == "cam"
-    assert ev.has_audio is False
     assert ev.cam_email == "alice@example.com"
+    # has_audio depends on TTS config; just check it's a bool
+    assert isinstance(ev.has_audio, bool)
 
 
 def test_push_bot_turn_email_lowercased(fresh_bus):
@@ -200,6 +201,52 @@ def test_recent_events(fresh_bus):
     recent = bus.recent_events(3)
     assert len(recent) == 3
     assert recent[-1].seq == 9
+
+
+# ---------------------------------------------------------------------------
+# Voice assignment
+# ---------------------------------------------------------------------------
+
+def test_cam_voice_assigned(fresh_bus):
+    bus = fresh_bus
+    voice = bus.get_cam_voice("alice@x.com")
+    assert isinstance(voice, str)
+    assert len(voice) > 5   # sanity: not empty
+
+
+def test_cam_voice_stable(fresh_bus):
+    """Same email always returns the same voice."""
+    bus = fresh_bus
+    v1 = bus.get_cam_voice("bob@x.com")
+    v2 = bus.get_cam_voice("bob@x.com")
+    assert v1 == v2
+
+
+def test_cam_voices_distinct(fresh_bus):
+    """Different CAMs get different voices (assuming pool has ≥ 2 entries)."""
+    from agent.voice import interview_relay as _mod
+    if len(_mod._CAM_VOICE_POOL) < 2:
+        pytest.skip("pool too small to guarantee distinct voices")
+    bus = fresh_bus
+    v_alice = bus.get_cam_voice("alice@x.com")
+    v_bob   = bus.get_cam_voice("bob@x.com")
+    assert v_alice != v_bob
+
+
+def test_cam_voice_email_case_insensitive(fresh_bus):
+    bus = fresh_bus
+    v1 = bus.get_cam_voice("Carol@Corp.COM")
+    v2 = bus.get_cam_voice("carol@corp.com")
+    assert v1 == v2
+
+
+def test_cam_voice_assignments_map(fresh_bus):
+    bus = fresh_bus
+    bus.get_cam_voice("alice@x.com")
+    bus.get_cam_voice("bob@x.com")
+    assignments = bus.cam_voice_assignments()
+    assert "alice@x.com" in assignments
+    assert "bob@x.com" in assignments
 
 
 # ---------------------------------------------------------------------------

@@ -106,16 +106,31 @@ class ElevenLabsTTSEngine(TTSEngine):
                     self._voice_id, self._model)
 
     def synthesize(self, text: str) -> bytes:
-        """Call ElevenLabs API and return MP3 audio bytes."""
-        logger.debug("action=tts_synthesize provider=elevenlabs chars=%d", len(text))
+        """Call ElevenLabs API and return MP3 audio bytes using the configured voice."""
+        return self.synthesize_with_voice(text, self._voice_id)
+
+    def synthesize_with_voice(self, text: str, voice_id: str) -> bytes:
+        """
+        Call ElevenLabs API with a specific voice ID.
+
+        Used by the interview relay so each CAM can have a distinct voice
+        without creating a separate engine instance per voice.
+        """
+        logger.debug(
+            "action=tts_synthesize provider=elevenlabs voice=%s chars=%d",
+            voice_id, len(text),
+        )
         audio_gen = self._client.text_to_speech.convert(
-            voice_id=self._voice_id,
+            voice_id=voice_id,
             text=text,
             model_id=self._model,
             voice_settings=_VoiceSettings(stability=0.5, similarity_boost=0.75),
         )
         audio_bytes = b"".join(audio_gen)
-        logger.info("action=tts_done provider=elevenlabs bytes=%d", len(audio_bytes))
+        logger.info(
+            "action=tts_done provider=elevenlabs voice=%s bytes=%d",
+            voice_id, len(audio_bytes),
+        )
         return audio_bytes
 
     @property
@@ -221,3 +236,20 @@ def build_tts_engine() -> TTSEngine:
 
     logger.warning("action=tts_fallback reason=no_elevenlabs_key using=mock")
     return MockTTSEngine()
+
+
+def tts_configured() -> bool:
+    """
+    Return True if a real TTS engine is configured (non-mock).
+
+    Used by the relay bus to eagerly set has_audio=True on events so the
+    browser starts pre-fetching audio immediately rather than waiting for
+    a separate has_audio patch event.
+    """
+    if _PROVIDER == "azure":
+        return bool(_AZURE_KEY)
+    return (
+        _ELEVENLABS_AVAILABLE
+        and bool(_ELEVENLABS_KEY)
+        and not _ELEVENLABS_KEY.startswith("your_")
+    )
