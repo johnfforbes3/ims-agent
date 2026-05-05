@@ -7,13 +7,13 @@
 
 ---
 
-## Current State (2026-05-03)
+## Current State (2026-05-04)
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 7.3 IN PROGRESS — EAC date interview feature complete (404 tests); infra/observability items awaiting deployment platform |
-| **Unit tests** | **404 / 404 passing** |
-| **Last procedure run** | 2026-05-03 (Phase 7.3 EAC date feature — 404 tests passing) |
+| **Phase** | Phase 8.3 / TD-023 / TD-010 complete — beta-PERT SRA, bootstrap CLI, Whisper integration tests (424 tests); infra/observability items awaiting deployment platform |
+| **Unit tests** | **424 / 424 passing** (4 Whisper integration tests skipped — openai-whisper not installed) |
+| **Last procedure run** | 2026-05-04 (Phase 8.3 + TD-023 + TD-010 — 424 tests passing) |
 | **Last production cycle** | 2026-05-03 — `20260503T191337Z`, health=RED, 5/5 CAMs responded (Teams chat relay) |
 | **Open FAILs** | None |
 | **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
@@ -78,7 +78,7 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 |-----------|-------------|--------|
 | **7.1** | Technical Debt Sprint (TD-001/002/003/013/014/015/021 + LOW items) | ✅ COMPLETE — 336 tests |
 | **7.2** | Security & Compliance (JWT auth, MFA, IR plan, SIEM, key lifecycle) | ✅ COMPLETE — JWT + JTI blocklist + key age + SIEM + IR plan |
-| **7.3** | Infrastructure & Observability (Grafana, log aggregation, backup automation, DR test); EAC date interview collection | 🔄 EAC date feature DONE (404 tests); infra items awaiting deployment platform |
+| **7.3** | Infrastructure & Observability (Grafana, log aggregation, backup automation, DR test); EAC date interview collection | 🔄 EAC date feature DONE; infra items awaiting deployment platform |
 | **7.4** | Platform Enhancements (live dashboard, cumulative diff, baseline drift, Q&A cache) | ✅ COMPLETE — 359 tests |
 | **7.5** | First Customer Pilot Execution (4 cycles, real data, acceptance criteria) | ⏳ Blocked on customer engagement |
 | **8.1** | Real Teams/ACS Voice Integration | ⏳ Backlog — post-pilot |
@@ -112,3 +112,4 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 | 2026-05-03 | Phase 7.4 Platform Enhancements — per-CAM dashboard pills, cumulative diff, baseline drift, Q&A TTL cache, cycle report diff/drift sections; TD-009/TD-016 resolved | **359** |
 | 2026-05-03 | Phase 7.2 Security & Compliance — JWT auth (POST /api/auth/token), JTI replay protection, key age alert, SIEM syslog, IR plan, DR runbook §9; 6 CMMC gaps REMEDIATED | **375** |
 | 2026-05-03 | Phase 7.3 EAC Date Feature — AWAITING_EAC_DATE state, _classify_eac_date LLM, SRARunner.eac_dates override, report CAM Forecast/Δ Days columns; 29 new tests | **404** |
+| 2026-05-04 | Phase 8.3 + TD-023 + TD-010 — beta-PERT SRA (_pert_variate, duration_opt/pess), --bootstrap-sessions CLI (agent/bootstrap_sessions.py), Whisper integration tests (@pytest.mark.integration), integration mark registered in conftest.py; 20 new unit tests | **424** |

@@ -3,6 +3,14 @@ Schedule Risk Assessment (SRA) runner — Monte Carlo simulation engine.
 
 Implements a pure-Python Monte Carlo simulation to estimate P50/P80/P95
 completion dates for each milestone task.
+
+Duration sampling:
+  - Default: triangular distribution ±SRA_DURATION_UNCERTAINTY around remaining.
+  - Beta-PERT (Phase 8.3): when a task dict contains ``duration_opt`` and
+    ``duration_pess`` (optimistic and pessimistic full-duration estimates in
+    days), the simulation uses the beta-PERT distribution (λ=4) instead of the
+    triangular fallback.  The three-point estimates are scaled by the remaining
+    completion fraction to produce per-task remaining-duration samples.
 """
 
 import logging
@@ -21,6 +29,36 @@ _ITERATIONS = int(os.getenv("SRA_ITERATIONS", "1000"))
 _UNCERTAINTY = float(os.getenv("SRA_DURATION_UNCERTAINTY", "0.10"))
 _HIGH_RISK_THRESHOLD = float(os.getenv("SRA_HIGH_RISK_THRESHOLD", "0.50"))
 _MEDIUM_RISK_THRESHOLD = float(os.getenv("SRA_MEDIUM_RISK_THRESHOLD", "0.75"))
+
+
+def _pert_variate(
+    rng: random.Random,
+    optimistic: float,
+    most_likely: float,
+    pessimistic: float,
+) -> float:
+    """Sample from the beta-PERT distribution (λ=4).
+
+    Maps the three-point estimate onto a scaled Beta(α₁, α₂) distribution:
+      α₁ = 1 + 4 * (m - a) / (b - a)
+      α₂ = 1 + 4 * (b - m) / (b - a)
+      sample = a + (b - a) * Beta(α₁, α₂)
+
+    Args:
+        optimistic:  Best-case value (lower bound).
+        most_likely: Modal value (the peak of the distribution).
+        pessimistic: Worst-case value (upper bound).
+
+    Returns:
+        A single float sample in [optimistic, pessimistic].
+    """
+    a, m, b = optimistic, most_likely, pessimistic
+    if b <= a:
+        # Degenerate: no spread — return most_likely
+        return m
+    alpha1 = 1.0 + 4.0 * (m - a) / (b - a)
+    alpha2 = 1.0 + 4.0 * (b - m) / (b - a)
+    return a + (b - a) * rng.betavariate(alpha1, alpha2)
 
 
 class SRARunner:
@@ -132,11 +170,30 @@ class SRARunner:
         if remaining <= 0:
             slip = 0.0
         else:
-            # Triangular distribution: optimistic, likely, pessimistic
-            low = -_UNCERTAINTY * remaining
-            mode = 0.0
-            high = _UNCERTAINTY * remaining
-            slip = rng.triangular(low, high, mode)
+            duration_opt = task.get("duration_opt")
+            duration_pess = task.get("duration_pess")
+
+            if duration_opt is not None and duration_pess is not None:
+                # Beta-PERT (Phase 8.3): scale three-point duration estimates by
+                # the remaining completion fraction to get remaining-duration bounds.
+                frac = 1.0 - task["percent_complete"] / 100.0
+                opt_rem = max(0.0, duration_opt * frac)
+                pess_rem = max(0.0, duration_pess * frac)
+                # Enforce opt ≤ mode ≤ pess (clamp if estimates are mis-ordered)
+                opt_rem = min(opt_rem, remaining)
+                pess_rem = max(pess_rem, remaining)
+                sampled = _pert_variate(rng, opt_rem, remaining, pess_rem)
+                slip = sampled - remaining
+                logger.debug(
+                    "action=sra_pert task=%s opt=%.1f ml=%.1f pess=%.1f "
+                    "sampled=%.1f slip=%.1f",
+                    task_id, opt_rem, remaining, pess_rem, sampled, slip,
+                )
+            else:
+                # Triangular fallback: ±uncertainty around the expected remaining
+                low = -_UNCERTAINTY * remaining
+                high = _UNCERTAINTY * remaining
+                slip = rng.triangular(low, high, 0.0)
 
         # Add worst-case slip from predecessors
         predecessor_slip = 0.0

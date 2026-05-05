@@ -2,7 +2,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 7.3 (partial) — EAC date interview collection complete. 404 tests passing.**
+**Current status: Phase 8.3 / TD-023 / TD-010 complete — beta-PERT SRA, bootstrap CLI, Whisper integration tests. 424 tests passing.**
 
 ---
 
@@ -45,7 +45,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 404 tests
+pytest tests/ -v         # all 424 tests (4 Whisper integration tests skipped)
 pytest tests/ -q         # quiet summary only
 ```
 

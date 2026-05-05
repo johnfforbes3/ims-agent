@@ -327,6 +327,9 @@ def main() -> None:
     group.add_argument("--init-mpp", action="store_true",
                        help="One-time: convert data/sample_ims.xml → data/ims_master/ as a "
                             "timestamped .mpp to seed the master IMS folder")
+    group.add_argument("--bootstrap-sessions", action="store_true",
+                       help="Identify CAMs with no Teams chat session and send bootstrap "
+                            "outreach (email via Graph API or manual instructions)")
 
     # --demo-interview arguments
     parser.add_argument("--meeting-url", default="",
@@ -339,6 +342,9 @@ def main() -> None:
     parser.add_argument("--cam-email", default="",
                         help="Teams UPN/email of the CAM (optional for --demo-chat; "
                              "omit to assign interview to first user who messages the bot)")
+    parser.add_argument("--wait", action="store_true",
+                        help="With --bootstrap-sessions: poll cam_sessions.json until "
+                             "all missing sessions are detected or the timeout elapses")
 
     args = parser.parse_args()
     ims_path = args.ims_file
@@ -375,6 +381,12 @@ def main() -> None:
         )
     elif args.init_mpp:
         _run_init_mpp(ims_path)
+    elif args.bootstrap_sessions:
+        from agent.bootstrap_sessions import bootstrap
+        sys.exit(bootstrap(
+            cam_filter=args.cam,
+            wait=args.wait,
+        ))
     elif args.cam_responder:
         from agent.graph_cam_responder import run_cam_responder
         explicit_cam = next((a.split("=")[1] for a in sys.argv if a.startswith("--cam=")), None)

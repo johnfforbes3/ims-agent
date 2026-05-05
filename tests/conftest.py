@@ -23,6 +23,15 @@ import pytest
 from unittest.mock import patch
 
 
+def pytest_configure(config):
+    """Register custom marks so pytest doesn't warn about unknown marks."""
+    config.addinivalue_line(
+        "markers",
+        "integration: marks tests that require external services or optional "
+        "packages (e.g. openai-whisper, Azure credentials). Skipped in CI.",
+    )
+
+
 @pytest.fixture(autouse=True)
 def no_mpp_master():
     """

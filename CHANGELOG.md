@@ -4,6 +4,34 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 8.3 + TD-023 + TD-010 (2026-05-04)
+
+**Summary:** Three items completed in one sprint: (1) beta-PERT three-point duration sampling in the SRA engine, (2) `--bootstrap-sessions` CLI flag for pilot onboarding, (3) Whisper STT integration test infrastructure. 416 unit tests passing (+12 new); 4 Whisper integration tests registered (skipped when openai-whisper is not installed).
+
+### Added
+
+- **`_pert_variate(rng, optimistic, most_likely, pessimistic)`** (`agent/sra_runner.py`) — beta-PERT distribution sampler (λ=4) using `random.betavariate(α₁, α₂)`. Maps three-point estimates onto a scaled Beta distribution: α₁ = 1 + 4*(m−a)/(b−a), α₂ = 1 + 4*(b−m)/(b−a).
+- **Beta-PERT integration in `SRARunner._simulate_chain_slip()`** — When a task dict contains `duration_opt` and `duration_pess` (optimistic/pessimistic full-duration estimates in days), slip is sampled from the beta-PERT distribution scaled by the remaining completion fraction. Falls back to the existing ±10% triangular distribution when estimates are absent. Backward compatible — no changes required for existing task dicts or call sites.
+- **`duration_opt` / `duration_pess` fields in `IMSFileHandler._parse_task()`** — Parser now reads optional `<OptimisticDuration>` and `<PessimisticDuration>` MSPDI fields from task XML. When absent (the default for standard MS Project exports), both fields are `None`. Fields are included in every task dict returned by `parse()`.
+- **`agent/bootstrap_sessions.py`** (new module, TD-023) — `find_missing_cams(identity_map, sessions, cam_filter)` identifies CAMs in `cam_identity_map.json` without a session in `cam_sessions.json`. `send_bootstrap_email(cam_email, cam_name, access_token, sender_email)` sends a proactive bootstrap email via Microsoft Graph `POST /users/{sender}/sendMail`. `bootstrap(cam_filter, wait)` orchestrates: acquires app-only Graph token via MSAL client credentials flow, emails missing CAMs (if credentials configured), falls back to manual instructions, optionally polls `cam_sessions.json` every 30s until all sessions appear.
+- **`main.py --bootstrap-sessions`** (TD-023) — New mutually-exclusive CLI mode. `--cam <name>` filters to one CAM; `--wait` enables polling mode with timeout controlled by `BOOTSTRAP_WAIT_TIMEOUT_SEC`.
+- **`tests/test_bootstrap_sessions.py`** — 17 new tests: `TestFindMissingCams` (7), `TestLoadHelpers` (4), `TestBootstrapOrchestrator` (3 + integration-style capsys checks).
+- **`TestBetaPERT`** in `tests/test_sra_runner.py` — 6 new tests: P50≤P80≤P95 ordering, pessimistic shift increases risk, symmetric estimate produces P50 near most-likely, optimistic skew produces earlier P50, triangular fallback when no estimates, full reproducibility under seed.
+- **`TestWhisperIntegration`** in `tests/test_stt_engine.py` (TD-010) — 4 tests marked `@pytest.mark.integration`; skip automatically when `openai-whisper` is not installed. Synthetic 440Hz WAV generated in-process using `wave` + `struct`. Tests validate: package import, model instantiation, `TranscriptionResult` structure from `transcribe_file()`, `FileNotFoundError` for missing path.
+- **`pytest_configure`** in `tests/conftest.py` — Registers `integration` mark to suppress `PytestUnknownMarkWarning`.
+
+### Changed
+
+- **`SRARunner._simulate_chain_slip()`** — Slip sampling block now branches: beta-PERT when `duration_opt` + `duration_pess` both present, triangular otherwise. `DEBUG` log line emitted for each PERT sample.
+- **`TECHNICAL-DEBT.md`** — TD-010 and TD-023 marked RESOLVED with implementation details.
+
+### Metrics
+
+- Total unit tests: **424** (all passing; +20 vs 404)
+- Integration tests registered: 4 (skipped when openai-whisper absent)
+
+---
+
 ## Phase 7.3 (partial) — EAC Date Interview Collection (2026-05-03)
 
 **Summary:** CAM interviews now collect projected completion dates (EAC dates) for all in-progress tasks (1–99% complete). EAC dates anchor the SRA Monte Carlo distribution and surface in the report as CAM Forecast + Δ Days columns. 404 tests passing (+29 new).

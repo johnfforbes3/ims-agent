@@ -205,6 +205,15 @@ class IMSFileHandler:
         # Duration in days (PT8H0M0S format or stored as minutes)
         duration_days = self._parse_duration_days(self._get_text(task_el, "Duration", "PT0H0M0S"))
 
+        # Optional three-point estimates for beta-PERT SRA (Phase 8.3).
+        # These are non-standard MSPDI fields written by some risk-analysis tools
+        # or custom MS Project exports.  When absent (the common case), both are
+        # None and SRARunner falls back to the ±10 % triangular distribution.
+        _opt_str = self._get_text(task_el, "OptimisticDuration", "")
+        _pess_str = self._get_text(task_el, "PessimisticDuration", "")
+        duration_opt: float | None = self._parse_duration_days(_opt_str) if _opt_str else None
+        duration_pess: float | None = self._parse_duration_days(_pess_str) if _pess_str else None
+
         # Predecessors
         predecessors: list[str] = []
         pred_link_el = task_el.find(_tag("PredecessorLink"))
@@ -228,6 +237,8 @@ class IMSFileHandler:
             "cam": cam,
             "is_milestone": is_milestone,
             "duration_days": duration_days,
+            "duration_opt": duration_opt,
+            "duration_pess": duration_pess,
             "notes": notes,
         }
 
