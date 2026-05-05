@@ -396,6 +396,42 @@ async def api_history():
     return JSONResponse(_load_json(_HISTORY_FILE) or [])
 
 
+@app.get("/api/diff/latest", dependencies=[Depends(_require_api_key)])
+async def api_diff_latest():
+    """
+    Return the most recent cycle that has a completed IMS diff file.
+
+    Scans data/ims_exports/ for *_diff.json files and returns the newest one's
+    data along with its cycle_id — so the dashboard can pre-populate the diff
+    viewer without the user needing to know a specific cycle ID.
+    """
+    import glob as _glob
+    from agent.ims_diff import load_diff
+
+    exports_dir = os.path.join(os.getenv("DATA_DIR", "data"), "ims_exports")
+    diff_files = sorted(_glob.glob(os.path.join(exports_dir, "*_diff.json")))
+    if not diff_files:
+        return JSONResponse({"error": "No diff files found"}, status_code=404)
+
+    # Walk newest → oldest; prefer the most recent cycle with at least 1 change,
+    # falling back to the most recent readable diff even if it has 0 changes.
+    fallback = None
+    for path in reversed(diff_files):
+        cycle_id = os.path.basename(path)[: -len("_diff.json")]
+        diff = load_diff(cycle_id)
+        if diff is None:
+            continue
+        if diff:                             # has actual changes — use this
+            return JSONResponse({"cycle_id": cycle_id, "changes": diff, "count": len(diff)})
+        if fallback is None:                 # record most-recent readable even if empty
+            fallback = (cycle_id, diff)
+
+    if fallback:
+        return JSONResponse({"cycle_id": fallback[0], "changes": fallback[1], "count": 0})
+
+    return JSONResponse({"error": "No readable diff files found"}, status_code=404)
+
+
 @app.get("/api/diff/{cycle_id}", dependencies=[Depends(_require_api_key)])
 async def api_diff(cycle_id: str):
     """

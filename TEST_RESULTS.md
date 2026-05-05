@@ -1,11 +1,82 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 8.3 + TD-023 + TD-010 — Beta-PERT SRA, Bootstrap CLI, Whisper Integration Tests  
+**Test Procedure Version:** Phase 9.1 — Dashboard Defaults, Feature Doc, Dark UI Overhaul  
 **Executed:** 2026-05-04  
-**Tester:** Claude (automated — unit tests + live Teams cycle + live dashboard endpoints + live Q&A)  
+**Tester:** Claude (automated — unit tests + live Teams cycle + full dashboard endpoint sweep + Q&A)  
 **Environment:** Windows 11, Python 3.13.3, MS Project Professional C2R  
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
-**Overall Result:** **PASS** — 424/424 unit tests passing (4 Whisper integration tests skipped — openai-whisper not installed); live cycle 20260505T004516Z completed; beta-PERT SRA active with 2 EAC overrides; all dashboard endpoints verified; Q&A engine verified; **zero open FAILs**
+**Overall Result:** **PASS** — 424/424 unit tests passing (4 Whisper integration skipped); live cycle 20260505T011814Z (IMS write committed, 10 changes, baseline snapshot set); all dashboard endpoints verified; new `/api/diff/latest` endpoint verified; dark UI deployed; 121-requirement feature doc created; **zero open FAILs**
+
+---
+
+> **2026-05-04 (Phase 9.1 — Dashboard Defaults, Feature Documentation, Dark UI Overhaul)**
+>
+> **§1 — Unit Test Suite (424 tests — no regressions)**
+> - `pytest tests/ -q` → **424 passed, 4 skipped** (Whisper integration; same count as Phase 8.3 baseline)
+> - All existing tests pass against new server.py (`/api/diff/latest` is additive only)
+> - **Zero failures; zero regressions**
+>
+> **§2 — New `/api/diff/latest` Endpoint (Item 1: Diff/Drift Defaults)**
+> - `GET /api/diff/latest` added to `agent/dashboard/server.py` before `GET /api/diff/{cycle_id}` (correct FastAPI route ordering)
+> - Logic: scans `data/ims_exports/*_diff.json`, walks newest→oldest, prefers most recent cycle with ≥1 change; falls back to most recent readable diff if all empty
+> - **VERIFIED**: `curl /api/diff/latest` → `{"cycle_id":"20260505T011814Z","changes":[...],"count":10}` ✅
+>
+> **§3 — Dashboard Auto-Load (Item 1: Diff/Drift Defaults)**
+> - `autoInitPanels()` function added to JS, called from `DOMContentLoaded`
+> - On page load: fetches `/api/diff/latest`, pre-populates cycle input, renders diff table; opens panel if changes > 0
+> - On page load: calls `loadChanges()` (blank = all cycles); opens panel if total_changes > 0
+> - On page load: calls `loadBaselineDrift()`; opens panel if drifted tasks > 0
+> - Friendly message on baseline-drift if no snapshot: "No baseline snapshot yet — established after first approved IMS write cycle"
+> - Count badges appear in panel summaries when data present
+>
+> **§4 — Dashboard Feature Documentation (Item 2)**
+> - `docs/DASHBOARD_FEATURES.md` created — 121 named requirements across 18 feature sections
+> - Covers: Header, Health Banner, Validation Alerts, KPI Cards, Milestone Risk, CAM Status, Top Risks, Tasks Behind, Critical Path, Recommended Actions, Health History, Q&A Chat, Cycle-In-Progress, IMS Diff Viewer, Change History, Baseline Drift, Trigger Button, Auto-Refresh
+> - Serves as acceptance checklist for all future UI changes
+>
+> **§5 — Dark UI Overhaul (Item 3)**
+> - Complete CSS rewrite in `index.html`: dark theme (`#0d1117` background, `#161b22` cards, `#21262d` borders)
+> - Color palette: danger `#f85149`, warning `#d29922`, ok `#3fb950`, accent `#58a6ff`, text `#e6edf3`/`#7d8590`
+> - KPI cards row replaces flat stat row: 4 bold metric cards with color-coded values
+> - Health banner updated: colored border + subtle tinted background, no light backgrounds
+> - Tables: dark headers, dark hover rows, badge colors updated to dark-theme variants
+> - Collapsible panels redesigned: chevron indicator, badge count in header, smooth transitions
+> - Chat widget: dark bubble styling, dark input field
+> - History rows: subtle separator lines, monospace cycle ID, right-aligned metadata
+> - Sticky header with app logo block
+> - Custom dark scrollbars
+> - All Jinja2 template bindings, polling logic, AJAX functions, chat persistence — **fully preserved**
+>
+> **§6 — Live Full Cycle (Teams Chat Transport)**
+> - `POST /api/trigger` → `{"status":"triggered","message":"Cycle started in background"}`
+> - MPP conversion: `IMS_2026-05-03_1918z.mpp` → `data/sample_ims.xml` (COM path)
+> - Cycle ID: `20260505T011814Z`
+> - CAMs: 4/5 responded (Alice Nguyen, Carol Smith, David Lee, Eva Johnson; Bob Martinez not reachable)
+> - Validation: **0 failures**, 70 warnings — IMS write **committed** ✅
+> - Diff file written: `20260505T011814Z_diff.json` — **10 field changes**
+> - Baseline snapshot set: `20260505T011814Z` — 6 tasks drifted from baseline
+> - CPM: 54 critical tasks, 27 near-critical, float = 0.00 days
+> - SRA: N=10,000, 8 milestones, EAC overrides active
+> - Health: **RED**
+> - Report saved: `reports/2026-05-04_ims_report.md` ✅
+> - Dashboard updated, Slack sent, cycle persisted ✅
+>
+> **§7 — Dashboard Endpoint Sweep (post-new-code restart)**
+> - `GET /health` → `{"status":"healthy","uptime_seconds":681,"cycle_active":false,...}` ✅
+> - `GET /api/status` → `{"cycle_active":false}` ✅
+> - `GET /api/state` → cycle_id=20260505T011814Z, health=RED, 54 critical path tasks ✅
+> - `GET /api/history` → multi-cycle array including new cycle ✅
+> - `GET /metrics?format=prometheus` → `ims_cycles_completed_total 1`, `ims_last_cycle_duration_seconds 640`, `ims_cam_response_rate` present ✅
+> - `GET /api/diff/latest` → `cycle_id=20260505T011814Z, count=10` ✅ (new endpoint confirmed working)
+> - `GET /api/diff/20260505T011814Z` → 10-row change array ✅
+> - `GET /api/changes` → `total_changes=15, from=20260503T173209Z, to=20260505T011814Z` ✅
+> - `GET /api/baseline-drift` → `baseline=20260505T011814Z, drifted=6` ✅
+>
+> **§8 — Q&A Interface**
+> - `POST /api/ask {"question":"What is the schedule health?"}` → direct=True, intent=["health"], RED narrative citing cycle 20260505T011814Z ✅
+> - `POST /api/ask {"question":"Which tasks have the most float risk on the critical path?"}` → direct=False (LLM-routed), intent=["critical_path","risks","float"] ✅
+>
+> Unit test count: **424/424 passed** (unchanged from Phase 8.3 — additive server change only)
 
 ---
 

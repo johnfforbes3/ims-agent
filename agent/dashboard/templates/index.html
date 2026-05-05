@@ -5,136 +5,350 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IMS Agent Dashboard</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-           background: #f5f5f5; color: #333; }
-    header { background: #1a237e; color: white; padding: 16px 24px;
-             display: flex; align-items: center; justify-content: space-between; }
-    header h1 { font-size: 20px; font-weight: 600; }
-    header small { font-size: 12px; opacity: 0.75; }
-    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px;
-                 display: grid; gap: 16px; }
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
 
-    /* Health banner */
-    .health-banner { border-radius: 8px; padding: 24px 32px;
-                     display: flex; align-items: center; gap: 24px; }
-    .health-banner.RED    { background: #fce8e6; border-left: 6px solid #d93025; }
-    .health-banner.YELLOW { background: #fef9e3; border-left: 6px solid #f9ab00; }
-    .health-banner.GREEN  { background: #e6f4ea; border-left: 6px solid #1e8e3e; }
-    .health-banner.UNKNOWN { background: #f5f5f5; border-left: 6px solid #aaa; }
-    .health-dot { font-size: 48px; line-height: 1; }
-    .health-label { font-size: 32px; font-weight: 700; }
-    .health-meta { font-size: 13px; color: #555; margin-top: 4px; }
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      background: #010409;
+      border-bottom: 1px solid #21262d;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-brand { display: flex; align-items: center; gap: 12px; }
+    .header-logo {
+      width: 32px; height: 32px; border-radius: 6px;
+      background: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: white;
+    }
+    .header-title { font-size: 16px; font-weight: 600; color: #e6edf3; }
+    .header-sub   { font-size: 11px; color: #7d8590; margin-top: 1px; }
+    .header-right { display: flex; align-items: center; gap: 20px; }
+    .header-meta  { text-align: right; }
+    .refresh-badge { font-size: 11px; color: #7d8590; }
+    .refresh-badge span { color: #58a6ff; font-weight: 600; }
+    .last-updated { font-size: 11px; color: #484f58; margin-top: 2px; }
 
-    /* Cards */
-    .card { background: white; border-radius: 8px; padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .card h2 { font-size: 14px; font-weight: 600; text-transform: uppercase;
-               letter-spacing: 0.05em; color: #666; margin-bottom: 12px; }
+    /* ── Layout container ────────────────────────────────────────────────── */
+    .container {
+      max-width: 1280px;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    /* ── Health banner ───────────────────────────────────────────────────── */
+    .health-banner {
+      border-radius: 10px;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      border: 1px solid;
+    }
+    .health-banner.RED    { background: rgba(248,81,73,0.08);  border-color: #f85149; }
+    .health-banner.YELLOW { background: rgba(210,153,34,0.08); border-color: #d29922; }
+    .health-banner.GREEN  { background: rgba(63,185,80,0.08);  border-color: #3fb950; }
+    .health-banner.UNKNOWN{ background: rgba(110,118,129,0.08); border-color: #30363d; }
+
+    .health-dot   { font-size: 40px; line-height: 1; }
+    .health-label {
+      font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+    }
+    .health-banner.RED    .health-label { color: #f85149; }
+    .health-banner.YELLOW .health-label { color: #d29922; }
+    .health-banner.GREEN  .health-label { color: #3fb950; }
+    .health-banner.UNKNOWN .health-label{ color: #7d8590; }
+    .health-meta { font-size: 12px; color: #7d8590; margin-top: 3px; }
+
+    /* ── KPI stat cards ──────────────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .kpi-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 18px 20px;
+      transition: border-color 0.15s;
+    }
+    .kpi-card:hover { border-color: #30363d; }
+    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: 0.06em; color: #7d8590; margin-bottom: 8px; }
+    .kpi-value { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: #e6edf3; }
+    .kpi-value.danger  { color: #f85149; }
+    .kpi-value.warning { color: #d29922; }
+    .kpi-value.ok      { color: #3fb950; }
+    .kpi-value.accent  { color: #58a6ff; }
+    .kpi-sub { font-size: 11px; color: #484f58; margin-top: 4px; }
+
+    /* ── Generic cards ───────────────────────────────────────────────────── */
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .card h2 {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: #7d8590; margin-bottom: 14px;
+    }
+
+    /* ── Grid layouts ────────────────────────────────────────────────────── */
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
-    /* Stats row */
-    .stat-row { display: flex; gap: 16px; }
-    .stat { flex: 1; text-align: center; }
-    .stat-value { font-size: 28px; font-weight: 700; color: #1a237e; }
-    .stat-label { font-size: 12px; color: #777; margin-top: 2px; }
-
-    /* Tables */
+    /* ── Tables ──────────────────────────────────────────────────────────── */
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { text-align: left; padding: 8px 10px; background: #f8f9fa;
-         border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #555; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    th {
+      text-align: left; padding: 8px 12px;
+      background: #0d1117;
+      border-bottom: 1px solid #21262d;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: #7d8590;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1c2128;
+      vertical-align: top;
+      color: #c9d1d9;
+    }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #fafafa; }
+    tr:hover td { background: rgba(177,186,196,0.04); }
 
-    /* Risk badges */
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
-             font-size: 11px; font-weight: 600; }
-    .badge-HIGH   { background: #fce8e6; color: #c5221f; }
-    .badge-MEDIUM { background: #fef9e3; color: #b06000; }
-    .badge-LOW    { background: #e6f4ea; color: #137333; }
+    /* ── Risk badges ─────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .badge-HIGH   { background: rgba(248,81,73,0.15);  color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+    .badge-MEDIUM { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+    .badge-LOW    { background: rgba(63,185,80,0.15);  color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
 
-    /* CAM status dots */
-    .dot { display: inline-block; width: 10px; height: 10px;
-           border-radius: 50%; margin-right: 6px; }
-    .dot-ok  { background: #1e8e3e; }
-    .dot-miss { background: #d93025; }
-    .dot-pend { background: #aaa; }
+    /* ── CAM status dots ─────────────────────────────────────────────────── */
+    .dot { display: inline-block; width: 8px; height: 8px;
+           border-radius: 50%; margin-right: 7px; }
+    .dot-ok   { background: #3fb950; box-shadow: 0 0 6px rgba(63,185,80,0.5); }
+    .dot-miss { background: #f85149; }
+    .dot-pend { background: #d29922; }
 
-    /* History chart (simple text-based) */
-    .history-row { display: flex; align-items: center; gap: 8px;
-                   margin-bottom: 6px; font-size: 12px; }
-    .history-bar { height: 16px; border-radius: 3px; min-width: 4px; }
-    .bar-RED    { background: #d93025; }
-    .bar-YELLOW { background: #f9ab00; }
-    .bar-GREEN  { background: #1e8e3e; }
-    .bar-UNKNOWN { background: #aaa; }
+    /* ── History chart ───────────────────────────────────────────────────── */
+    .history-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 8px; font-size: 12px;
+      padding: 6px 0; border-bottom: 1px solid #1c2128;
+    }
+    .history-row:last-child { border-bottom: none; }
+    .history-bar { height: 14px; border-radius: 3px; min-width: 4px; }
+    .bar-RED    { background: #f85149; }
+    .bar-YELLOW { background: #d29922; }
+    .bar-GREEN  { background: #3fb950; }
+    .bar-UNKNOWN{ background: #30363d; }
 
-    /* Action button */
-    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;
-           font-size: 13px; font-weight: 500; }
-    .btn-primary { background: #1a73e8; color: white; }
-    .btn-primary:hover { background: #1557b0; }
-    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      padding: 8px 16px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn-primary {
+      background: #1f6feb; color: white;
+    }
+    .btn-primary:hover:not(:disabled) { background: #388bfd; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-danger  { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+    .btn-ghost   { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+    .btn-ghost:hover { background: #30363d; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 5px; }
 
-    /* Risks list */
-    .risks-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6;
-                  color: #333; }
+    /* ── Text content areas ──────────────────────────────────────────────── */
+    .risks-text {
+      white-space: pre-wrap; font-size: 13px; line-height: 1.7;
+      color: #c9d1d9;
+    }
+    .narrative { font-size: 13px; line-height: 1.8; color: #8b949e; }
+    .empty { color: #484f58; font-style: italic; font-size: 13px; padding: 12px 0; }
 
-    /* Narrative */
-    .narrative { font-size: 13px; line-height: 1.7; color: #444; }
+    /* ── Critical path chips ─────────────────────────────────────────────── */
+    .chip {
+      display: inline-block;
+      background: rgba(31,111,235,0.15);
+      color: #58a6ff;
+      border: 1px solid rgba(88,166,255,0.2);
+      padding: 3px 10px; border-radius: 6px;
+      margin: 2px; font-size: 12px; font-weight: 500;
+    }
 
-    /* Empty state */
-    .empty { color: #aaa; font-style: italic; font-size: 13px; padding: 12px 0; }
+    /* ── Validation alert ────────────────────────────────────────────────── */
+    .alert-panel {
+      background: rgba(210,153,34,0.08);
+      border: 1px solid rgba(210,153,34,0.3);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .alert-panel summary {
+      cursor: pointer; font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: #d29922; padding: 4px 0; list-style: none;
+    }
+    .alert-panel summary::-webkit-details-marker { display: none; }
 
-    /* Auto-refresh indicator */
-    #refresh-badge { font-size: 11px; color: rgba(255,255,255,0.6); }
+    /* ── Cycle progress card ─────────────────────────────────────────────── */
+    .progress-card {
+      background: rgba(31,111,235,0.06);
+      border: 1px solid rgba(88,166,255,0.25);
+      border-radius: 10px; padding: 20px 24px;
+    }
+    .progress-card h2 { color: #58a6ff !important; }
 
-    /* Q&A Chat Widget */
-    .chat-messages { height: 320px; overflow-y: auto; border: 1px solid #e0e0e0;
-                     border-radius: 6px; padding: 12px; margin-bottom: 10px;
-                     background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
+    /* ── Collapsible panels (diff / changes / drift) ─────────────────────── */
+    .panel {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .panel summary {
+      cursor: pointer;
+      padding: 16px 20px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; font-weight: 600;
+      color: #c9d1d9;
+      list-style: none;
+      user-select: none;
+      border-bottom: 1px solid transparent;
+      transition: background 0.15s;
+    }
+    .panel summary::-webkit-details-marker { display: none; }
+    .panel summary:hover { background: rgba(177,186,196,0.04); }
+    .panel[open] summary { border-bottom-color: #21262d; color: #e6edf3; }
+    .panel-chevron { margin-left: auto; font-size: 10px; color: #484f58; transition: transform 0.2s; }
+    .panel[open] .panel-chevron { transform: rotate(180deg); }
+    .panel-icon { font-size: 15px; }
+    .panel-badge {
+      display: inline-block; padding: 1px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; background: rgba(88,166,255,0.15);
+      color: #58a6ff; border: 1px solid rgba(88,166,255,0.25);
+    }
+    .panel-body { padding: 20px 24px; }
+
+    /* Panel input row */
+    .panel-controls {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .panel-label { font-size: 12px; color: #7d8590; white-space: nowrap; }
+    .panel-input {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 12px;
+      padding: 5px 10px;
+      width: 200px;
+      outline: none;
+    }
+    .panel-input:focus { border-color: #1f6feb; }
+    .panel-status { font-size: 11px; color: #7d8590; }
+
+    /* ── Q&A Chat ────────────────────────────────────────────────────────── */
+    .chat-messages {
+      height: 340px; overflow-y: auto;
+      border: 1px solid #21262d; border-radius: 8px;
+      padding: 14px; margin-bottom: 12px;
+      background: #0d1117;
+      display: flex; flex-direction: column; gap: 12px;
+    }
     .chat-msg { max-width: 88%; }
-    .chat-msg.user { align-self: flex-end; }
+    .chat-msg.user      { align-self: flex-end; }
     .chat-msg.assistant { align-self: flex-start; }
-    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; }
-    .chat-msg.user .chat-bubble { background: #1a73e8; color: white; border-bottom-right-radius: 4px; }
-    .chat-msg.assistant .chat-bubble { background: white; border: 1px solid #e0e0e0;
-                                        color: #333; border-bottom-left-radius: 4px;
-                                        white-space: pre-wrap; }
-    .chat-bubble.thinking { color: #aaa; font-style: italic; }
-    .chat-source { font-size: 10px; color: #aaa; margin-top: 3px; }
+    .chat-bubble {
+      padding: 10px 14px; border-radius: 12px;
+      font-size: 13px; line-height: 1.65;
+    }
+    .chat-msg.user      .chat-bubble { background: #1f6feb; color: white; border-bottom-right-radius: 4px; }
+    .chat-msg.assistant .chat-bubble {
+      background: #161b22; border: 1px solid #21262d;
+      color: #c9d1d9; border-bottom-left-radius: 4px;
+      white-space: pre-wrap;
+    }
+    .chat-bubble.thinking { color: #484f58; font-style: italic; }
+    .chat-source  { font-size: 10px; color: #484f58; margin-top: 3px; }
     .chat-input-row { display: flex; gap: 8px; }
-    .chat-input-row input { flex: 1; padding: 9px 12px; border: 1px solid #ddd;
-                            border-radius: 4px; font-size: 13px; }
-    .chat-input-row input:focus { outline: none; border-color: #1a73e8; }
-    .chat-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-    .chat-chip { padding: 4px 10px; background: #e8eaf6; border-radius: 12px;
-                 font-size: 11px; color: #1a237e; cursor: pointer; border: none; }
-    .chat-chip:hover { background: #c5cae9; }
+    .chat-input {
+      flex: 1; padding: 10px 14px;
+      background: #0d1117; border: 1px solid #30363d;
+      border-radius: 6px; color: #e6edf3; font-size: 13px; outline: none;
+    }
+    .chat-input:focus { border-color: #1f6feb; }
+    .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chat-chip {
+      padding: 4px 11px; background: rgba(31,111,235,0.1);
+      border: 1px solid rgba(88,166,255,0.2);
+      border-radius: 20px; font-size: 11px;
+      color: #58a6ff; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .chat-chip:hover { background: rgba(31,111,235,0.2); }
 
-    @media (max-width: 768px) {
-      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    /* ── Scrollbars ──────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .kpi-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      header { padding: 12px 16px; }
+      .container { padding: 0 12px; }
     }
   </style>
 </head>
 <body>
 
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header>
-  <div>
-    <h1>IMS Agent — Schedule Dashboard</h1>
-    <small>ATLAS Program</small>
+  <div class="header-brand">
+    <div class="header-logo">IMS</div>
+    <div>
+      <div class="header-title">IMS Agent — Schedule Dashboard</div>
+      <div class="header-sub">ATLAS Program · AI Agent Server Rack</div>
+    </div>
   </div>
-  <div style="text-align:right">
-    <span id="refresh-badge">Auto-refresh in <span id="countdown">60</span>s</span><br>
-    <small>{{ state.get('last_updated', 'No data yet') }}</small>
+  <div class="header-right">
+    <div class="header-meta">
+      <div class="refresh-badge">Refresh in <span id="countdown">60</span>s</div>
+      <div class="last-updated">{{ state.get('last_updated', 'No data yet') }}</div>
+    </div>
+    <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
+      ▶ Trigger Cycle
+    </button>
   </div>
 </header>
 
 <div class="container">
 
-  <!-- Health Banner -->
+  <!-- ── Health Banner ──────────────────────────────────────────────────────── -->
   {% set health = state.get('schedule_health', 'UNKNOWN') %}
   {% set dot_map = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'} %}
   <div class="health-banner {{ health }}">
@@ -142,106 +356,98 @@
     <div>
       <div class="health-label">{{ health }}</div>
       <div class="health-meta">
-        Cycle {{ state.get('cycle_id', '—') }} &nbsp;|&nbsp;
+        Cycle {{ state.get('cycle_id', '—') }}&nbsp;&nbsp;·&nbsp;&nbsp;
         Last updated {{ state.get('last_updated', '—') }}
+        {% if state.get('ims_master_dir') %}
+        &nbsp;&nbsp;·&nbsp;&nbsp;
+        <span style="font-size:11px;color:#484f58" title="Open in Explorer for latest .mpp">
+          Master: <code style="font-family:monospace;color:#7d8590">{{ state.get('ims_master_dir','') }}</code>
+        </span>
+        {% endif %}
       </div>
-    </div>
-    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-      {% if state.get('ims_master_dir') %}
-      <span style="font-size:0.78rem;opacity:0.8" title="Open this folder in Explorer to find the latest .mpp">
-        Master IMS: <code style="user-select:all">{{ state.get('ims_master_dir','') }}</code>
-      </span>
-      {% endif %}
-      <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
-        Trigger Cycle Now
-      </button>
     </div>
   </div>
 
-  <!-- Validation Alerts (TD-015) — shown only when the cycle flagged anomalies -->
+  <!-- ── Validation Alerts ─────────────────────────────────────────────────── -->
   {% set holds = state.get('validation_holds', []) %}
   {% if holds %}
-  <details class="card" style="border-left:4px solid #f9ab00;background:#fffde7" open>
-    <summary style="cursor:pointer;font-weight:600;font-size:13px;text-transform:uppercase;
-                    letter-spacing:0.05em;color:#b06000;padding:4px 0">
-      ⚠ Validation Alerts — {{ holds | length }} hold(s) flagged this cycle
-    </summary>
-    <table style="margin-top:12px">
+  <details class="alert-panel" open>
+    <summary>⚠&nbsp; Validation Alerts — {{ holds | length }} hold(s) flagged this cycle</summary>
+    <table style="margin-top:14px">
       <thead>
-        <tr>
-          <th>Task</th>
-          <th>CAM</th>
-          <th>Rule</th>
-          <th>Detail</th>
-        </tr>
+        <tr><th>Task</th><th>CAM</th><th>Rule</th><th>Detail</th></tr>
       </thead>
       <tbody>
-        {% for h in holds %}
+      {% for h in holds %}
         <tr>
           <td>{{ h.get('task_id', '—') }}</td>
           <td>{{ h.get('cam_name', '—') }}</td>
           <td><span class="badge badge-MEDIUM">{{ h.get('rule', '—') }}</span></td>
-          <td style="font-size:12px;color:#555">{{ h.get('detail', '') }}</td>
+          <td style="font-size:12px;color:#7d8590">{{ h.get('detail', '') }}</td>
         </tr>
-        {% endfor %}
+      {% endfor %}
       </tbody>
     </table>
   </details>
   {% endif %}
 
-  <!-- Stats Row -->
-  <div class="card">
+  <!-- ── KPI Cards ─────────────────────────────────────────────────────────── -->
+  <div class="kpi-grid">
     {% set cr = state.get('completion_report', {}) %}
-    <div class="stat-row">
-      <div class="stat">
-        <div class="stat-value">{{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}</div>
-        <div class="stat-label">CAMs Responded</div>
+    {% set milestones = state.get('milestones', []) %}
+    {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
+    {% set cp = state.get('critical_path_task_ids', []) %}
+    {% set behind = state.get('tasks_behind', []) %}
+
+    <div class="kpi-card">
+      <div class="kpi-label">CAMs Responded</div>
+      <div class="kpi-value {% if cr.get('responded', 0) == cr.get('total', 1) %}ok{% elif cr.get('responded', 0) == 0 %}danger{% else %}warning{% endif %}">
+        {{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}
       </div>
-      <div class="stat">
-        {% set milestones = state.get('milestones', []) %}
-        {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
-        <div class="stat-value" style="color:#d93025">{{ high_risk | length }}</div>
-        <div class="stat-label">HIGH Risk Milestones</div>
+      <div class="kpi-sub">This cycle</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">HIGH Risk Milestones</div>
+      <div class="kpi-value {% if high_risk | length > 0 %}danger{% else %}ok{% endif %}">
+        {{ high_risk | length }}
       </div>
-      <div class="stat">
-        <div class="stat-value">{{ state.get('tasks_behind', []) | length }}</div>
-        <div class="stat-label">Tasks Behind w/ Blocker</div>
+      <div class="kpi-sub">of {{ milestones | length }} milestones</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Tasks Behind w/ Blocker</div>
+      <div class="kpi-value {% if behind | length > 0 %}warning{% else %}ok{% endif %}">
+        {{ behind | length }}
       </div>
-      <div class="stat">
-        {% set cp = state.get('critical_path_task_ids', []) %}
-        <div class="stat-value">{{ cp | length }}</div>
-        <div class="stat-label">Critical Path Tasks</div>
-      </div>
+      <div class="kpi-sub">Active blockers</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Critical Path Tasks</div>
+      <div class="kpi-value accent">{{ cp | length }}</div>
+      <div class="kpi-sub">Zero float</div>
     </div>
   </div>
 
-  <!-- Milestone Risk + CAM Status -->
+  <!-- ── Milestone Risk + CAM Status ──────────────────────────────────────── -->
   <div class="grid-2">
 
-    <!-- Milestone Risk Table -->
     <div class="card">
       <h2>Milestone Risk Summary</h2>
-      {% set milestones = state.get('milestones', []) %}
       {% if milestones %}
       <table>
         <thead>
-          <tr>
-            <th>Milestone</th>
-            <th>Baseline</th>
-            <th>P50</th>
-            <th>P95</th>
-            <th>On-Time</th>
-            <th>Risk</th>
-          </tr>
+          <tr><th>Milestone</th><th>Baseline</th><th>P50</th><th>P95</th><th>On-Time</th><th>Risk</th></tr>
         </thead>
         <tbody>
         {% for m in milestones | sort(attribute='prob_on_baseline') %}
           <tr>
-            <td>{{ m.milestone_name }}</td>
-            <td>{{ m.baseline_date }}</td>
+            <td style="color:#e6edf3;font-weight:500">{{ m.milestone_name }}</td>
+            <td style="color:#7d8590">{{ m.baseline_date }}</td>
             <td>{{ m.p50_date }}</td>
-            <td>{{ m.p95_date }}</td>
-            <td>{{ "%.0f%%" | format(m.prob_on_baseline * 100) }}</td>
+            <td style="color:#7d8590">{{ m.p95_date }}</td>
+            <td style="font-weight:600">{{ "%.0f%%" | format(m.prob_on_baseline * 100) }}</td>
             <td><span class="badge badge-{{ m.risk_level }}">{{ m.risk_level }}</span></td>
           </tr>
         {% endfor %}
@@ -252,19 +458,18 @@
       {% endif %}
     </div>
 
-    <!-- CAM Response Status -->
     <div class="card">
       <h2>CAM Response Status</h2>
       {% set cam_status = state.get('cam_response_status', {}) %}
       {% if cam_status %}
       <table id="cam-status-table">
         <thead>
-          <tr><th>CAM</th><th>Status</th><th>Attempts</th><th>Last Outcome</th></tr>
+          <tr><th>CAM</th><th>Status</th><th>Attempts</th><th>Outcome</th></tr>
         </thead>
         <tbody>
         {% for cam, info in cam_status.items() %}
           <tr data-cam="{{ cam }}">
-            <td>{{ cam }}</td>
+            <td style="font-weight:500;color:#e6edf3">{{ cam }}</td>
             <td class="cam-status-cell">
               {% if info.responded %}
                 <span class="dot dot-ok"></span>Responded
@@ -272,8 +477,8 @@
                 <span class="dot dot-miss"></span>No Response
               {% endif %}
             </td>
-            <td>{{ info.attempts }}</td>
-            <td>{{ info.last_outcome or '—' }}</td>
+            <td style="color:#7d8590">{{ info.attempts }}</td>
+            <td style="color:#7d8590">{{ info.last_outcome or '—' }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -285,10 +490,9 @@
 
   </div>
 
-  <!-- Top Risks + Tasks Behind -->
+  <!-- ── Top Risks + Tasks Behind ─────────────────────────────────────────── -->
   <div class="grid-2">
 
-    <!-- Top Risks -->
     <div class="card">
       <h2>Top Risks</h2>
       {% set risks = state.get('top_risks', '') %}
@@ -299,10 +503,8 @@
       {% endif %}
     </div>
 
-    <!-- Tasks Behind Schedule -->
     <div class="card">
       <h2>Tasks Behind Schedule (with Blockers)</h2>
-      {% set behind = state.get('tasks_behind', []) %}
       {% if behind %}
       <table>
         <thead>
@@ -311,10 +513,10 @@
         <tbody>
         {% for t in behind %}
           <tr>
-            <td>{{ t.task_id }}</td>
+            <td style="color:#58a6ff;font-weight:500">{{ t.task_id }}</td>
             <td>{{ t.cam_name }}</td>
-            <td>{{ t.percent_complete }}%</td>
-            <td style="font-size:12px;color:#555">{{ t.blocker }}</td>
+            <td><span class="badge badge-HIGH">{{ t.percent_complete }}%</span></td>
+            <td style="font-size:12px;color:#7d8590">{{ t.blocker }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -326,14 +528,13 @@
 
   </div>
 
-  <!-- Critical Path -->
+  <!-- ── Critical Path ──────────────────────────────────────────────────────── -->
   <div class="card">
-    <h2>Critical Path Task IDs</h2>
-    {% set cp = state.get('critical_path_task_ids', []) %}
+    <h2>Critical Path Task IDs — {{ cp | length }} tasks, 0 days float</h2>
     {% if cp %}
-    <div style="font-size:13px;color:#333;line-height:2">
+    <div style="line-height:2.2">
       {% for tid in cp %}
-        <span style="background:#e8eaf6;padding:2px 8px;border-radius:4px;margin:2px;display:inline-block">{{ tid }}</span>
+        <span class="chip">{{ tid }}</span>
       {% endfor %}
     </div>
     {% else %}
@@ -341,29 +542,31 @@
     {% endif %}
   </div>
 
-  <!-- Recommended Actions -->
+  <!-- ── Recommended Actions ───────────────────────────────────────────────── -->
   {% set actions = state.get('recommended_actions', '') %}
   {% if actions %}
-  <div class="card">
+  <div class="card" style="border-left:3px solid #1f6feb">
     <h2>Recommended Actions for PM</h2>
     <div class="risks-text">{{ actions }}</div>
   </div>
   {% endif %}
 
-  <!-- Cycle History -->
+  <!-- ── Cycle Health History ──────────────────────────────────────────────── -->
   <div class="card">
-    <h2>Schedule Health History (Last {{ history | length }} Cycles)</h2>
+    <h2>Schedule Health History — Last {{ history | length }} Cycles</h2>
     {% if history %}
     {% for entry in history | reverse %}
     <div class="history-row">
-      <div style="width:160px;color:#555;font-size:11px">
+      <div style="width:140px;color:#484f58;font-size:11px;font-family:monospace">
         {{ entry.get('timestamp', '')[:10] }}
       </div>
       {% set h = entry.get('schedule_health', 'UNKNOWN') %}
-      <div class="history-bar bar-{{ h }}" style="width:{{ 60 if h == 'RED' else (40 if h == 'YELLOW' else 20) }}px"></div>
+      <div class="history-bar bar-{{ h }}" style="width:{{ 56 if h == 'RED' else (32 if h == 'YELLOW' else 16) }}px"></div>
       <span class="badge badge-{{ h }}">{{ h }}</span>
-      <span style="color:#888;font-size:11px">
-        {{ entry.get('cams_responded', '?') }}/{{ entry.get('cams_total', '?') }} CAMs &nbsp;|&nbsp; {{ entry.get('cycle_id', '') }}
+      <span style="color:#484f58;font-size:11px;margin-left:auto">
+        {{ entry.get('cams_responded', '?') }}/{{ entry.get('cams_total', '?') }} CAMs
+        &nbsp;·&nbsp;
+        <code style="font-size:10px;color:#30363d">{{ entry.get('cycle_id', '') }}</code>
       </span>
     </div>
     {% endfor %}
@@ -372,18 +575,18 @@
     {% endif %}
   </div>
 
-  <!-- Q&A Chat Widget -->
+  <!-- ── Q&A Chat Widget ───────────────────────────────────────────────────── -->
   <div class="card">
     <h2>Ask the IMS Agent</h2>
-    <div class="chat-examples">
+    <div class="chat-chips">
       <button class="chat-chip" onclick="askQuestion('What is the current critical path?')">Critical path?</button>
       <button class="chat-chip" onclick="askQuestion('What are the top risks right now?')">Top risks?</button>
       <button class="chat-chip" onclick="askQuestion('What should I focus on this week?')">Focus this week?</button>
-      <button class="chat-chip" onclick="askQuestion('What is the probability of hitting PDR on time?')">PDR probability?</button>
-      <button class="chat-chip" onclick="askQuestion('What is Alice Nguyen behind on?')">Alice Nguyen status?</button>
-      <button class="chat-chip" onclick="askQuestion('Why is SE-03 behind?')">Why is SE-03 behind?</button>
+      <button class="chat-chip" onclick="askQuestion('What is the probability of hitting the terminal milestone on time?')">Terminal milestone?</button>
+      <button class="chat-chip" onclick="askQuestion('What is Alice Nguyen behind on?')">Alice Nguyen?</button>
       <button class="chat-chip" onclick="askQuestion('What changed since last cycle?')">Changes this cycle?</button>
       <button class="chat-chip" onclick="askQuestion('What is the schedule health?')">Schedule health?</button>
+      <button class="chat-chip" onclick="askQuestion('Which blockers need PM action today?')">PM actions?</button>
     </div>
     <div class="chat-messages" id="chat-messages">
       <div class="chat-msg assistant">
@@ -391,97 +594,108 @@
       </div>
     </div>
     <div class="chat-input-row">
-      <input type="text" id="chat-input" placeholder="e.g. What is the probability of hitting CDR on time?"
+      <input class="chat-input" type="text" id="chat-input"
+             placeholder="e.g. What is the probability of hitting CDR on time?"
              onkeydown="if(event.key==='Enter') sendChat()" maxlength="500">
       <button class="btn btn-primary" onclick="sendChat()" id="chat-send-btn">Ask</button>
-      <button class="btn" onclick="clearChat()" style="background:#f1f3f4;color:#555;margin-left:4px" title="Clear chat">✕</button>
+      <button class="btn btn-ghost" onclick="clearChat()" style="margin-left:2px" title="Clear chat">✕</button>
     </div>
   </div>
 
-  <!-- Current Cycle Progress (shown when active; JS updates it live) -->
+  <!-- ── Cycle In Progress ─────────────────────────────────────────────────── -->
   {% set current = state.get('current_cycle', {}) %}
   {% set _phase = current.get('phase', '') %}
   {% set _active = _phase and _phase not in ['complete', 'failed'] %}
-  <div class="card" id="cycle-progress-card"
-       style="border-left:4px solid #1a73e8;{{ 'display:none' if not _active else '' }}">
+  <div class="progress-card" id="cycle-progress-card"
+       style="{{ 'display:none' if not _active else '' }}">
     <h2>Cycle In Progress</h2>
-    <p style="font-size:13px" id="cycle-progress-text">
-      <strong>Phase:</strong> <span id="cp-phase">{{ _phase.upper() if _phase else '—' }}</span>
-      &nbsp;|&nbsp;
-      <strong>Cycle ID:</strong> <span id="cp-cycle">{{ current.get('cycle_id', '—') }}</span>
-      &nbsp;|&nbsp;
-      <strong>CAMs:</strong> <span id="cp-cams">{{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}</span>
+    <p style="font-size:13px;color:#8b949e">
+      <strong style="color:#58a6ff">Phase:</strong>
+      <span id="cp-phase">{{ _phase.upper() if _phase else '—' }}</span>
+      &nbsp;·&nbsp;
+      <strong style="color:#58a6ff">Cycle:</strong>
+      <span id="cp-cycle" style="font-family:monospace">{{ current.get('cycle_id', '—') }}</span>
+      &nbsp;·&nbsp;
+      <strong style="color:#58a6ff">CAMs:</strong>
+      <span id="cp-cams">{{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}</span>
     </p>
-    <!-- Per-CAM live progress pills — updated by _updateCycleCard() via AJAX -->
-    <div id="cp-cam-progress" style="margin-top:8px;font-size:12px;line-height:2"></div>
+    <div id="cp-cam-progress" style="margin-top:10px;font-size:12px;line-height:2.2"></div>
   </div>
 
-  <!-- What Changed (7.4.1) -->
-  <details class="card" id="what-changed-panel">
-    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#1a73e8">
-      🔄 What Changed — IMS Diff Viewer
+  <!-- ── What Changed — IMS Diff Viewer ───────────────────────────────────── -->
+  <details class="panel" id="what-changed-panel">
+    <summary>
+      <span class="panel-icon">🔄</span>
+      <span>What Changed — IMS Diff Viewer</span>
+      <span class="panel-badge" id="diff-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
     </summary>
-    <div style="margin-top:12px">
-      <label style="font-size:12px;color:#555">Cycle ID:
-        <input id="diff-cycle-input" type="text"
+    <div class="panel-body">
+      <div class="panel-controls">
+        <span class="panel-label">Cycle ID:</span>
+        <input class="panel-input" id="diff-cycle-input" type="text"
                value="{{ state.get('cycle_id', '') }}"
-               style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
-      </label>
-      <button class="btn btn-primary" onclick="loadDiff()" style="margin-left:8px;padding:4px 12px;font-size:12px">Load</button>
-      <span id="diff-status" style="font-size:11px;color:#888;margin-left:8px"></span>
-      <div id="diff-table-container" style="margin-top:12px;overflow-x:auto"></div>
+               placeholder="e.g. 20260505T004516Z">
+        <button class="btn btn-primary btn-sm" onclick="loadDiff()">Load</button>
+        <span class="panel-status" id="diff-status"></span>
+      </div>
+      <div id="diff-table-container" style="overflow-x:auto"></div>
     </div>
   </details>
 
-  <!-- Change History (7.4.2) -->
-  <details class="card" id="change-history-panel">
-    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#1a73e8">
-      📋 Change History — Cumulative Diff
+  <!-- ── Change History — Cumulative Diff ─────────────────────────────────── -->
+  <details class="panel" id="change-history-panel">
+    <summary>
+      <span class="panel-icon">📋</span>
+      <span>Change History — Cumulative Diff</span>
+      <span class="panel-badge" id="ch-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
     </summary>
-    <div style="margin-top:12px">
-      <span style="font-size:12px;color:#555">From cycle:</span>
-      <input id="ch-from" type="text" placeholder="earliest (leave blank for all)"
-             style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
-      <span style="font-size:12px;color:#555;margin-left:8px">To:</span>
-      <input id="ch-to" type="text" placeholder="latest (leave blank for all)"
-             style="font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;width:200px;margin-left:6px">
-      <button class="btn btn-primary" onclick="loadChanges()" style="margin-left:8px;padding:4px 12px;font-size:12px">Load</button>
-      <a id="ch-csv-link" href="#" style="display:none;margin-left:8px;font-size:12px">⬇ CSV</a>
-      <span id="ch-status" style="font-size:11px;color:#888;margin-left:8px"></span>
-      <div id="ch-table-container" style="margin-top:12px;overflow-x:auto"></div>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <span class="panel-label">From:</span>
+        <input class="panel-input" id="ch-from" type="text" placeholder="earliest (blank = all)">
+        <span class="panel-label">To:</span>
+        <input class="panel-input" id="ch-to" type="text" placeholder="latest (blank = all)">
+        <button class="btn btn-primary btn-sm" onclick="loadChanges()">Load</button>
+        <a id="ch-csv-link" href="#" style="display:none;font-size:12px;color:#58a6ff;margin-left:4px">⬇ CSV</a>
+        <span class="panel-status" id="ch-status"></span>
+      </div>
+      <div id="ch-table-container" style="overflow-x:auto"></div>
     </div>
   </details>
 
-  <!-- Baseline Drift (7.4.3) -->
-  <details class="card" id="baseline-drift-panel">
-    <summary style="cursor:pointer;font-weight:600;font-size:14px;color:#b06000">
-      📐 Baseline Drift Report
+  <!-- ── Baseline Drift Report ─────────────────────────────────────────────── -->
+  <details class="panel" id="baseline-drift-panel">
+    <summary>
+      <span class="panel-icon">📐</span>
+      <span>Baseline Drift Report</span>
+      <span class="panel-badge" id="bd-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
     </summary>
-    <div style="margin-top:12px">
-      <button class="btn btn-primary" onclick="loadBaselineDrift()" style="padding:4px 12px;font-size:12px">Load</button>
-      <span id="bd-status" style="font-size:11px;color:#888;margin-left:8px"></span>
-      <div id="bd-table-container" style="margin-top:12px;overflow-x:auto"></div>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadBaselineDrift()">Load</button>
+        <span class="panel-status" id="bd-status"></span>
+      </div>
+      <div id="bd-table-container" style="overflow-x:auto"></div>
     </div>
   </details>
 
 </div><!-- /container -->
 
 <script>
-  // ── Unified polling & live countdown ─────────────────────────────────────
-  // When a cycle is idle:  poll every 60 s, full-page reload each time.
-  // When a cycle is active: poll every 5 s, update progress card + CAM table
-  //   in-place via AJAX; only do a full reload when the cycle finishes.
+  // ── Polling & countdown ───────────────────────────────────────────────────
   const countdownEl = document.getElementById('countdown');
-  let _pollMs    = 60000;      // 60 s idle, 5 s active
-  let _nextPollAt = Date.now() + _pollMs;  // start countdown from now
+  let _pollMs     = 60000;
+  let _nextPollAt = Date.now() + _pollMs;
   let _wasActive  = false;
-  let _polling    = false;     // guard against concurrent polls
+  let _polling    = false;
 
-  // Live CAM status label helpers
   const _statusHtml = {
     complete:  '<span class="dot dot-ok"></span>Responded',
     no_answer: '<span class="dot dot-miss"></span>No Response',
-    pending:   '<span class="dot dot-pend"></span>Interviewing\u2026',
+    pending:   '<span class="dot dot-pend"></span>Interviewing…',
   };
 
   function _updateCycleCard(state) {
@@ -497,9 +711,6 @@
         (cur.cams_responded || 0) + '/' + (cur.cams_total || 0);
       card.style.display = '';
 
-      // ── Live CAM status table ──────────────────────────────────────
-      // During the interviewing phase, cur.cam_status_live holds per-CAM
-      // progress written by cycle_runner after each session completes.
       const camLive = cur.cam_status_live;
       if (camLive && typeof camLive === 'object') {
         const table = document.getElementById('cam-status-table');
@@ -513,13 +724,11 @@
             if (cell) cell.innerHTML = _statusHtml[liveStatus] || cell.innerHTML;
           }
         }
-
-        // ── Per-CAM progress pills (7.4.1) ────────────────────────
         const pills = Object.entries(camLive).map(([name, st]) => {
           const icon = st === 'complete' ? '✓' : st === 'no_answer' ? '✗' : '⏳';
-          const col  = st === 'complete' ? '#1e8e3e' : st === 'no_answer' ? '#d93025' : '#f9ab00';
-          return `<span style="border:1px solid ${col};color:${col};border-radius:12px;`
-               + `padding:1px 10px;margin:2px;display:inline-block">${icon} ${name}</span>`;
+          const col  = st === 'complete' ? '#3fb950' : st === 'no_answer' ? '#f85149' : '#d29922';
+          return `<span style="border:1px solid ${col};color:${col};border-radius:20px;`
+               + `padding:2px 11px;margin:2px;display:inline-block;font-size:12px">${icon} ${name}</span>`;
         }).join(' ');
         const prog = document.getElementById('cp-cam-progress');
         if (prog) prog.innerHTML = pills;
@@ -529,39 +738,94 @@
     }
   }
 
-  // ── What Changed (7.4.1) — load single-cycle diff ────────────────────────
+  async function _poll() {
+    if (_polling) return;
+    _polling = true;
+    try {
+      const status = await fetch('/api/status').then(r => r.json());
+      const active = !!status.cycle_active;
+      if (_wasActive && !active) { window.location.reload(); return; }
+      _wasActive = active;
+      _pollMs    = active ? 5000 : 60000;
+      if (active) {
+        const state = await fetch('/api/state').then(r => r.json());
+        _updateCycleCard(state);
+      }
+    } catch (_) { _pollMs = 10000; }
+    finally     { _polling = false; }
+    _nextPollAt = Date.now() + _pollMs;
+  }
+
+  setInterval(() => {
+    const rem = Math.max(0, Math.ceil((_nextPollAt - Date.now()) / 1000));
+    if (countdownEl) countdownEl.textContent = rem;
+    if (!_polling && Date.now() >= _nextPollAt) _poll();
+  }, 1000);
+  _poll();
+
+  // ── Manual trigger ────────────────────────────────────────────────────────
+  function triggerCycle() {
+    const btn = document.getElementById('trigger-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting…';
+    fetch('/api/trigger', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        btn.textContent = data.status === 'triggered' ? '✓ Cycle Started' : '✗ Error';
+        setTimeout(() => window.location.reload(), 2000);
+      })
+      .catch(() => { btn.textContent = '✗ Error — check logs'; btn.disabled = false; });
+  }
+
+  // ── Diff helper: render a table of change rows ────────────────────────────
+  function _renderDiffTable(changes) {
+    if (!changes.length)
+      return '<p class="empty">No field changes recorded for this cycle.</p>';
+    return '<table><thead><tr>'
+      + '<th>Task</th><th>CAM</th><th>Field</th><th>Old</th><th>New</th>'
+      + '</tr></thead><tbody>'
+      + changes.map(c =>
+          `<tr><td style="color:#e6edf3;font-weight:500">${escapeHtml(c.task_name||c.task_id)}</td>`
+        + `<td style="color:#7d8590">${escapeHtml(c.cam_name||'—')}</td>`
+        + `<td>${escapeHtml(c.field)}</td>`
+        + `<td style="color:#484f58">${escapeHtml(String(c.old_value??'—'))}</td>`
+        + `<td style="color:#3fb950;font-weight:600">${escapeHtml(String(c.new_value??'—'))}</td></tr>`
+        ).join('')
+      + '</tbody></table>';
+  }
+
+  // ── What Changed — single-cycle diff ─────────────────────────────────────
   async function loadDiff() {
-    const cycleId = document.getElementById('diff-cycle-input').value.trim();
-    const status  = document.getElementById('diff-status');
+    const cycleId   = document.getElementById('diff-cycle-input').value.trim();
+    const status    = document.getElementById('diff-status');
     const container = document.getElementById('diff-table-container');
+    const badge     = document.getElementById('diff-count-badge');
     if (!cycleId) { status.textContent = 'Enter a cycle ID.'; return; }
     status.textContent = 'Loading…';
     try {
       const data = await fetch(`/api/diff/${encodeURIComponent(cycleId)}`).then(r => r.json());
-      if (data.error) { status.textContent = data.error; container.innerHTML = ''; return; }
-      if (!Array.isArray(data) || data.length === 0) {
-        status.textContent = 'No changes recorded for this cycle.';
-        container.innerHTML = '';
+      if (data.error) {
+        status.textContent = data.error;
+        container.innerHTML = `<p class="empty">${escapeHtml(data.error)}</p>`;
+        badge.style.display = 'none';
         return;
       }
-      status.textContent = `${data.length} change(s)`;
-      container.innerHTML = '<table><thead><tr>'
-        + '<th>Task</th><th>CAM</th><th>Field</th><th>Old</th><th>New</th>'
-        + '</tr></thead><tbody>'
-        + data.map(c => `<tr><td>${c.task_name||c.task_id}</td><td>${c.cam_name||'—'}</td>`
-            + `<td>${c.field}</td><td style="color:#888">${c.old_value??'—'}</td>`
-            + `<td><strong>${c.new_value??'—'}</strong></td></tr>`).join('')
-        + '</tbody></table>';
+      const changes = Array.isArray(data) ? data : (data.changes || []);
+      status.textContent = `${changes.length} change(s) — cycle ${cycleId}`;
+      badge.textContent  = changes.length;
+      badge.style.display = changes.length ? '' : 'none';
+      container.innerHTML = _renderDiffTable(changes);
     } catch (e) { status.textContent = 'Error: ' + e; }
   }
 
-  // ── Change History (7.4.2) — cumulative diff across a cycle range ─────────
+  // ── Change History — cumulative diff ─────────────────────────────────────
   async function loadChanges() {
     const from = document.getElementById('ch-from').value.trim();
     const to   = document.getElementById('ch-to').value.trim();
-    const status = document.getElementById('ch-status');
+    const status    = document.getElementById('ch-status');
     const container = document.getElementById('ch-table-container');
     const csvLink   = document.getElementById('ch-csv-link');
+    const badge     = document.getElementById('ch-count-badge');
     status.textContent = 'Loading…';
     let url = '/api/changes';
     const params = new URLSearchParams();
@@ -570,120 +834,132 @@
     if ([...params].length) url += '?' + params;
     try {
       const data = await fetch(url).then(r => r.json());
-      if (data.error) { status.textContent = data.error; container.innerHTML = ''; return; }
+      if (data.error) {
+        status.textContent = data.error;
+        container.innerHTML = `<p class="empty">${escapeHtml(data.error)}</p>`;
+        badge.style.display = 'none';
+        return;
+      }
       const changes = data.changes || [];
-      status.textContent = `${data.total_changes} net change(s) across ${data.from_cycle} → ${data.to_cycle}`;
+      status.textContent = `${data.total_changes} net change(s) · ${data.from_cycle} → ${data.to_cycle}`;
+      badge.textContent  = data.total_changes;
+      badge.style.display = data.total_changes ? '' : 'none';
       csvLink.href = url + (url.includes('?') ? '&' : '?') + 'format=csv';
       csvLink.style.display = '';
-      if (!changes.length) { container.innerHTML = '<p class="empty">No changes in range.</p>'; return; }
+      if (!changes.length) {
+        container.innerHTML = '<p class="empty">No changes in range.</p>';
+        return;
+      }
       container.innerHTML = '<table><thead><tr>'
         + '<th>Task</th><th>CAM</th><th>Field</th><th>Old</th><th>New</th><th>Hops</th><th>Cycles</th>'
         + '</tr></thead><tbody>'
-        + changes.map(c => `<tr><td>${c.task_name||c.task_id}</td><td>${c.cam_name||'—'}</td>`
-            + `<td>${c.field}</td><td style="color:#888">${c.old_value??'—'}</td>`
-            + `<td><strong>${c.new_value??'—'}</strong></td><td>${c.hop_count}</td>`
-            + `<td style="font-size:11px;color:#888">${(c.contributing_cycle_ids||[]).join(', ')}</td></tr>`).join('')
+        + changes.map(c =>
+            `<tr><td style="color:#e6edf3;font-weight:500">${escapeHtml(c.task_name||c.task_id)}</td>`
+          + `<td style="color:#7d8590">${escapeHtml(c.cam_name||'—')}</td>`
+          + `<td>${escapeHtml(c.field)}</td>`
+          + `<td style="color:#484f58">${escapeHtml(String(c.old_value??'—'))}</td>`
+          + `<td style="color:#3fb950;font-weight:600">${escapeHtml(String(c.new_value??'—'))}</td>`
+          + `<td style="color:#7d8590">${c.hop_count}</td>`
+          + `<td style="font-size:11px;color:#484f58">${escapeHtml((c.contributing_cycle_ids||[]).join(', '))}</td></tr>`
+          ).join('')
         + '</tbody></table>';
     } catch (e) { status.textContent = 'Error: ' + e; }
   }
 
-  // ── Baseline Drift (7.4.3) ────────────────────────────────────────────────
+  // ── Baseline Drift ────────────────────────────────────────────────────────
   async function loadBaselineDrift() {
-    const status = document.getElementById('bd-status');
+    const status    = document.getElementById('bd-status');
     const container = document.getElementById('bd-table-container');
+    const badge     = document.getElementById('bd-count-badge');
     status.textContent = 'Loading…';
     try {
       const data = await fetch('/api/baseline-drift').then(r => r.json());
-      if (data.error) { status.textContent = `Baseline: ${data.error}`; container.innerHTML = ''; return; }
-      const drift = data.task_drift || [];
+      if (data.error) {
+        const msg = data.error.includes('No baseline')
+          ? 'No baseline snapshot yet — established after the first approved IMS write cycle.'
+          : data.error;
+        status.textContent = msg;
+        container.innerHTML = `<p class="empty">${escapeHtml(msg)}</p>`;
+        badge.style.display = 'none';
+        return;
+      }
+      const drift    = data.task_drift || [];
       const baseline = data.baseline_cycle_id || '?';
-      status.textContent = `Baseline: ${baseline} | ${drift.length} task(s) drifted`;
-      if (!drift.length) { container.innerHTML = '<p class="empty">No drift from baseline.</p>'; return; }
+      status.textContent = `Baseline: ${baseline} · ${drift.length} task(s) drifted`;
+      badge.textContent  = drift.length;
+      badge.style.display = drift.length ? '' : 'none';
+      if (!drift.length) {
+        container.innerHTML = '<p class="empty">No drift from baseline — all tasks within tolerance.</p>';
+        return;
+      }
       container.innerHTML = '<table><thead><tr>'
-        + '<th>Task</th><th>CAM</th><th>Baseline Finish</th><th>Current Finish</th><th>Slip (days)</th><th>Δ%</th>'
+        + '<th>Task</th><th>CAM</th><th>Baseline Finish</th><th>Current Finish</th>'
+        + '<th>Slip (days)</th><th>Δ%</th>'
         + '</tr></thead><tbody>'
         + drift.map(t => {
             const slip = t.finish_slip_days;
-            const col  = slip >= 30 ? '#d93025' : slip >= 14 ? '#f9ab00' : '#333';
-            return `<tr><td>${t.name||t.task_id}${t.is_milestone?' ⛳':''}</td><td>${t.cam||'—'}</td>`
-              + `<td style="color:#888">${t.baseline_finish||'—'}</td><td>${t.current_finish||'—'}</td>`
-              + `<td style="color:${col};font-weight:bold">${slip!=null?slip:'—'}</td>`
-              + `<td style="color:${(t.pct_delta||0)<0?'#d93025':'#1e8e3e'}">${(t.pct_delta||0)>0?'+':''}${t.pct_delta||0}%</td></tr>`;
+            const slipCol = slip >= 30 ? '#f85149' : slip >= 14 ? '#d29922' : '#c9d1d9';
+            const pctCol  = (t.pct_delta||0) < 0 ? '#f85149' : '#3fb950';
+            return `<tr>`
+              + `<td style="color:#e6edf3;font-weight:500">${escapeHtml(t.name||t.task_id)}${t.is_milestone?' ⛳':''}</td>`
+              + `<td style="color:#7d8590">${escapeHtml(t.cam||'—')}</td>`
+              + `<td style="color:#484f58">${escapeHtml(t.baseline_finish||'—')}</td>`
+              + `<td>${escapeHtml(t.current_finish||'—')}</td>`
+              + `<td style="color:${slipCol};font-weight:700">${slip!=null?'+'+slip:'—'}</td>`
+              + `<td style="color:${pctCol}">${(t.pct_delta||0)>0?'+':''}${t.pct_delta||0}%</td></tr>`;
           }).join('')
         + '</tbody></table>';
     } catch (e) { status.textContent = 'Error: ' + e; }
   }
 
-  async function _poll() {
-    if (_polling) return;
-    _polling = true;
+  // ── Auto-init bottom panels on page load ──────────────────────────────────
+  // Fires after DOM is ready: pre-loads the most recent diff, all change
+  // history, and baseline drift so every panel has data before the user opens it.
+  async function autoInitPanels() {
+    // 1. Most-recent diff via /api/diff/latest
     try {
-      const status = await fetch('/api/status').then(r => r.json());
-      const active = !!status.cycle_active;
-
-      if (_wasActive && !active) {
-        // Cycle just completed — reload to pull in fresh health/report data
-        window.location.reload();
-        return;
+      const data = await fetch('/api/diff/latest').then(r => r.json());
+      if (!data.error && data.cycle_id) {
+        document.getElementById('diff-cycle-input').value = data.cycle_id;
+        const changes = data.changes || [];
+        const status  = document.getElementById('diff-status');
+        const badge   = document.getElementById('diff-count-badge');
+        status.textContent = `${changes.length} change(s) — cycle ${data.cycle_id}`;
+        badge.textContent  = changes.length;
+        badge.style.display = changes.length ? '' : 'none';
+        document.getElementById('diff-table-container').innerHTML = _renderDiffTable(changes);
+        if (changes.length) document.getElementById('what-changed-panel').open = true;
       }
+    } catch (_) { /* server may not be restarted yet */ }
 
-      _wasActive = active;
-      _pollMs    = active ? 5000 : 60000;
+    // 2. Full change history (blank from/to = all cycles)
+    try {
+      await loadChanges();
+      const chBadge = document.getElementById('ch-count-badge');
+      if (chBadge && chBadge.textContent && parseInt(chBadge.textContent) > 0)
+        document.getElementById('change-history-panel').open = true;
+    } catch (_) {}
 
-      if (active) {
-        const state = await fetch('/api/state').then(r => r.json());
-        _updateCycleCard(state);
-      }
-    } catch (_) {
-      _pollMs = 10000;   // network hiccup — back off briefly
-    } finally {
-      _polling = false;
-    }
-    _nextPollAt = Date.now() + _pollMs;
+    // 3. Baseline drift
+    try {
+      await loadBaselineDrift();
+      const bdBadge = document.getElementById('bd-count-badge');
+      if (bdBadge && bdBadge.style.display !== 'none')
+        document.getElementById('baseline-drift-panel').open = true;
+    } catch (_) {}
   }
 
-  // Tick every second: update countdown badge and fire poll when due
-  setInterval(() => {
-    const remaining = Math.max(0, Math.ceil((_nextPollAt - Date.now()) / 1000));
-    if (countdownEl) countdownEl.textContent = remaining;
-    if (!_polling && Date.now() >= _nextPollAt) _poll();
-  }, 1000);
-
-  _poll();  // immediate first poll on page load
-
-  // ── Manual cycle trigger ──────────────────────────────────────────────────
-  function triggerCycle() {
-    const btn = document.getElementById('trigger-btn');
-    btn.disabled = true;
-    btn.textContent = 'Triggering...';
-    fetch('/api/trigger', { method: 'POST' })
-      .then(r => r.json())
-      .then(data => {
-        btn.textContent = data.status === 'triggered' ? 'Cycle Started!' : 'Error';
-        setTimeout(() => window.location.reload(), 2000);
-      })
-      .catch(() => {
-        btn.textContent = 'Error — check logs';
-        btn.disabled = false;
-      });
-  }
-
-  // ── Chat persistence (sessionStorage) ────────────────────────────────────
-  // Messages are stored as [{role, html}] so a page reload restores the thread.
-  // sessionStorage clears when the tab is closed — appropriate TTL for a chat.
-
+  // ── Chat history persistence (sessionStorage) ─────────────────────────────
   const CHAT_KEY = 'ims_chat_history';
 
   function _loadHistory() {
     try { return JSON.parse(sessionStorage.getItem(CHAT_KEY) || '[]'); }
     catch { return []; }
   }
-
   function _saveHistory() {
     const msgs = document.getElementById('chat-messages');
     const entries = [];
     for (const el of msgs.children) {
-      // Skip the default welcome bubble (it has no data-role) and any pending "Thinking…" bubble
       const role = el.dataset.role;
       if (!role) continue;
       const bubble = el.querySelector('.chat-bubble');
@@ -692,14 +968,12 @@
       entries.push({ role, html: bubble.innerHTML, source: source ? source.textContent : '' });
     }
     try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(entries)); }
-    catch { /* storage quota — silently skip */ }
+    catch { /* quota */ }
   }
-
   function _restoreHistory() {
     const history = _loadHistory();
     if (!history.length) return;
     const msgs = document.getElementById('chat-messages');
-    // Replace welcome bubble with the saved thread
     msgs.innerHTML = '';
     for (const { role, html, source } of history) {
       const el = document.createElement('div');
@@ -711,17 +985,17 @@
     }
     msgs.scrollTop = msgs.scrollHeight;
   }
-
   function clearChat() {
     sessionStorage.removeItem(CHAT_KEY);
-    const msgs = document.getElementById('chat-messages');
-    msgs.innerHTML = `<div class="chat-msg assistant">
+    document.getElementById('chat-messages').innerHTML = `<div class="chat-msg assistant">
       <div class="chat-bubble">Ask me anything about the schedule — critical path, milestone risk, CAM status, blockers, or recommended actions.</div>
     </div>`;
   }
 
-  // Restore on load
-  document.addEventListener('DOMContentLoaded', _restoreHistory);
+  document.addEventListener('DOMContentLoaded', () => {
+    _restoreHistory();
+    autoInitPanels();
+  });
 
   // ── Q&A Chat ──────────────────────────────────────────────────────────────
   function askQuestion(q) {
@@ -730,30 +1004,27 @@
   }
 
   function sendChat() {
-    const input = document.getElementById('chat-input');
-    const btn = document.getElementById('chat-send-btn');
+    const input    = document.getElementById('chat-input');
+    const btn      = document.getElementById('chat-send-btn');
     const question = input.value.trim();
     if (!question) return;
 
     const messages = document.getElementById('chat-messages');
-
-    // User bubble
-    const userMsg = document.createElement('div');
-    userMsg.className = 'chat-msg user';
+    const userMsg  = document.createElement('div');
+    userMsg.className   = 'chat-msg user';
     userMsg.dataset.role = 'user';
-    userMsg.innerHTML = `<div class="chat-bubble">${escapeHtml(question)}</div>`;
+    userMsg.innerHTML   = `<div class="chat-bubble">${escapeHtml(question)}</div>`;
     messages.appendChild(userMsg);
 
-    // Thinking bubble (not saved to history)
     const thinkingMsg = document.createElement('div');
     thinkingMsg.className = 'chat-msg assistant';
     thinkingMsg.innerHTML = `<div class="chat-bubble thinking">Thinking…</div>`;
     messages.appendChild(thinkingMsg);
     messages.scrollTop = messages.scrollHeight;
 
-    input.value = '';
+    input.value  = '';
     input.disabled = true;
-    btn.disabled = true;
+    btn.disabled   = true;
 
     fetch('/api/ask', {
       method: 'POST',
@@ -770,11 +1041,11 @@
         _saveHistory();
       })
       .catch(err => {
-        thinkingMsg.innerHTML = `<div class="chat-bubble" style="color:#d93025">Error: ${escapeHtml(String(err))}</div>`;
+        thinkingMsg.innerHTML = `<div class="chat-bubble" style="color:#f85149">Error: ${escapeHtml(String(err))}</div>`;
       })
       .finally(() => {
         input.disabled = false;
-        btn.disabled = false;
+        btn.disabled   = false;
         input.focus();
         messages.scrollTop = messages.scrollHeight;
       });
@@ -782,10 +1053,8 @@
 
   function escapeHtml(str) {
     return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
       .replace(/\n/g, '<br>');
   }
 </script>
