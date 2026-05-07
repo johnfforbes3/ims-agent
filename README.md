@@ -1,8 +1,10 @@
 # IMS Agent
 
+[![CI](https://github.com/johnfforbes3/ims-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/johnfforbes3/ims-agent/actions/workflows/ci.yml)
+
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 8.3 / TD-023 / TD-010 complete — beta-PERT SRA, bootstrap CLI, Whisper integration tests. 424 tests passing.**
+**Current status: Phase 11 complete — Full System Integration Test Suite (Phase 10), Comprehensive Dashboard UI Test Suite (Phase 11). 1010 tests passing. Phase 9.6: EVM/DCMA/Briefing/Portfolio. Phase 8.5: GitHub Actions CI, Dockerfile Python 3.13. Production cycle `20260505T121010Z`: 4/4 CAMs, 23 blocked tasks, health=RED.**
 
 ---
 
@@ -45,7 +47,7 @@ python main.py --schedule
 ### Running Tests
 
 ```bash
-pytest tests/ -v         # all 424 tests (4 Whisper integration tests skipped)
+pytest tests/ -v         # all 1010 tests (4 Whisper integration tests skipped)
 pytest tests/ -q         # quiet summary only
 ```
 
@@ -71,11 +73,16 @@ Between cycles, the PM can ask natural language questions via the dashboard chat
 ```
 ims-agent/
 ├── agent/
-│   ├── file_handler.py         — IMS XML parsing and write-back
+│   ├── file_handler.py         — IMS XML parsing and write-back (+ predecessor_links, float, constraints)
 │   ├── llm_interface.py        — All Anthropic SDK calls (single entry point)
 │   ├── critical_path.py        — CPM calculation and float analysis
-│   ├── sra_runner.py           — Monte Carlo SRA engine (N=1000)
+│   ├── sra_runner.py           — Monte Carlo SRA engine (N=1000, beta-PERT)
 │   ├── report_generator.py     — Markdown report + IMS diff/drift sections
+│   ├── evm_engine.py           — EVM metrics (BAC/BCWP/BCWS/SPI/SV/EAC/BEI) — Phase 9.2
+│   ├── dcma_assessment.py      — DCMA 14-Point Assessment Engine — Phase 9.3
+│   ├── variance_analyst.py     — LLM-backed CPR Format 5 variance narrative — Phase 9.4
+│   ├── executive_briefing.py   — Self-contained HTML executive brief generator — Phase 9.5
+│   ├── portfolio.py            — Multi-program portfolio health aggregator — Phase 9.6
 │   ├── cam_directory.py        — CAM registry, scheduling, retry logic
 │   ├── cycle_runner.py         — Full cycle orchestration
 │   ├── cycle_state.py          — Cycle state persistence
@@ -107,16 +114,18 @@ ims-agent/
 │       ├── teams_connector.py      — Teams/ACS voice connector (Tier 3)
 │       └── teams_chat_connector.py — Teams Chat Bot connector (Tier 4)
 ├── agent/demo_chat.py          — Teams Chat demo runner (--demo-chat mode)
-├── tests/                      — pytest test suite (404 tests)
+├── tests/                      — pytest test suite (1010 tests)
 ├── data/
 │   ├── sample_ims.xml          — Synthetic 100-task AI Agent Server Rack IMS
 │   ├── ims_master/             — Timestamped .mpp master (source of truth)
 │   ├── ims_exports/            — Versioned XML exports + diff JSON/Markdown per cycle
-│   ├── dashboard_state.json    — Live dashboard state (updated each cycle)
+│   ├── dashboard_state.json    — Live dashboard state (updated each cycle; incl. EVM, DCMA, variance)
 │   ├── cycle_history.json      — Per-cycle summary history
+│   ├── portfolio.json          — Multi-program portfolio registry (Phase 9.6)
 │   └── snapshots/              — Pre-write IMS snapshots (rollback source)
 ├── reports/
-│   └── cycles/                 — Per-cycle status JSON (gitignored)
+│   ├── cycles/                 — Per-cycle status JSON (gitignored)
+│   └── briefings/              — Generated executive brief HTML files (Phase 9.5)
 ├── docs/
 │   ├── STATUS.md               — Single source of truth for current system state
 │   ├── CMMC_GAP.md             — CMMC Level 2 gap analysis (6 gaps REMEDIATED)
@@ -160,6 +169,16 @@ ims-agent/
 | 7.4 | Platform Enhancements | ✅ Complete — 359 tests | 2026-05-03 |
 | 7.2 | Security & Compliance (CMMC Level 2) | ✅ Complete — 375 tests | 2026-05-03 |
 | **7.3** | **EAC Date Interview Collection** | ✅ **Complete — 404 tests** (infra items awaiting deployment) | 2026-05-03 |
+| 8.3 | Advanced SRA (beta-PERT), bootstrap CLI, Whisper integration tests | ✅ Complete — 424 tests | 2026-05-04 |
+| **8.4** | **Latency & reliability sprint** — `claude-haiku-4-5` model fix, validation fix, `force=true` trigger, Listen-In dropdown, CAM simulator markdown fix | ✅ **Complete — 445 tests** | **2026-05-06** |
+| **8.5** | **CI & infrastructure** — GitHub Actions CI workflow, Dockerfile Python 3.13 | ✅ **Complete — 445 tests** | **2026-05-06** |
+| **9.2** | **EVM Metrics Engine** — BAC/BCWP/BCWS/SPI/SV/EAC/BEI per program and CAM | ✅ **Complete** | **2026-05-06** |
+| **9.3** | **DCMA 14-Point Assessment** — auto-scored schedule quality | ✅ **Complete** | **2026-05-06** |
+| **9.4** | **Variance Analysis Narratives** — LLM-backed CPR Format 5 | ✅ **Complete** | **2026-05-06** |
+| **9.5** | **Executive Briefing Generator** — one-click self-contained HTML brief | ✅ **Complete** | **2026-05-06** |
+| **9.6** | **Portfolio View** — multi-program health aggregation — **611 tests** | ✅ **Complete** | **2026-05-06** |
+| **10** | **Full System Integration Test Suite** — relay wiring, SSE stream, API smoke, E2E cycle | ✅ **Complete — 721 tests** | **2026-05-07** |
+| **11** | **Comprehensive Dashboard UI Test Suite** — 289 element-by-element dashboard tests (18 classes) | ✅ **Complete — 1010 tests** | **2026-05-07** |
 | 7.5 | First Customer Pilot Execution | ⏳ Awaiting customer engagement | — |
 
 **Phase 6 note:** 4 Core Integrity bugs fixed; Prometheus metrics + extended `/health`; secrets hardening + CMMC gap analysis; LLM retry backoff + DR runbook; IMS audit trail (`ims_diff.py`, per-cycle diff JSON/Markdown, `GET /api/diff/{cycle_id}`); customer onboarding docs.
@@ -169,6 +188,18 @@ ims-agent/
 **Phase 7.3 note:** New `AWAITING_EAC_DATE` interview state collects CAM-provided projected finish dates for all 1–99% tasks. LLM date extractor (`_classify_eac_date`) resolves absolute dates, relative dates, "on schedule", and uncertain responses. `SRARunner(eac_dates=...)` overrides remaining-duration estimates with CAM EAC dates. Cycle report "Tasks Behind Schedule" table expanded with CAM Forecast and Δ Days columns. 29 new tests in `test_eac_date.py`. Grafana/log-aggregation infra items deferred to deployment platform.
 
 **Phase 7.4 note:** Per-CAM dashboard progress pills, cumulative diff (`GET /api/changes`), baseline drift alert (`GET /api/baseline-drift`), Q&A 30s TTL cache (TD-016), `SIMULATOR_CALL_DELAY_MS` rate limiting (TD-009), cycle report IMS Diff Summary and Baseline Drift Alert sections.
+
+**Phase 8.3 note:** Beta-PERT three-point SRA sampling (`_pert_variate`), `--bootstrap-sessions` CLI for proactive CAM onboarding via Graph API, Whisper STT integration tests (`@pytest.mark.integration`). 424 tests.
+
+**Phase 8.4 note:** `claude-haiku-4-5` model fix eliminated HTTP 404 errors and reduced interview latency from 30-60s to ~5s/turn. Validation backwards-movement rule now distinguishes explained regressions (warning) from unexplained (hard failure). Trigger Cycle button always sends `?force=true` to allow immediate re-runs after failed cycles. Listen-In panel per-interview dropdown filters transcript and audio to a single CAM. Graph CAM Responder poll/delay reduced (2s / 0.5s). CAM simulator markdown fix: `LLMInterface.ask()` now accepts an optional `system` override; `_SIMULATOR_SYSTEM_PROMPT` (the "No Markdown — plain speech only" instruction) is now wired into every `CAMSimulator.respond()` call — eliminating asterisks and other markdown from simulated CAM responses. Production cycle `20260505T121010Z` verified end-to-end.
+
+**Phase 8.5 note:** GitHub Actions CI pipeline (`.github/workflows/ci.yml`) — Windows runner, Python 3.13, Java 21. Runs `pytest tests/ -q -m "not integration"` on every push and PR to main. Requires `ANTHROPIC_API_KEY` GitHub Actions secret. Dockerfile base image corrected from `python:3.11-slim` to `python:3.13-slim` to match the development and production runtime.
+
+**Phase 9.2–9.6 note:** Five executive-grade features added in one sprint. EVM engine uses task `duration_days` as the budget proxy (BAC unit: work-days) to produce schedule-based SPI, SV, EAC, and BEI without cost data. DCMA 14-point assessment parses MSPDI `PredecessorLink`, `ConstraintType`, and `TotalSlack` fields for all 14 checks. Variance narrative is an LLM-generated CPR Format 5 text incorporating EVM, DCMA, CAM interview inputs, and IMS diff. Executive brief is a fully self-contained HTML file (no CDN dependencies) suitable for print-to-PDF distribution. Portfolio view reads a `data/portfolio.json` registry and aggregates health across all registered programs — any RED → RED, all GREEN → GREEN, else YELLOW. All five subsystems are wired into the cycle runner and gracefully degrade on individual module failure. 611 tests passing.
+
+**Phase 10 note:** Full System Integration Test Suite — 110 new integration tests covering Teams relay wiring, SSE stream endpoint, full API smoke suite, and end-to-end cycle integration. 6 bug fixes discovered and resolved during integration testing. 721 tests passing.
+
+**Phase 11 note:** Comprehensive Dashboard UI Test Suite — 289 element-by-element dashboard tests across 18 test classes covering all panels, KPIs, tables, EVM/DCMA/briefing/portfolio UI paths, and JavaScript API paths. Graph CAM Responder lookback window fix (30s→2h) to prevent interview stall on responder restart during active cycle. 1010 tests passing.
 
 ---
 
@@ -231,4 +262,4 @@ See [docs/decisions.md](docs/decisions.md) for full rationale. Summary:
 - [API.md](API.md) — all endpoints with auth requirements and response schemas
 - [CONFIGURATION.md](CONFIGURATION.md) — every env var with default, required/optional, description
 - [CHANGELOG.md](CHANGELOG.md) — version history by phase
-- [TEST-PROCEDURE.md](TEST-PROCEDURE.md) — 228-case test procedure with run history
+- [TEST_RESULTS.md](TEST_RESULTS.md) — test procedure run history (1010 tests passing)

@@ -4,6 +4,8 @@ This guide walks through deploying the IMS Agent on a single Linux host using Do
 
 **Prerequisites:** Docker 24+, Docker Compose v2, and a copy of the `.env` file with all required secrets filled in.
 
+> **Container image:** `python:3.13-slim` (non-root user `imsagent`, uid 1001). Matches the Python 3.13 runtime used for development and testing.
+
 ---
 
 ## 1. Prepare the Host

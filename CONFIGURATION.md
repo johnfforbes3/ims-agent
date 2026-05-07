@@ -11,7 +11,9 @@ Variables marked **Required** have no safe default and the agent will not start 
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | — | **Conditional** | Anthropic API key. Required when `LLM_BASE_URL` is empty (Anthropic cloud). **Not required** when `LLM_BASE_URL` points to a local Ollama-compatible endpoint. Obtain at console.anthropic.com. |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | No | Claude model ID. Change to test other models. |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | No | Claude model ID for cycle synthesis, Q&A, and report generation. |
+| `SIMULATOR_MODEL` | `claude-haiku-4-5` | No | Model ID used for CAM persona generation in `cam_simulator.py`. Haiku is 5-10× faster than Sonnet for conversational responses. **Must use the 4.x naming convention** (`claude-haiku-4-5`), not the date-stamped format (`claude-3-5-haiku-20241022`) — date-stamped IDs return HTTP 404 for this account tier. |
+| `CLASSIFIER_MODEL` | `claude-haiku-4-5` | No | Model ID used for NLU classification in `interview_agent.py` (`_classify_cam_response`, `_classify_eac_date`, `_extract_and_apply_correction`). Same naming convention requirement as `SIMULATOR_MODEL`. |
 | `LLM_BASE_URL` | *(empty)* | No | Override the Anthropic API base URL. Set to an Ollama-compatible endpoint for on-prem/ITAR deployments (e.g., `http://localhost:11434`). When set, `ANTHROPIC_API_KEY` is not required. Empty = Anthropic cloud. |
 | `IMS_FILE_PATH` | `data/sample_ims.xml` | **Yes** | Path to the IMS XML file (MSPDI format). Relative to the project root. |
 | `REPORTS_DIR` | `reports` | No | Directory for generated reports and cycle status JSONs. |
@@ -81,8 +83,8 @@ Runs auto-responding simulated CAM accounts via Microsoft Graph API. Requires M3
 |---|---|---|---|
 | `AZURE_TENANT_ID` | — | **Yes** for cam-responder | Tenant ID for the M365 tenant hosting the fake CAM accounts (e.g., `intelligenceexpanse.onmicrosoft.com`). Used by MSAL device code flow. |
 | `AZURE_CLIENT_ID` | — | No (falls back to `TEAMS_BOT_APP_ID`) | App Registration client ID. If unset, `TEAMS_BOT_APP_ID` is used. Must have `Chat.ReadWrite` delegated permission and public client flows enabled. |
-| `CAM_RESPONDER_POLL_SEC` | `5` | No | Seconds between Graph API message-poll ticks for each responder account. |
-| `CAM_RESPONDER_DELAY_SEC` | `2.0` | No | Simulated human typing delay (seconds) before posting each CAM response. |
+| `CAM_RESPONDER_POLL_SEC` | `2` | No | Seconds between Graph API message-poll ticks for each responder account. Lower values reduce turn-to-turn latency. |
+| `CAM_RESPONDER_DELAY_SEC` | `0.5` | No | Simulated human typing delay (seconds) before posting each CAM response. Lower values reduce turn-to-turn latency. |
 
 > **One-time Azure portal steps:** App Registration → API permissions → add `Chat.ReadWrite` (Delegated) → Grant admin consent. App Registration → Authentication → enable "Allow public client flows" → add redirect URI `https://login.microsoftonline.com/common/oauth2/nativeclient`.
 

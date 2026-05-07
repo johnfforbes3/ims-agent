@@ -778,6 +778,86 @@
     </div>
   </details>
 
+  <!-- ── Phase 9.5: Executive Briefing Button ─────────────────────────────── -->
+  <div style="margin:12px 0 4px;display:flex;gap:10px;align-items:center;">
+    <button class="btn btn-primary" onclick="openBriefing()" title="Generate one-click HTML executive briefing">
+      📋 Generate Executive Briefing
+    </button>
+    <span style="font-size:11px;color:#7d8590;">One-click brief: EVM · DCMA · milestones · variance · CAM status</span>
+  </div>
+
+  <!-- ── Phase 9.2: EVM Metrics ─────────────────────────────────────────────── -->
+  <details class="panel" id="evm-panel">
+    <summary>
+      <span class="panel-icon">📊</span>
+      <span>Earned Value Metrics (EVM)</span>
+      <span class="panel-badge" id="evm-health-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadEvm()">Refresh</button>
+        <span class="panel-status" id="evm-status"></span>
+      </div>
+      <div id="evm-program-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0;"></div>
+      <div id="evm-cam-table" style="overflow-x:auto;margin-top:8px;"></div>
+    </div>
+  </details>
+
+  <!-- ── Phase 9.3: DCMA 14-Point Assessment ───────────────────────────────── -->
+  <details class="panel" id="dcma-panel">
+    <summary>
+      <span class="panel-icon">✅</span>
+      <span>DCMA 14-Point Assessment</span>
+      <span class="panel-badge" id="dcma-score-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadDcma()">Refresh</button>
+        <span class="panel-status" id="dcma-status"></span>
+      </div>
+      <div id="dcma-scorecard" style="margin:10px 0;"></div>
+      <div id="dcma-checks-table" style="overflow-x:auto;"></div>
+    </div>
+  </details>
+
+  <!-- ── Phase 9.4: Variance Analysis Narrative ────────────────────────────── -->
+  <details class="panel" id="variance-panel">
+    <summary>
+      <span class="panel-icon">📝</span>
+      <span>Schedule Variance Narrative (CPR Format 5)</span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadVariance()">Refresh</button>
+        <span class="panel-status" id="variance-status"></span>
+      </div>
+      <div id="variance-text" style="margin:10px 0;padding:12px;background:#0d1117;border:1px solid #21262d;
+           border-radius:6px;white-space:pre-wrap;font-size:12px;line-height:1.7;color:#e6edf3;">
+        No variance narrative yet — run a cycle to generate.
+      </div>
+    </div>
+  </details>
+
+  <!-- ── Phase 9.6: Portfolio View ─────────────────────────────────────────── -->
+  <details class="panel" id="portfolio-panel">
+    <summary>
+      <span class="panel-icon">🗂️</span>
+      <span>Portfolio View</span>
+      <span class="panel-badge" id="portfolio-at-risk-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadPortfolio()">Refresh</button>
+        <span class="panel-status" id="portfolio-status"></span>
+      </div>
+      <div id="portfolio-tiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin:10px 0;"></div>
+    </div>
+  </details>
+
   <!-- ── Live Interview Listen-In ─────────────────────────────────────────── -->
   <details class="panel" id="listenin-panel">
     <summary>
@@ -804,6 +884,12 @@
           ■ Disconnect
         </button>
         <button class="btn btn-ghost btn-sm" onclick="listenInClear()" title="Clear transcript">✕ Clear</button>
+        <!-- Per-interview selector — populated as events arrive -->
+        <select id="listenin-cam-select" onchange="listenInFilterChange()"
+                style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;
+                       padding:2px 6px;font-size:12px;cursor:pointer;max-width:160px">
+          <option value="all">All interviews</option>
+        </select>
         <span class="listenin-status" id="listenin-status">Not connected — will auto-connect when panel opens</span>
         <label class="listenin-autoplay-toggle">
           <input type="checkbox" id="listenin-autoplay" checked style="accent-color:#58a6ff">
@@ -920,7 +1006,7 @@
     const btn = document.getElementById('trigger-btn');
     btn.disabled = true;
     btn.textContent = '⏳ Starting…';
-    fetch('/api/trigger', { method: 'POST' })
+    fetch('/api/trigger?force=true', { method: 'POST' })
       .then(r => r.json())
       .then(data => {
         btn.textContent = data.status === 'triggered' ? '✓ Cycle Started' : '✗ Error';
@@ -1099,6 +1185,18 @@
       if (bdBadge && bdBadge.style.display !== 'none')
         document.getElementById('baseline-drift-panel').open = true;
     } catch (_) {}
+
+    // 4. Phase 9.2 — EVM Metrics
+    try { await loadEvm(); } catch (_) {}
+
+    // 5. Phase 9.3 — DCMA
+    try { await loadDcma(); } catch (_) {}
+
+    // 6. Phase 9.4 — Variance Narrative
+    try { await loadVariance(); } catch (_) {}
+
+    // 7. Phase 9.6 — Portfolio
+    try { await loadPortfolio(); } catch (_) {}
   }
 
   // ── Chat history persistence (sessionStorage) ─────────────────────────────
@@ -1225,12 +1323,35 @@
   let _listenSeq    = 0;       // cursor for ?since= reconnect
   let _currentAudio = null;    // active HTMLAudioElement
   let _audioPlaying = false;   // serialise playback across turns
-  let _audioQueue   = [];      // [{event_id, cam_name, speaker}, ...]
+  let _audioQueue   = [];      // [{event_id, cam_name, speaker, cam_email}, ...]
   let _seenEventIds = new Set(); // dedup guard across backfill + live
+  let _knownCams    = new Map(); // cam_email → cam_name (for dropdown)
 
   // Pre-fetch cache: event_id → Promise<Blob|null>
   // Only populated for LIVE events (not backfill) to avoid browser overload.
   const _audioPending = new Map();
+
+  // Active CAM filter — "all" or a specific cam_email
+  function _selectedCam() {
+    return document.getElementById('listenin-cam-select')?.value || 'all';
+  }
+
+  // Re-render transcript visibility when filter changes
+  function listenInFilterChange() {
+    const sel = _selectedCam();
+    document.querySelectorAll('#listenin-transcript .listenin-turn').forEach(el => {
+      const email = el.dataset.camEmail || '';
+      el.style.display = (sel === 'all' || email === sel) ? '' : 'none';
+    });
+    // Stop current audio if it's from a different CAM
+    if (sel !== 'all' && _currentAudio) {
+      const playing = document.querySelector('#listenin-transcript .listenin-turn.playing');
+      if (playing && playing.dataset.camEmail !== sel) {
+        _currentAudio.pause();
+      }
+    }
+    // Drain queue will naturally skip non-matching items
+  }
 
   // ---------------------------------------------------------------------------
   // Pre-fetch pipeline
@@ -1238,16 +1359,17 @@
 
   function _prefetch(event_id) {
     if (_audioPending.has(event_id)) return _audioPending.get(event_id);
-    // Retry up to 16 × 200 ms = 3.2 s total — covers ElevenLabs generation time
+    // Retry up to 30 × 300 ms = 9 s total — covers ElevenLabs Turbo generation time
+    // (Haiku → TTS pipeline is now faster, but extra headroom avoids silent turns)
     const p = (async () => {
-      for (let i = 0; i < 16; i++) {
+      for (let i = 0; i < 30; i++) {
         try {
           const r = await fetch(`/api/interview-audio/${encodeURIComponent(event_id)}`);
           if (r.ok) return r.blob();
         } catch (_) {}
-        if (i < 15) await new Promise(res => setTimeout(res, 200));
+        if (i < 29) await new Promise(res => setTimeout(res, 300));
       }
-      return null;  // no audio after 3.2 s — skip, text-only turn
+      return null;  // no audio after 9 s — skip, text-only turn
     })();
     _audioPending.set(event_id, p);
     return p;
@@ -1278,7 +1400,13 @@
     _audioPlaying = true;
 
     while (_audioQueue.length) {
-      const { event_id, cam_name, speaker } = _audioQueue.shift();
+      const { event_id, cam_name, speaker, cam_email } = _audioQueue.shift();
+      const sel = _selectedCam();
+      // Skip audio for CAMs not matching the current filter
+      if (sel !== 'all' && cam_email && cam_email !== sel) {
+        _audioPending.delete(event_id);
+        continue;
+      }
       const displayName = speaker === 'bot' ? 'ATLAS' : cam_name;
 
       _showSpeaking(displayName, speaker);
@@ -1323,32 +1451,53 @@
     if (_seenEventIds.has(ev.event_id)) return; // deduplicate
     _seenEventIds.add(ev.event_id);
 
+    const camEmail = (ev.cam_email || '').toLowerCase();
+    const camName  = ev.cam_name || ev.cam_email || '';
+
+    // ── Populate per-interview dropdown ──────────────────────────────────
+    if (camEmail && !_knownCams.has(camEmail)) {
+      _knownCams.set(camEmail, camName);
+      const sel = document.getElementById('listenin-cam-select');
+      if (sel) {
+        const opt = document.createElement('option');
+        opt.value       = camEmail;
+        opt.textContent = camName;
+        sel.appendChild(opt);
+      }
+    }
+
+    // ── Visibility filter ─────────────────────────────────────────────────
+    const selectedCam = _selectedCam();
+    const visible = selectedCam === 'all' || !camEmail || camEmail === selectedCam;
+
     const box = document.getElementById('listenin-transcript');
     const empty = document.getElementById('listenin-empty');
     if (empty) empty.remove();
 
-    const isBot  = ev.speaker === 'bot';
-    const label  = isBot ? 'ATLAS' : escapeHtml(ev.cam_name || ev.cam_email);
-    const ts     = new Date(ev.timestamp * 1000)
-                     .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const isBot = ev.speaker === 'bot';
+    const label = isBot ? 'ATLAS' : escapeHtml(camName);
+    const ts    = new Date(ev.timestamp * 1000)
+                    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     const turn = document.createElement('div');
     turn.className = `listenin-turn ${ev.speaker}${live ? '' : ' historical'}`;
-    turn.dataset.eventId = ev.event_id;
+    turn.dataset.eventId  = ev.event_id;
+    turn.dataset.camEmail = camEmail;
+    if (!visible) turn.style.display = 'none';
     turn.innerHTML = `
       <div class="listenin-bubble">${escapeHtml(ev.text)}</div>
       <div class="listenin-meta">${label} · ${ts}${live ? '' : ' <span class="hist-badge">history</span>'}</div>`;
     box.appendChild(turn);
-    box.scrollTop = box.scrollHeight;
+    if (visible) box.scrollTop = box.scrollHeight;
 
     if (live) {
       // Pre-fetch audio immediately — audio for live turns is usually
       // already stored on server by the time SSE fires.
       _prefetch(ev.event_id);
 
-      // Queue for auto-play
+      // Queue for auto-play (drain logic will apply filter)
       if (document.getElementById('listenin-autoplay').checked) {
-        _audioQueue.push({ event_id: ev.event_id, cam_name: ev.cam_name, speaker: ev.speaker });
+        _audioQueue.push({ event_id: ev.event_id, cam_name: camName, speaker: ev.speaker, cam_email: camEmail });
         _drainAudioQueue();
       }
     }
@@ -1418,6 +1567,13 @@
     _audioQueue = [];
     _audioPending.clear();
     _seenEventIds.clear();
+    _knownCams.clear();
+    // Reset dropdown to "All interviews", keeping only the first option
+    const sel = document.getElementById('listenin-cam-select');
+    if (sel) {
+      while (sel.options.length > 1) sel.remove(1);
+      sel.value = 'all';
+    }
   }
 
   function _setListenStatus(msg) {
@@ -1450,6 +1606,198 @@
         ).join('');
       })
       .catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 9.2 — EVM Metrics
+  // ---------------------------------------------------------------------------
+
+  async function loadEvm() {
+    const status = document.getElementById('evm-status');
+    const cardsEl = document.getElementById('evm-program-cards');
+    const tableEl = document.getElementById('evm-cam-table');
+    const badge = document.getElementById('evm-health-badge');
+    if (status) status.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/evm', { headers: _authHeaders() });
+      if (!r.ok) { if (status) status.textContent = 'No EVM data yet.'; return; }
+      const data = await r.json();
+      const prog = data.program || {};
+
+      // Health badge
+      const health = prog.health || 'UNKNOWN';
+      if (badge) { badge.textContent = health; badge.style.display = ''; badge.className = 'panel-badge health-' + health.toLowerCase(); }
+
+      // KPI cards
+      const kpis = [
+        ['SPI', prog.spi != null ? prog.spi.toFixed(3) : 'N/A', prog.spi < 0.85 ? 'red' : prog.spi < 0.95 ? 'yellow' : 'green'],
+        ['SV', prog.sv != null ? prog.sv.toFixed(1) + 'd' : 'N/A', prog.sv < 0 ? 'red' : 'green'],
+        ['Completion', prog.completion_pct != null ? prog.completion_pct.toFixed(1) + '%' : 'N/A', 'neutral'],
+        ['BEI', prog.bei != null ? prog.bei.toFixed(3) : 'N/A', prog.bei < 0.85 ? 'red' : prog.bei < 0.95 ? 'yellow' : 'green'],
+        ['BAC', prog.bac != null ? prog.bac.toFixed(1) + 'd' : 'N/A', 'neutral'],
+        ['EAC', prog.eac != null ? prog.eac.toFixed(1) + 'd' : 'N/A', 'neutral'],
+        ['VAC', prog.vac != null ? prog.vac.toFixed(1) + 'd' : 'N/A', prog.vac < 0 ? 'red' : 'green'],
+        ['BCWP', prog.bcwp != null ? prog.bcwp.toFixed(1) + 'd' : 'N/A', 'neutral'],
+      ];
+      if (cardsEl) cardsEl.innerHTML = kpis.map(([lbl, val, col]) =>
+        `<div style="background:#161b22;border:1px solid #21262d;border-radius:6px;padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:${col==='red'?'#f85149':col==='yellow'?'#d29922':col==='green'?'#3fb950':'#58a6ff'}">${escapeHtml(val)}</div>
+          <div style="font-size:10px;color:#7d8590;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">${escapeHtml(lbl)}</div>
+        </div>`).join('');
+
+      // CAM breakdown table
+      const byCam = data.by_cam || {};
+      const camRows = Object.entries(byCam).sort((a,b) => (a[1].spi||99) - (b[1].spi||99));
+      if (tableEl && camRows.length) {
+        tableEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<tr style="background:#21262d;">' +
+          '<th style="padding:6px 8px;text-align:left;">CAM</th>' +
+          '<th>BAC (d)</th><th>BCWP</th><th>BCWS</th><th>SPI</th><th>SV (d)</th><th>% Done</th><th>Health</th></tr>' +
+          camRows.map(([cam, d]) => {
+            const hcol = d.health==='RED'?'#f85149':d.health==='YELLOW'?'#d29922':'#3fb950';
+            return `<tr style="border-bottom:1px solid #21262d;">
+              <td style="padding:5px 8px;"><strong>${escapeHtml(cam)}</strong></td>
+              <td style="padding:5px 8px;text-align:right;">${(d.bac||0).toFixed(1)}</td>
+              <td style="padding:5px 8px;text-align:right;">${(d.bcwp||0).toFixed(1)}</td>
+              <td style="padding:5px 8px;text-align:right;">${(d.bcws||0).toFixed(1)}</td>
+              <td style="padding:5px 8px;text-align:right;color:${hcol}">${d.spi!=null?d.spi.toFixed(3):'N/A'}</td>
+              <td style="padding:5px 8px;text-align:right;">${(d.sv||0).toFixed(1)}</td>
+              <td style="padding:5px 8px;text-align:right;">${(d.completion_pct||0).toFixed(1)}%</td>
+              <td style="padding:5px 8px;color:${hcol};font-weight:700;">${escapeHtml(d.health||'')}</td>
+            </tr>`;
+          }).join('') + '</table>';
+      }
+      if (status) status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    } catch(e) {
+      if (status) status.textContent = 'Error loading EVM data.';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 9.3 — DCMA 14-Point Assessment
+  // ---------------------------------------------------------------------------
+
+  async function loadDcma() {
+    const status = document.getElementById('dcma-status');
+    const scoreEl = document.getElementById('dcma-scorecard');
+    const tableEl = document.getElementById('dcma-checks-table');
+    const badge = document.getElementById('dcma-score-badge');
+    if (status) status.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/dcma', { headers: _authHeaders() });
+      if (!r.ok) { if (status) status.textContent = 'No DCMA data yet.'; return; }
+      const data = await r.json();
+      const score = data.score || 0;
+      const total = data.total_checks || 14;
+      const health = data.health || 'UNKNOWN';
+      const hcol = health==='RED'?'#f85149':health==='YELLOW'?'#d29922':'#3fb950';
+
+      if (badge) { badge.textContent = `${score}/${total}`; badge.style.display = ''; }
+
+      if (scoreEl) scoreEl.innerHTML = `<div style="display:flex;align-items:center;gap:16px;padding:10px;background:#161b22;border-radius:6px;border:1px solid #21262d;">
+        <div style="font-size:36px;font-weight:900;color:${hcol}">${score}/${total}</div>
+        <div><strong style="color:${hcol}">${escapeHtml(health)}</strong><br>
+        <span style="font-size:11px;color:#7d8590">${escapeHtml(data.summary||'')}</span></div>
+      </div>`;
+
+      const checks = data.checks || [];
+      if (tableEl && checks.length) {
+        tableEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">' +
+          '<tr style="background:#21262d;"><th style="padding:6px 8px;text-align:left;">#</th>' +
+          '<th style="padding:6px 8px;text-align:left;">Check</th>' +
+          '<th>Status</th><th>Violations</th><th style="text-align:left;">Note</th></tr>' +
+          checks.map(c => {
+            const scol = c.passed ? '#3fb950' : '#f85149';
+            return `<tr style="border-bottom:1px solid #21262d;">
+              <td style="padding:5px 8px;color:#7d8590;">${c.check_id}</td>
+              <td style="padding:5px 8px;">${escapeHtml(c.name)}</td>
+              <td style="padding:5px 8px;text-align:center;font-weight:700;color:${scol}">${c.passed?'PASS':'FAIL'}</td>
+              <td style="padding:5px 8px;text-align:center;">${c.violations}</td>
+              <td style="padding:5px 8px;color:#7d8590;font-size:11px">${escapeHtml(c.note||'')}</td>
+            </tr>`;
+          }).join('') + '</table>';
+      }
+      if (status) status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    } catch(e) {
+      if (status) status.textContent = 'Error loading DCMA data.';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 9.4 — Variance Analysis Narrative
+  // ---------------------------------------------------------------------------
+
+  async function loadVariance() {
+    const status = document.getElementById('variance-status');
+    const textEl = document.getElementById('variance-text');
+    if (status) status.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/variance', { headers: _authHeaders() });
+      if (!r.ok) { if (status) status.textContent = 'No variance narrative yet.'; return; }
+      const data = await r.json();
+      if (textEl) textEl.textContent = data.narrative || 'No narrative available.';
+      if (status) status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    } catch(e) {
+      if (status) status.textContent = 'Error loading variance narrative.';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 9.5 — Executive Briefing
+  // ---------------------------------------------------------------------------
+
+  function openBriefing() {
+    window.open('/api/briefing', '_blank');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 9.6 — Portfolio View
+  // ---------------------------------------------------------------------------
+
+  async function loadPortfolio() {
+    const status = document.getElementById('portfolio-status');
+    const tilesEl = document.getElementById('portfolio-tiles');
+    const badge = document.getElementById('portfolio-at-risk-badge');
+    if (status) status.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/portfolio', { headers: _authHeaders() });
+      if (!r.ok) { if (status) status.textContent = 'Error loading portfolio.'; return; }
+      const data = await r.json();
+      const programs = data.programs || [];
+      const atRisk = data.programs_at_risk || 0;
+
+      if (badge && atRisk > 0) { badge.textContent = atRisk + ' at risk'; badge.style.display = ''; }
+
+      if (tilesEl) tilesEl.innerHTML = programs.map(p => {
+        const health = p.health || 'UNKNOWN';
+        const hcol = health==='RED'?'#f85149':health==='YELLOW'?'#d29922':health==='GREEN'?'#3fb950':'#7d8590';
+        const hbg = health==='RED'?'#2a0a0a':health==='YELLOW'?'#1f1a08':health==='GREEN'?'#0a1f0a':'#161b22';
+        return `<div style="background:${hbg};border:2px solid ${hcol};border-radius:8px;padding:14px;position:relative;">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">${escapeHtml(p.name)}</div>
+          <div style="font-size:24px;font-weight:900;color:${hcol};margin-bottom:8px;">${escapeHtml(health)}</div>
+          <div style="font-size:11px;color:#7d8590;display:grid;grid-template-columns:1fr 1fr;gap:2px;">
+            <span>SPI: <strong style="color:#e6edf3">${p.spi!=null?p.spi.toFixed(3):'N/A'}</strong></span>
+            <span>Completion: <strong style="color:#e6edf3">${p.completion_pct!=null?p.completion_pct.toFixed(1)+'%':'N/A'}</strong></span>
+            <span>DCMA: <strong style="color:#e6edf3">${escapeHtml(p.dcma_score||'N/A')}</strong></span>
+            <span>CAMs: <strong style="color:#e6edf3">${escapeHtml(p.cam_response_rate||'N/A')}</strong></span>
+            <span>High-Risk MS: <strong style="color:${p.milestones_high_risk>0?'#f85149':'#e6edf3'}">${p.milestones_high_risk||0}</strong></span>
+            <span>BEI: <strong style="color:#e6edf3">${p.bei!=null?p.bei.toFixed(3):'N/A'}</strong></span>
+          </div>
+          ${p.top_risk_preview ? '<div style="margin-top:8px;font-size:11px;color:#7d8590;border-top:1px solid #21262d;padding-top:6px;">' + escapeHtml(p.top_risk_preview) + '</div>' : ''}
+          ${p.is_stale ? '<div style="position:absolute;top:8px;right:8px;font-size:10px;background:#3d2a00;color:#d29922;padding:2px 5px;border-radius:3px;">STALE</div>' : ''}
+        </div>`;
+      }).join('');
+
+      if (status) status.textContent = `${programs.length} programs · Updated ${new Date().toLocaleTimeString()}`;
+    } catch(e) {
+      if (status) status.textContent = 'Error loading portfolio data.';
+    }
+  }
+
+  // Helper: return auth headers if API key is configured
+  function _authHeaders() {
+    const key = '{{ api_key | default("") }}';
+    return key ? { 'X-API-Key': key } : {};
   }
 
   // ---------------------------------------------------------------------------

@@ -32,6 +32,10 @@ def _call_delay_s() -> float:
     """Return the configured inter-call delay in seconds (default 200 ms)."""
     return int(os.getenv("SIMULATOR_CALL_DELAY_MS", "200")) / 1000.0
 
+# Fast model for CAM persona simulation — Haiku is 5-10× faster than Sonnet
+# and sufficient for generating realistic conversational CAM responses.
+_SIM_MODEL: str = os.getenv("SIMULATOR_MODEL", "claude-haiku-4-5")
+
 
 _SIMULATOR_SYSTEM_PROMPT = """You are roleplaying as a defense program engineer on a \
 phone call with an automated scheduling agent doing a quick status check.
@@ -203,9 +207,9 @@ class CAMSimulator:
         """
         from agent.llm_interface import LLMInterface
         self._persona = persona
-        self._llm = LLMInterface()
+        self._llm = LLMInterface(model=_SIM_MODEL)
         self._conversation_history: list[dict[str, str]] = []
-        logger.info("action=simulator_init cam=%s", persona.cam_name)
+        logger.info("action=simulator_init cam=%s model=%s", persona.cam_name, _SIM_MODEL)
 
     def respond(self, agent_utterance: str) -> str:
         """
@@ -228,7 +232,7 @@ class CAMSimulator:
         if delay > 0:
             time.sleep(delay)
 
-        response = self._llm.ask(full_prompt, context="")
+        response = self._llm.ask(full_prompt, context="", system=_SIMULATOR_SYSTEM_PROMPT)
         # Strip any prefixes like "Carol Smith: " that Claude might add
         clean = response.strip()
         for prefix in [f"{self._persona.cam_name}:", "CAM:", "Response:"]:

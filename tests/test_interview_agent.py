@@ -273,7 +273,20 @@ class TestEdgeCases:
         agent.process("no problem, I'm ready to start")
         assert agent.state != InterviewState.ABORTED
 
-    def test_invalid_pct_triggers_retry(self):
+    def test_invalid_pct_triggers_retry(self, monkeypatch):
+        # This test validates the interview-agent's retry logic when no percent
+        # can be determined.  The LLM classifier is patched to return null so the
+        # test is isolated from model behaviour (the LLM may infer ~50% from a
+        # vague phrase if the task's expected_pct is also 50%).
+        import agent.voice.interview_agent as ia
+        def _null_classify(*args, **kwargs):
+            return {
+                "percent": None, "blocker_mentioned": False, "blocker_text": "",
+                "sentiment": "unclear", "unknown": False,
+                "key_insight": "", "cam_question": False,
+            }
+        monkeypatch.setattr(ia, "_classify_cam_response", _null_classify)
+
         task = _make_task("1", "Task", pct=50)
         agent = InterviewAgent("Carol", [task], expected_pcts={"1": 50})
         agent.start()

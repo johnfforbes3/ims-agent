@@ -57,7 +57,7 @@ This converts `data/sample_ims.xml` into a timestamped `.mpp` in `data/ims_maste
 python -m pytest tests/ -q --tb=short
 ```
 
-Expected: `255 passed`. If any fail, see the TECHNICAL-DEBT.md register for known issues.
+Expected: `1010 passed`. If any fail, see the TECHNICAL-DEBT.md register for known issues.
 
 ### Step 5 — Start the agent
 
@@ -173,6 +173,41 @@ The scheduler stops cleanly. The dashboard persists `data/dashboard_state.json` 
 
 ---
 
+## Windows Process Management
+
+When running background server or responder processes on Windows, use **PowerShell** — not Git Bash — for process management:
+
+### Killing all Python processes (when Ctrl+C is not available)
+
+```powershell
+Get-Process python | Stop-Process -Force
+```
+
+> **Do not use** `taskkill /F /IM python.exe` from Git Bash — it is unreliable on Windows and may silently fail to terminate processes.
+
+### Starting background processes
+
+```powershell
+# Start the dashboard server in the background with output redirected
+$dir = "C:\Users\forbe\OneDrive\Documents\AI Projects\04 - IMS AGENT\ims-agent"
+Start-Process python -ArgumentList 'main.py','--serve' `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput 'logs\server.log' `
+    -RedirectStandardError 'logs\server_err.log' `
+    -WindowStyle Hidden
+
+# Start the Graph CAM responder in the background
+Start-Process python -ArgumentList 'main.py','--cam-responder' `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput 'logs\responder.log' `
+    -RedirectStandardError 'logs\responder_err.log' `
+    -WindowStyle Hidden
+```
+
+> **Do not use** `start /B "" cmd /C "python ... > logs/..."` — the shell redirect does not work reliably from bash on Windows and produces empty log files.
+
+---
+
 ## Quick Reference — All CLI Modes
 
 | Command | What it does |
@@ -184,7 +219,7 @@ The scheduler stops cleanly. The dashboard persists `data/dashboard_state.json` 
 | `python main.py --demo` | Phase 2 simulated voice interview demo (no Teams required). |
 | `python main.py --demo-chat --cam "Alice Nguyen"` | Teams chat interview via Bot Framework (requires ngrok + Azure Bot Service). |
 | `python main.py --cam-responder` | Start Graph API auto-responders for all configured fake CAM accounts. |
-| `python -m pytest tests/ -q` | Run all 255 unit tests. |
+| `python -m pytest tests/ -q` | Run all 1010 unit tests. |
 
 ---
 
@@ -233,7 +268,7 @@ If you are an AI agent reading this to bring the system up, follow these steps i
 
 2. **Check master IMS**: Run `python -c "from pathlib import Path; f=list(Path('data/ims_master').glob('*.*')); print(len(f), [x.name for x in f])"`. If count is 0, run `python main.py --init-mpp`. If `--init-mpp` fails (no COM, no JVM), note the error but continue — the cycle runner will fall back to `data/sample_ims.xml`.
 
-3. **Run unit tests**: Run `python -m pytest tests/ -q --tb=short 2>&1 | tail -5`. If all 255 pass, proceed. If failures exist, report them before starting the server.
+3. **Run unit tests**: Run `python -m pytest tests/ -q --tb=short 2>&1 | tail -5`. If all 1010 pass, proceed. If failures exist, report them before starting the server.
 
 4. **Start the server**: Run `python main.py --schedule` (blocks). The server is ready when you see "Dashboard: http://localhost:9000".
 
@@ -248,4 +283,4 @@ The `.env` file in that directory contains all secrets. Do not display secret va
 
 ---
 
-*Last updated: 2026-04-29*
+*Last updated: 2026-05-07*

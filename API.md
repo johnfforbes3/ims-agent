@@ -280,6 +280,21 @@ Counters reset on process restart (in-memory only).
 
 Fires a new cycle immediately in a background thread. Requires **admin key**. Returns immediately; use `GET /api/status` to poll for completion.
 
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `force` | boolean | `false` | When `true`, clears `ChatInterviewManager._completed_cams` before starting so the same CAMs can be re-interviewed immediately. Use after a failed cycle to avoid the "already completed" guard skipping all CAMs. The dashboard Trigger Cycle button always sends `force=true`. |
+
+**Example:**
+```bash
+# Normal trigger
+curl -X POST -H "X-Admin-Key: KEY" http://localhost:9000/api/trigger
+
+# Force re-run after a failed cycle
+curl -X POST -H "X-Admin-Key: KEY" http://localhost:9000/api/trigger?force=true
+```
+
 **Response 200:**
 ```json
 {
@@ -362,6 +377,141 @@ Answer a natural language question about the schedule. The engine first tries to
 | `"What are the successors of HW-01?"` | LLM + tools | ~8s |
 | `"Why is Alice Nguyen behind schedule?"` | LLM + state | ~10s |
 | `"What is the probability of hitting PDR on time?"` | LLM + state | ~10s |
+
+---
+
+## GET /api/evm
+
+*(Phase 9.2)* Returns EVM metrics from the latest dashboard state. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "program": {
+    "label": "PROGRAM", "task_count": 92,
+    "bac": 460.0, "bcwp": 215.3, "bcws": 230.0,
+    "spi": 0.936, "sv": -14.7, "sv_pct": -6.4,
+    "eac": 491.5, "vac": -31.5, "tcpi": 1.13,
+    "completion_pct": 46.8, "health": "YELLOW", "bei": 0.91
+  },
+  "by_cam": {
+    "Alice": { "spi": 0.90, "sv": -5.0, "bac": 110.0, "health": "YELLOW" }
+  },
+  "task_detail": [...],
+  "data_unit": "work-days",
+  "reference_date": "2026-05-06T12:00:00+00:00",
+  "computed_at": "2026-05-06T12:01:00+00:00"
+}
+```
+
+**Response 404:** No state file yet — run a cycle first.
+
+---
+
+## GET /api/dcma
+
+*(Phase 9.3)* Returns DCMA 14-point assessment from the latest dashboard state. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "score": 10, "total_checks": 14, "score_pct": 71.4,
+  "health": "YELLOW",
+  "summary": "10/14 checks passed — YELLOW",
+  "checks": [
+    { "check_id": 1, "name": "Logic (Missing Predecessors/Successors)", "passed": true,
+      "violations": 0, "threshold": "≤5% orphan tasks", "flagged_tasks": [], "note": "..." }
+  ],
+  "thresholds": { "high_float_days": 44, "high_duration_days": 44 },
+  "computed_at": "2026-05-06T12:01:00+00:00"
+}
+```
+
+**Response 404:** No state file yet — run a cycle first.
+
+---
+
+## GET /api/variance
+
+*(Phase 9.4)* Returns the auto-generated variance analysis narrative from the latest dashboard state. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "narrative": "Schedule performance for the current period reflects...",
+  "variance_summary": {
+    "spi": 0.936, "sv": -14.7, "bei": 0.91, "dcma_score": 10,
+    "blockers": 23, "risk_flags": 5, "worst_cams": ["Alice", "Bob"]
+  }
+}
+```
+
+**Response 404:** No variance narrative yet — run a cycle first.
+
+---
+
+## GET /api/briefing
+
+*(Phase 9.5)* Generates and returns a self-contained HTML executive briefing for the latest cycle. Requires read API key.
+
+**Response 200:** `Content-Type: text/html` — a fully self-contained HTML document (no CDN dependencies). Saved to `reports/briefings/{cycle_id}_brief.html`.
+
+**Response 404:** No state available — run a cycle first.
+
+---
+
+## GET /api/briefing/{cycle_id}
+
+*(Phase 9.5)* Generates and returns an executive briefing for a specific cycle ID. Useful for recreating historical briefs. Requires read API key.
+
+**Response 200:** `Content-Type: text/html`
+**Response 404:** No state available.
+
+---
+
+## GET /api/portfolio
+
+*(Phase 9.6)* Returns the multi-program portfolio health summary. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "programs": [
+    {
+      "program_id": "ims-1", "name": "AI Agent Server Rack",
+      "health": "YELLOW", "spi": 0.936, "completion_pct": 46.8,
+      "dcma_score": "10/14", "dcma_health": "YELLOW",
+      "high_risk_milestones": 2, "medium_risk_milestones": 1,
+      "cam_rate": "4/5", "is_stale": false
+    }
+  ],
+  "portfolio_health": "YELLOW",
+  "total_programs": 1,
+  "programs_at_risk": 1,
+  "computed_at": "2026-05-06T12:01:00+00:00"
+}
+```
+
+**Portfolio health logic:** Any RED → RED; all GREEN → GREEN; else YELLOW. Falls back to single-program view when `data/portfolio.json` does not exist.
+
+---
+
+## POST /api/portfolio/register
+
+*(Phase 9.6)* Register a new program in the portfolio registry. Requires **admin key**.
+
+**Request:**
+```json
+{
+  "program_id": "prog-002",
+  "name": "Ground System Upgrade",
+  "state_file": "/opt/ims-agent-prog2/data/dashboard_state.json",
+  "description": "Option B ground system"
+}
+```
+
+**Response 200:** `{"status": "registered", "program_id": "prog-002"}`
+**Response 400:** Missing required field.
 
 ---
 

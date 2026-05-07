@@ -44,7 +44,7 @@ decisions quickly."""
 class LLMInterface:
     """Wraps the Anthropic SDK for all IMS Agent LLM calls."""
 
-    def __init__(self) -> None:
+    def __init__(self, model: str | None = None) -> None:
         """Initialize the Anthropic client.
 
         When ``LLM_BASE_URL`` is set (local Ollama or on-prem endpoint),
@@ -68,7 +68,7 @@ class LLMInterface:
         if _BASE_URL:
             kwargs["base_url"] = _BASE_URL
         self._client = anthropic.Anthropic(**kwargs)
-        self._model = _MODEL
+        self._model = model or _MODEL
         logger.info("action=llm_init model=%s base_url=%s", self._model, _BASE_URL or "(default)")
 
     def _call_with_retry(self, **kwargs: Any) -> Any:
@@ -166,13 +166,17 @@ class LLMInterface:
             result["schedule_health"] = schedule_health
         return result
 
-    def ask(self, question: str, context: str) -> str:
+    def ask(self, question: str, context: str, system: str | None = None) -> str:
         """
         Answer a free-form question grounded in the provided schedule context.
 
         Args:
             question: The PM's natural language question.
             context: Serialized schedule context to ground the answer.
+            system: Optional system prompt override. When provided, replaces the
+                    default PM-analyst system prompt. Used by CAMSimulator to
+                    inject the plain-speech / no-markdown persona prompt so
+                    simulated CAM responses do not contain markdown formatting.
 
         Returns:
             The model's answer as a string.
@@ -181,7 +185,7 @@ class LLMInterface:
         response = self._call_with_retry(
             model=self._model,
             max_tokens=1024,
-            system=_SYSTEM_PROMPT,
+            system=system or _SYSTEM_PROMPT,
             messages=[
                 {
                     "role": "user",

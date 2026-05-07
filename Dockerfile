@@ -2,7 +2,7 @@
 # Build: docker build -t ims-agent .
 # Run:   docker run -p 8080:8080 --env-file .env ims-agent
 
-FROM python:3.11-slim AS base
+FROM python:3.13-slim AS base
 
 # System deps for numpy/pandas + ffmpeg for future Whisper STT
 RUN apt-get update && apt-get install -y --no-install-recommends \

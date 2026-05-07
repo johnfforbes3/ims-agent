@@ -81,6 +81,15 @@ def is_com_available() -> bool:
         )
         _com_ok = False
         return False
+    except:  # noqa: E722 — catch Windows SEH / structured exceptions (e.g.
+             # 0x80010108 RPC_E_DISCONNECTED) that escape the C boundary without
+             # being wrapped in a Python exception.
+        logger.warning(
+            "action=com_unavailable error=windows_structured_exception "
+            "— MS Project COM crashed; falling back to MPXJ."
+        )
+        _com_ok = False
+        return False
 
 
 def is_mpxj_available() -> bool:

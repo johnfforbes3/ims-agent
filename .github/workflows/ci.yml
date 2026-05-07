@@ -1,0 +1,59 @@
+# IMS Agent — CI Pipeline
+#
+# Runs the full unit test suite on every push and pull request to main/master.
+# Uses a Windows runner to match the production environment (pywin32, COM path
+# stubs, MPXJ/JVM backend). Integration tests (openai-whisper) are excluded via
+# the `integration` mark registered in tests/conftest.py.
+#
+# Required GitHub secret:
+#   ANTHROPIC_API_KEY — Anthropic API key for LLM-backed unit tests
+#                       (interview agent NLU classification, Q&A engine, etc.)
+#                       Set at: Settings → Secrets → Actions → New repository secret
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Unit Tests (Python 3.13 · Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      # MPXJ (Java-based .mpp reader) and jpype1 both require a JVM at import
+      # time. The unit tests mock out all COM/MPP automation via conftest.py, but
+      # the packages still need to be importable without crashing.
+      - name: Set up Java 21 (required by MPXJ/jpype1)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Run all tests except the 4 @pytest.mark.integration Whisper STT tests
+      # (those require `pip install openai-whisper` + ffmpeg on PATH).
+      # The `-m "not integration"` filter is registered in tests/conftest.py.
+      - name: Run unit tests
+        run: pytest tests/ -q -m "not integration" --tb=short
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SIMULATOR_MODEL: claude-haiku-4-5
+          CLASSIFIER_MODEL: claude-haiku-4-5
+          IMS_FILE_PATH: data/sample_ims.xml
+          # Disable rate-limit delay in CI so simulator tests run at full speed
+          SIMULATOR_CALL_DELAY_MS: "0"

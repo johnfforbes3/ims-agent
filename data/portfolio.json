@@ -1,0 +1,8 @@
+[
+  {
+    "program_id": "prog-1",
+    "name": "Test Prog",
+    "state_file": "data/state.json",
+    "description": "desc"
+  }
+]

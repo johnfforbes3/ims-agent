@@ -6,7 +6,7 @@
 > checklist after any redesign or refactor. Every numbered requirement (REQ-D-NNN) must pass
 > before a dashboard change can be merged.
 >
-> **Last updated:** 2026-05-04 (Phase 8.3 / 424 tests)
+> **Last updated:** 2026-05-06 (Phase 8.4 / 445 tests)
 
 ---
 
@@ -30,6 +30,7 @@
 16. [Baseline Drift Report](#16-baseline-drift-report)
 17. [Trigger Cycle Button](#17-trigger-cycle-button)
 18. [Auto-Refresh](#18-auto-refresh)
+19. [Listen-In Panel](#19-listen-in-panel)
 
 ---
 
@@ -338,6 +339,23 @@ when cycle completes.
 
 ---
 
+## 19. Listen-In Panel
+
+**Feature:** Real-time audio and transcript panel that streams each CAM's interview conversation as it progresses during an active cycle. A per-interview dropdown allows the PM to isolate a single CAM's conversation — filtering both the transcript display and the TTS audio queue. Audio is served via ElevenLabs TTS, streamed turn-by-turn via SSE.
+
+| REQ # | Requirement | Verification |
+|-------|-------------|--------------|
+| REQ-D-190 | Panel is accessible during an active cycle | Trigger cycle, open Listen-In panel |
+| REQ-D-191 | Per-interview dropdown (`<select id="listenin-cam-select">`) is present in the controls row | Visual check |
+| REQ-D-192 | Dropdown starts with "All CAMs" selected | Fresh cycle start |
+| REQ-D-193 | CAM names populate dynamically as interviews begin (via SSE) — no hard-coded list | Start cycle with new CAM config, verify names appear |
+| REQ-D-194 | Selecting a CAM hides `.listenin-turn` elements whose `data-cam-email` does not match | Select specific CAM, verify transcript |
+| REQ-D-195 | TTS audio is suppressed for filtered-out CAMs (`_drainAudioQueue` skips non-matching entries) | Select specific CAM during cycle, verify only that CAM's audio plays |
+| REQ-D-196 | Selecting "All CAMs" restores all transcript turns and audio | Switch back to "All CAMs", verify |
+| REQ-D-197 | Dropdown persists the selection if the panel is scrolled or resized | Resize browser, verify dropdown unchanged |
+
+---
+
 ## Summary: Requirement Counts by Section
 
 | Section | REQ count |
@@ -360,7 +378,8 @@ when cycle completes.
 | 16 Baseline Drift | 10 |
 | 17 Trigger Button | 5 |
 | 18 Auto-Refresh | 6 |
-| **Total** | **121** |
+| 19 Listen-In Panel | 8 |
+| **Total** | **129** |
 
 ---
 
@@ -369,3 +388,4 @@ when cycle completes.
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-05-04 | Initial baseline created — 121 requirements across 18 features | Claude (Phase 8.3) |
+| 2026-05-05 | Added §19 Listen-In Panel (8 REQs) — per-interview dropdown for CAM isolation (Phase 8.4) | Claude (Phase 8.4) |

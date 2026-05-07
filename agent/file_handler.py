@@ -214,14 +214,43 @@ class IMSFileHandler:
         duration_opt: float | None = self._parse_duration_days(_opt_str) if _opt_str else None
         duration_pess: float | None = self._parse_duration_days(_pess_str) if _pess_str else None
 
-        # Predecessors
+        # Predecessors — legacy list[str] preserved for backward compatibility
         predecessors: list[str] = []
+        # Phase 9.3 — detailed predecessor link metadata (lag, type) for DCMA
+        predecessor_links: list[dict] = []
         pred_link_el = task_el.find(_tag("PredecessorLink"))
         if pred_link_el is not None:
             for pl in task_el.findall(_tag("PredecessorLink")):
                 pred_uid = self._get_text(pl, "PredecessorUID")
                 if pred_uid:
                     predecessors.append(pred_uid)
+                    # Type: 0=FF, 1=FS (default), 2=SF, 3=SS
+                    link_type = int(self._get_text(pl, "Type", "1"))
+                    # LinkLag stored in tenths of minutes; negative = lead
+                    link_lag_raw = int(self._get_text(pl, "LinkLag", "0"))
+                    predecessor_links.append({
+                        "predecessor_uid": pred_uid,
+                        "type": link_type,
+                        "lag_tenths_min": link_lag_raw,
+                    })
+
+        # Phase 9.3 — constraint type for DCMA hard-constraint check
+        # MSPDI ConstraintType: 0=ASAP(ok), 1=ALAP(hard), 2=MSO(hard),
+        # 3=MFNO(ok), 4=MFO(hard), 5=MSO(hard), 6=SNL(ok), 7=FNL(ok)
+        _HARD_CONSTRAINTS = {1, 2, 4, 5}  # ALAP, MSO, MFO, MSNLT
+        constraint_type_raw = int(self._get_text(task_el, "ConstraintType", "0"))
+        has_hard_constraint = constraint_type_raw in _HARD_CONSTRAINTS
+
+        # Phase 9.3 — total float from MSPDI (stored in tenths of a minute)
+        # 480 min/day × 10 = 4800 tenths-of-minutes per workday
+        _TENTHS_MIN_PER_DAY = 4800
+        total_slack_raw = self._get_text(task_el, "TotalSlack", "")
+        total_float_days: float | None = None
+        if total_slack_raw:
+            try:
+                total_float_days = int(total_slack_raw) / _TENTHS_MIN_PER_DAY
+            except (ValueError, ZeroDivisionError):
+                pass
 
         cam = assignments.get(uid, "Unassigned")
 
@@ -234,6 +263,11 @@ class IMSFileHandler:
             "baseline_finish": baseline_finish,
             "percent_complete": pct_complete,
             "predecessors": predecessors,
+            # Phase 9.3 additions
+            "predecessor_links": predecessor_links,
+            "has_hard_constraint": has_hard_constraint,
+            "constraint_type": constraint_type_raw,
+            "total_float_days": total_float_days,
             "cam": cam,
             "is_milestone": is_milestone,
             "duration_days": duration_days,

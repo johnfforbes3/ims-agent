@@ -631,6 +631,20 @@ class CycleRunner:
                 ok = _bf_send(service_url, conv_id, greeting)
                 if ok:
                     logger.info("action=proactive_greeting_sent cam=%s conv=%s", cam_name, conv_id[:20])
+                    # Register session and relay greeting to live listen-in panel
+                    try:
+                        from agent.voice.interview_relay import InterviewRelayBus as _RelayBus
+                        _relay = _RelayBus.get()
+                        _relay.register_session(cam_email, cam_name, str(id(session)))
+                        _relay.push_bot_turn(
+                            cam_name=cam_name,
+                            cam_email=cam_email,
+                            text=greeting,
+                            session_id=str(id(session)),
+                            cycle_id=cycle_id,
+                        )
+                    except Exception as _re:
+                        logger.debug("action=relay_greeting_failed cam=%s err=%s", cam_name, _re)
                 else:
                     logger.warning("action=proactive_greeting_failed cam=%s", cam_name)
 
@@ -813,6 +827,76 @@ class CycleRunner:
 
         call_status = directory.get_call_status_summary()
 
+        # Build cam_status from call_status + per-CAM task update / blocker counts
+        _cam_input_stats: dict[str, dict] = {}
+        for inp in cam_inputs:
+            cname = inp.get("cam_name", "")
+            if not cname:
+                continue
+            if cname not in _cam_input_stats:
+                _cam_input_stats[cname] = {"tasks_updated": 0, "blockers": 0}
+            _cam_input_stats[cname]["tasks_updated"] += 1
+            if inp.get("blocker"):
+                _cam_input_stats[cname]["blockers"] += 1
+        cam_status = {
+            cam: {
+                "responded": data.get("completed", False),
+                "tasks_updated": _cam_input_stats.get(cam, {}).get("tasks_updated", 0),
+                "blockers": _cam_input_stats.get(cam, {}).get("blockers", 0),
+            }
+            for cam, data in call_status.items()
+        }
+
+        # Phase 9.2 — EVM metrics
+        try:
+            from agent.evm_engine import compute_evm
+            evm_summary = compute_evm(tasks)
+        except Exception as _evm_exc:
+            logger.warning("action=evm_skipped error=%s", _evm_exc)
+            evm_summary = {}
+
+        # Phase 9.3 — DCMA 14-Point Assessment
+        try:
+            from agent.dcma_assessment import run_assessment as dcma_run
+            dcma_result = dcma_run(tasks, cp_result=cp_result)
+        except Exception as _dcma_exc:
+            logger.warning("action=dcma_skipped error=%s", _dcma_exc)
+            dcma_result = {}
+
+        # Phase 9.4 — Variance Analysis Narrative
+        try:
+            from agent.variance_analyst import generate_variance_narrative
+            diff_data = None
+            _diff_path = Path(_IMS_EXPORTS_DIR) / f"{cycle_id}_diff.json"
+            if _diff_path.exists():
+                import json as _json
+                diff_data = _json.loads(_diff_path.read_text(encoding="utf-8"))
+            variance_result = generate_variance_narrative(
+                tasks=tasks,
+                cam_inputs=cam_inputs,
+                evm_summary=evm_summary,
+                cycle_id=cycle_id,
+                dcma_result=dcma_result or None,
+                ims_diff=diff_data,
+            )
+        except Exception as _var_exc:
+            logger.warning("action=variance_skipped error=%s", _var_exc)
+            variance_result = {}
+
+        # Build variance sections from narrative (CPR Format 5 structure)
+        _var_narrative = variance_result.get("narrative", "")
+        _var_paras = [p.strip() for p in _var_narrative.split("\n\n") if p.strip()]
+        _var_section_keys = [
+            "schedule_variance", "technical_performance", "cost_variance",
+            "corrective_actions", "forward_look",
+        ]
+        _var_sections: dict[str, str] = {}
+        for _i, _k in enumerate(_var_section_keys):
+            _var_sections[_k] = (
+                _var_paras[_i] if _i < len(_var_paras)
+                else (_var_paras[0] if _var_paras else "Not available for this cycle.")
+            )
+
         state = {
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "cycle_id": cycle_id,
@@ -840,6 +924,26 @@ class CycleRunner:
             "ims_master_dir": str(Path(_IMS_MASTER_DIR).resolve()),
             "ims_exports_dir": str(Path(_IMS_EXPORTS_DIR).resolve()),
             "latest_ims_path": str((Path(_IMS_EXPORTS_DIR) / "latest_ims.xml").resolve()),
+            # Phase 9.2
+            "evm": evm_summary,
+            # Phase 9.3
+            "dcma": dcma_result,
+            # Phase 9.4 — legacy flat keys kept for backward compat
+            "variance_narrative": _var_narrative,
+            "variance_summary": variance_result.get("variance_summary", {}),
+            # Phase 10 clean API keys (used by Phase 10 integration tests and API clients)
+            "health": health,
+            "summary": synthesis.get("narrative", "")[:500] if synthesis.get("narrative") else "",
+            "cams_responded": completion_report["responded"],
+            "cams_total": completion_report["total"],
+            "cam_status": cam_status,
+            "variance": {
+                "cycle_id": cycle_id,
+                "generated_at": variance_result.get(
+                    "generated_at", datetime.now(timezone.utc).isoformat()
+                ),
+                "sections": _var_sections,
+            },
         }
 
         tmp = state_path.with_suffix(".tmp")

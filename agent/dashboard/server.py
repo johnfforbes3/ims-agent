@@ -571,20 +571,40 @@ async def api_status():
 
 
 @app.post("/api/trigger", dependencies=[Depends(_require_admin_key)])
-async def api_trigger(request: Request):
-    """Admin: fire a cycle immediately in a background thread."""
+async def api_trigger(request: Request, force: bool = False):
+    """Admin: fire a cycle immediately in a background thread.
+
+    Args:
+        force: When True, clears the "recently completed" guard so all CAMs
+               are re-interviewed even if they completed within the last 23 h.
+               Useful for ad-hoc testing without waiting for the guard window.
+    """
     from agent.cycle_runner import CycleRunner
     if CycleRunner.is_active():
         raise HTTPException(status_code=409, detail="A cycle is already running")
+
+    if force:
+        # Clear in-memory completion guard so all CAMs get a fresh interview
+        try:
+            from agent.voice.teams_chat_connector import ChatInterviewManager
+            mgr = ChatInterviewManager.get()
+            with mgr._lock:
+                mgr._completed_cams.clear()
+            logger.info("action=trigger_force_clear ip=%s",
+                        request.client.host if request.client else "unknown")
+        except Exception as _exc:
+            logger.debug("action=trigger_force_clear_skip reason=%s", _exc)
+
     runner = CycleRunner(ims_path=_IMS_PATH, mode=os.getenv("CALL_TRANSPORT", "simulated"))
     thread = threading.Thread(target=runner.run, daemon=True, name="manual_cycle")
     thread.start()
     logger.info(
-        "action=audit_admin_trigger ip=%s transport=%s",
+        "action=audit_admin_trigger ip=%s transport=%s force=%s",
         request.client.host if request.client else "unknown",
         os.getenv("CALL_TRANSPORT", "simulated"),
+        force,
     )
-    return JSONResponse({"status": "triggered", "message": "Cycle started in background"})
+    return JSONResponse({"status": "triggered", "message": "Cycle started in background", "force": force})
 
 
 @app.post("/api/admin/purge", dependencies=[Depends(_require_admin_key)])
@@ -1054,6 +1074,10 @@ async def internal_cam_message(request: Request):
         from agent.voice.interview_relay import InterviewRelayBus as _RelayBus
         _relay = _RelayBus.get()
         _sid = str(id(session))
+        # Ensure the session is registered (may not be if greeting was sent via
+        # cycle_runner before the relay bus was initialised, or after a restart)
+        if not any(s["session_id"] == _sid for s in _relay.active_sessions()):
+            _relay.register_session(email, session.cam_name, _sid)
         _relay.push_cam_turn(
             cam_name=session.cam_name,
             cam_email=email,
@@ -1221,12 +1245,20 @@ async def api_interview_stream(request: Request):
     except (TypeError, ValueError):
         start_seq = max(0, bus.current_seq - 30)
 
+    # ?_backfill_only=1 — stop after replaying existing events without entering
+    # the infinite polling loop.  Intended for integration tests only: it lets
+    # TestClient.get() (non-streaming) receive a finite, complete response.
+    backfill_only = request.query_params.get("_backfill_only") == "1"
+
     async def event_generator():
         seq = start_seq
         # Backfill: events already in the bus since start_seq
         for ev in bus.events_since(seq, limit=50):
             seq = ev.seq + 1
             yield f"data: {json.dumps(dataclasses.asdict(ev))}\n\n"
+
+        if backfill_only:
+            return  # Stop here — used by integration tests to avoid infinite loop
 
         # Stream new events as they arrive (poll every 300 ms)
         idle_ticks = 0
@@ -1279,6 +1311,163 @@ async def api_interview_audio(event_id: str):
     if audio is None:
         raise HTTPException(status_code=404, detail="Audio not ready or not found")
     return _Resp(content=audio, media_type="audio/mpeg")
+
+
+# ---------------------------------------------------------------------------
+# Phase 9.2 — EVM metrics endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/evm")
+async def api_evm(
+    _auth: None = Depends(_require_api_key),
+):
+    """Return EVM metrics from the latest dashboard state."""
+    state = _load_json(_STATE_FILE) or {}
+    evm = state.get("evm", {})
+    if not evm:
+        return JSONResponse({"error": "No EVM data available yet. Run a cycle first."}, status_code=404)
+    return JSONResponse(evm)
+
+
+# ---------------------------------------------------------------------------
+# Phase 9.3 — DCMA 14-Point Assessment endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/dcma")
+async def api_dcma(
+    _auth: None = Depends(_require_api_key),
+):
+    """Return DCMA 14-point assessment from the latest dashboard state."""
+    state = _load_json(_STATE_FILE) or {}
+    dcma = state.get("dcma", {})
+    if not dcma:
+        return JSONResponse({"error": "No DCMA data available yet. Run a cycle first."}, status_code=404)
+    return JSONResponse(dcma)
+
+
+# ---------------------------------------------------------------------------
+# Phase 9.4 — Variance narrative endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/variance")
+async def api_variance(
+    _auth: None = Depends(_require_api_key),
+):
+    """Return variance analysis data from the latest dashboard state."""
+    state = _load_json(_STATE_FILE) or {}
+    # Phase 10 schema: state["variance"] with nested sections
+    variance = state.get("variance")
+    if variance and variance.get("sections"):
+        return JSONResponse(variance)
+    # Backward compat: Phase 9.4 flat keys
+    narrative = state.get("variance_narrative", "")
+    summary = state.get("variance_summary", {})
+    if narrative:
+        return JSONResponse({"narrative": narrative, "variance_summary": summary})
+    return JSONResponse(
+        {"error": "No variance data available yet. Run a cycle first."}, status_code=404
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 9.5 — Executive briefing endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/briefing")
+async def api_briefing_latest(
+    _auth: None = Depends(_require_api_key),
+):
+    """Generate and return an executive briefing HTML for the latest cycle."""
+    state = _load_json(_STATE_FILE) or {}
+    if not state:
+        return JSONResponse({"error": "No state available. Run a cycle first."}, status_code=404)
+    try:
+        from agent.executive_briefing import generate_briefing
+        html = generate_briefing(state)
+        return HTMLResponse(content=html)
+    except Exception as exc:
+        logger.error("action=briefing_error error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"Briefing generation failed: {exc}")
+
+
+@app.get("/api/briefing/{cycle_id}")
+async def api_briefing_cycle(
+    cycle_id: str,
+    _auth: None = Depends(_require_api_key),
+):
+    """Return a pre-saved executive briefing for a specific cycle.
+
+    Lookup order:
+      1. Pre-saved HTML file at {REPORTS_DIR}/briefings/{cycle_id}_briefing.html
+      2. Generate on-demand if cycle_id matches the current dashboard state
+      3. 404 if neither exists
+    """
+    # Check for a pre-saved briefing first (written by GET /api/briefing)
+    reports_dir = os.getenv("REPORTS_DIR", _REPORTS_DIR)
+    briefing_path = Path(reports_dir) / "briefings" / f"{cycle_id}_briefing.html"
+    if briefing_path.exists():
+        return HTMLResponse(content=briefing_path.read_text(encoding="utf-8"))
+
+    # Fall back: generate on-demand only when cycle_id matches the current state
+    state = _load_json(_STATE_FILE) or {}
+    if not state or state.get("cycle_id") != cycle_id:
+        return JSONResponse(
+            {"error": f"No briefing found for cycle {cycle_id}"},
+            status_code=404,
+        )
+
+    try:
+        from agent.executive_briefing import generate_briefing
+        html = generate_briefing(state, cycle_id=cycle_id)
+        return HTMLResponse(content=html)
+    except Exception as exc:
+        logger.error("action=briefing_error cycle=%s error=%s", cycle_id, exc)
+        raise HTTPException(status_code=500, detail=f"Briefing generation failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 9.6 — Portfolio view endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/portfolio")
+async def api_portfolio(
+    _auth: None = Depends(_require_api_key),
+):
+    """Return the multi-program portfolio summary."""
+    try:
+        from agent.portfolio import get_portfolio
+        portfolio = get_portfolio()
+        return JSONResponse(portfolio)
+    except Exception as exc:
+        logger.error("action=portfolio_error error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"Portfolio aggregation failed: {exc}")
+
+
+@app.post("/api/portfolio/register")
+async def api_portfolio_register(
+    request: Request,
+    _auth: None = Depends(_require_admin_key),
+):
+    """Register a new program in the portfolio."""
+    try:
+        body = await request.json()
+        from agent.portfolio import register_program
+        ok = register_program(
+            program_id=body["program_id"],
+            name=body["name"],
+            state_file=body["state_file"],
+            description=body.get("description", ""),
+        )
+        if ok:
+            return JSONResponse({"status": "registered", "program_id": body["program_id"]})
+        return JSONResponse({"error": "Registration failed"}, status_code=500)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Missing required field: {exc}")
 
 
 # ---------------------------------------------------------------------------

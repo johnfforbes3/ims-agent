@@ -74,7 +74,7 @@ agent.py    simulator  interface.py
 | `main.py` | CLI entry point. Parses args, dispatches to the correct runtime mode. |
 | `requirements.txt` | All Python dependencies. |
 | `.env.example` | Template for all 40+ environment variables with descriptions. |
-| `Dockerfile` | Non-root production container (`imsagent` uid 1001, `python:3.11-slim`). |
+| `Dockerfile` | Non-root production container (`imsagent` uid 1001, `python:3.13-slim`). |
 | `docker-compose.yml` | Local dev compose (bind-mount volumes). |
 | `docker-compose.prod.yml` | Production compose (named volumes, resource limits, `unless-stopped`). |
 | `START.bat` | One-click Windows startup: activates venv, seeds master, launches `--schedule`. |
@@ -94,7 +94,7 @@ agent.py    simulator  interface.py
 
 | File | Responsibility |
 |------|---------------|
-| `llm_interface.py` | **Single entry point for ALL Anthropic API calls.** Never call the SDK directly from other modules. Provides: `synthesize()`, `classify_cam_response()`, `ask()`, `ask_with_tools()`. Routes to local Ollama if `LLM_BASE_URL` is set. |
+| `llm_interface.py` | **Single entry point for ALL Anthropic API calls.** Never call the SDK directly from other modules. Provides: `synthesize()`, `classify_cam_response()`, `ask(question, context, system=None)`, `ask_with_tools()`. `ask()` accepts an optional `system` override — used by `CAMSimulator` to inject the plain-speech persona prompt (eliminates markdown in simulated CAM responses). Routes to local Ollama if `LLM_BASE_URL` is set. |
 | `file_handler.py` | IMS XML parsing (`parse()`) and write-back (`apply_updates()`). Reads/writes MSPDI XML format. Atomic in-place write via `os.replace(tmp, target)`. Caches parsed tree; call `parse()` again after write to refresh. |
 | `critical_path.py` | CPM calculation. Returns `critical_path` (ordered task ID list), `total_float` (per-task dict), `project_float_days` (scalar), `near_critical` (task IDs with float < 5 days). |
 | `sra_runner.py` | Monte Carlo SRA engine. N=1000 simulations (configurable). Per-milestone: P50/P80/P95 dates and `prob_on_baseline`. Accepts optional `eac_dates` dict (task_id → ISO date string) to override remaining-duration estimates with CAM-provided EAC dates. |
@@ -633,13 +633,13 @@ pytest tests/ -k "interview"  # filter by keyword
 pytest tests/ --tb=short      # short tracebacks on failure
 ```
 
-**Current count:** 404 tests (all passing as of 2026-05-03)
+**Current count:** 1010 tests passing (4 Whisper integration tests skipped — `openai-whisper` not installed) as of 2026-05-07.
 
 ### Test File Map
 
 | File | What it covers |
 |------|---------------|
-| `test_interview_agent.py` | InterviewAgent state machine — all state transitions, edge cases, milestone risk suppression, CONFIRM keyword pre-check |
+| `test_interview_agent.py` | InterviewAgent state machine — all state transitions, edge cases, milestone risk suppression, CONFIRM keyword pre-check. `test_invalid_pct_triggers_retry` uses `monkeypatch` to mock `_classify_cam_response` for LLM-independent retry testing. |
 | `test_cam_directory.py` | CAM registry, business hours, retry/escalation logic |
 | `test_cam_input.py` | CAM input structuring and validation |
 | `test_critical_path.py` | CPM calculation, float, near-critical flagging |
@@ -649,14 +649,26 @@ pytest tests/ --tb=short      # short tracebacks on failure
 | `test_qa_engine.py` | Q&A engine — direct path and LLM-routed path |
 | `test_report_generator.py` | Markdown report structure, IMS diff summary, baseline drift alert |
 | `test_scheduler.py` | APScheduler cron configuration |
-| `test_sra_runner.py` | Monte Carlo SRA correctness |
-| `test_stt_engine.py` | STT engine abstraction (mock path) |
+| `test_sra_runner.py` | Monte Carlo SRA correctness; beta-PERT distribution (Phase 8.3) |
+| `test_stt_engine.py` | STT engine abstraction (mock path); Whisper integration tests (`@pytest.mark.integration`, skipped when openai-whisper absent) |
 | `test_tts_engine.py` | TTS engine abstraction (mock path) |
 | `test_validation.py` | Validation rules — backwards, large jump, missing |
 | `test_phase5.py` | RBAC, rate limiting, metrics (JSON + Prometheus), purge, health endpoint, IMS diff, observability |
 | `test_phase74.py` | Phase 7.4 — per-CAM dashboard pills, cumulative diff, baseline drift, Q&A TTL cache, simulator rate limiting, diff/drift report sections |
 | `test_security.py` | Phase 7.2 — JWT token endpoint, Bearer auth, admin JTI blocklist, key age alert, SIEM handler configuration |
 | `test_eac_date.py` | Phase 7.3 — `AWAITING_EAC_DATE` state transitions, `TaskResult.eac_date`/`eac_uncertain` fields, `_classify_eac_date` LLM extraction, `SRARunner(eac_dates=...)` override, report CAM Forecast/Δ Days columns |
+| `test_bootstrap_sessions.py` | Phase 8.3 — `find_missing_cams`, load helpers, bootstrap orchestrator exit codes, CAM filter |
+| `test_evm_engine.py` | EVM metrics engine (Phase 9.2) — BAC/BCWP/BCWS/SPI/SV/EAC/BEI per-program and per-CAM |
+| `test_dcma_assessment.py` | DCMA 14-point assessment (Phase 9.3) — auto-scoring all 14 checks from MSPDI |
+| `test_variance_analyst.py` | Variance analysis narratives (Phase 9.4) — LLM-backed CPR Format 5 narrative generation |
+| `test_executive_briefing.py` | Executive briefing generator (Phase 9.5) — self-contained HTML brief output |
+| `test_portfolio.py` | Portfolio health aggregation (Phase 9.6) — multi-program health rollup logic |
+| `test_phase92_endpoints.py` | Phase 9.2–9.6 FastAPI endpoint integration tests — `/api/evm`, `/api/dcma`, `/api/variance`, `/api/briefing`, `/api/portfolio` |
+| `test_integration_relay_wiring.py` | Teams relay wiring integration tests (Phase 10) |
+| `test_integration_sse_stream.py` | SSE stream endpoint tests (Phase 10) |
+| `test_integration_api_smoke.py` | Full API smoke tests (Phase 10) |
+| `test_integration_cycle_e2e.py` | End-to-end cycle integration tests (Phase 10) |
+| `test_integration_dashboard_ui.py` | 289-test element-by-element dashboard UI suite (Phase 11) — 18 test classes covering all panels, KPIs, tables, JS API paths |
 
 ### Test Fixtures (`tests/conftest.py`)
 
@@ -667,6 +679,19 @@ pytest tests/ --tb=short      # short tracebacks on failure
 ### Integration Tests
 
 Some tests that require real credentials (Azure, Slack, ElevenLabs) are marked `@pytest.mark.integration` and skipped in CI. Run them manually when the relevant credentials are available.
+
+### CI Pipeline
+
+`.github/workflows/ci.yml` — runs on every push and PR to `main`/`master`.
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| Runner | `windows-latest` | Matches production; ensures `pywin32`, MPXJ, and COM stubs behave as in dev |
+| Python | `3.13` | Matches runtime |
+| Java | `21` (Temurin) | Required for MPXJ/jpype1 to import cleanly |
+| Test command | `pytest tests/ -q -m "not integration" --tb=short` | Excludes 4 Whisper tests; runs all 1010 unit tests |
+| Secret required | `ANTHROPIC_API_KEY` | LLM-backed unit tests (interview NLU, Q&A engine) make real API calls |
+| `SIMULATOR_CALL_DELAY_MS` | `0` | Disables inter-call throttle in CI for speed |
 
 ---
 

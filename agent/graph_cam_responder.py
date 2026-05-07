@@ -43,8 +43,8 @@ load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-_POLL_SEC = int(os.getenv("CAM_RESPONDER_POLL_SEC", "5"))
-_RESPOND_DELAY_SEC = float(os.getenv("CAM_RESPONDER_DELAY_SEC", "2.0"))
+_POLL_SEC = int(os.getenv("CAM_RESPONDER_POLL_SEC", "2"))
+_RESPOND_DELAY_SEC = float(os.getenv("CAM_RESPONDER_DELAY_SEC", "0.5"))
 _TOKEN_CACHE_DIR = Path(os.getenv("DATA_DIR", "data")) / "cam_tokens"
 _BOT_APP_ID = os.getenv("TEAMS_BOT_APP_ID", "")
 _SCOPES = ["Chat.ReadWrite"]
@@ -78,13 +78,15 @@ class GraphCAMResponder:
         self._simulator = CAMSimulator(persona)
         self._stop = stop_event or threading.Event()
         self._chat_id: str | None = None
-        # Initialize _last_check 30 s before now so we catch any greeting the
-        # cycle_runner sent just before this responder was created.  The cycle
-        # sends all greetings first, then initialises responders — so for later
-        # CAMs there can be a several-second gap where the greeting is older than
-        # the responder's start time.  Without the lookback the greeting is
-        # filtered as "already processed" and the interview stalls.
-        self._last_check: datetime = datetime.now(timezone.utc) - timedelta(seconds=30)
+        # Initialize _last_check 2 hours before now so we catch any greeting the
+        # cycle_runner sent before this responder was created.  The cycle sends
+        # all greetings first, then initialises responders.  In normal startup
+        # the responder is created within seconds of the greeting.  However, if
+        # the responder was offline when the cycle started (e.g. restarted mid-
+        # cycle) the greeting may be many minutes old.  A 2-hour window ensures
+        # the responder always picks up the current cycle's greeting without
+        # reaching back into the previous day's completed interviews.
+        self._last_check: datetime = datetime.now(timezone.utc) - timedelta(hours=2)
         # Track Teams message IDs we have already processed and responded to.
         # This is the primary deduplication guard — timestamp-based filtering
         # (_last_check) is unreliable because the same message can appear in

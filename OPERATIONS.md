@@ -133,14 +133,16 @@ curl -X POST http://localhost:9000/api/ask \
 
 ## Validation Holds
 
-When the validation layer flags an anomaly, it logs a hold but does **not** block the cycle by default. To review:
+When the validation layer flags an anomaly, it either blocks the cycle (hard failure — unexplained backwards movement) or logs a warning (explained backwards movement, large jump, missing response). To review:
 
 ```bash
 grep "validation_hold" logs/ims_agent.log | tail -20
 cat reports/cycles/$(ls -t reports/cycles/ | head -1) | python -m json.tool | grep -A5 "validation_holds"
 ```
 
-Holds are logged but not currently surfaced on the dashboard (TD-015 — Phase 5 improvement).
+Holds are surfaced on the dashboard in the Validation Alert Panel (collapsible, yellow-bordered card listing each hold). Hard failures require PM approval via `POST /api/approvals/{cycle_id}/approve` before the IMS write is applied.
+
+**Backwards movement rule:** If a CAM reports a percent-complete lower than the previous cycle, the rule checks the `blocker` and `risk_description` fields. If a documented explanation is present, the issue is a **warning** (IMS write proceeds, PM is notified). Only truly unexplained decreases are **hard failures** requiring approval.
 
 ---
 
@@ -225,3 +227,34 @@ After rotation, update `KEY_CREATED_AT` in `.env` to reset the age counter.
 - Each Q&A question with tool use makes 1-5 API calls
 - Direct-answer queries (health, top risks, critical path) make 0 API calls
 - Review `LOG_LEVEL=DEBUG` output to count `action=llm_call` entries per cycle
+
+### LLM returns 404 / model not found — interviews fail silently
+
+Symptom: Log shows `Error code: 404 — model: <id>` and CAM responses are never received, or latency is 30-60s per turn with no data.
+
+Root cause: The Anthropic model ID in `.env` uses an unavailable naming convention. This account tier only has access to 4.x series models using the short version ID format (`claude-haiku-4-5`, `claude-sonnet-4-6`). Date-stamped IDs (`claude-3-5-haiku-20241022`) return HTTP 404.
+
+Fix:
+```
+# In .env — use the 4.x short form, NOT the date-stamped form
+SIMULATOR_MODEL=claude-haiku-4-5     # ✅ correct
+CLASSIFIER_MODEL=claude-haiku-4-5    # ✅ correct
+ANTHROPIC_MODEL=claude-sonnet-4-6    # ✅ correct
+
+# WRONG — these return 404:
+# SIMULATOR_MODEL=claude-3-5-haiku-20241022
+# ANTHROPIC_MODEL=claude-3-7-sonnet-20250219
+```
+
+After fixing `.env`, restart the server (`Ctrl+C` then `python main.py --schedule`) — model env vars are read at module load time.
+
+### Cycle re-trigger skips all CAMs ("0 CAMs responded")
+
+After a failed cycle, `ChatInterviewManager._completed_cams` may be populated from the partial run. Subsequent triggers skip those CAMs because they appear "already done."
+
+Fix: Always include `?force=true` when triggering manually:
+```bash
+curl -X POST -H "X-Admin-Key: KEY" http://localhost:9000/api/trigger?force=true
+```
+
+The dashboard Trigger Cycle button already does this automatically.

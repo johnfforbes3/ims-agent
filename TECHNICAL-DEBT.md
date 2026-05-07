@@ -236,9 +236,7 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 ### TD-024 — Eva Johnson has no Teams chat session; shows "not_contacted" on dashboard
 **File:** `data/cam_sessions.json`, `data/cam_identity_map.json`  
 **Severity:** Low  
-**Status:** IN PROGRESS — 2026-04-28. `cam_identity_map.json` updated: Eva now has `email: eva@intelligenceexpanse.onmicrosoft.com`, `auto_respond: true`, `responder_type: graph`. M365 account creation + first-contact bootstrap still pending (see TODAY_ACTIONS.txt Action 5).  
-**Description:** Eva Johnson is registered as a CAM in `cam_identity_map.json` and appears in the CAM Response Status panel on the dashboard, but has no entry in `cam_sessions.json`. In `teams_chat` mode she falls back to the CAM simulator. Resolution requires: (1) create eva@intelligenceexpanse.onmicrosoft.com in M365 Admin, (2) run cam-responder for Eva and complete device-code auth, (3) bootstrap first 1:1 Teams contact with the bot.  
-**Remaining fix:** See TODAY_ACTIONS.txt Action 5 for step-by-step instructions.
+**Status:** RESOLVED — 2026-05-07. Eva's Teams session is confirmed working. She responded in production cycle `20260507T222726Z`. All 5 CAMs (Alice, Bob, Carol, David, Eva) are active with working sessions.
 
 ---
 
@@ -246,6 +244,55 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 **Resolved:** 2026-05-04 — Phase 8.3 / TD-023 sprint  
 **File:** `agent/bootstrap_sessions.py` (new), `main.py` (`--bootstrap-sessions` flag), `tests/test_bootstrap_sessions.py` (17 tests)  
 **Description:** Added `python main.py --bootstrap-sessions` CLI flag. The command reads `cam_identity_map.json` and `cam_sessions.json`, identifies CAMs with no established session, and either: (a) sends a proactive bootstrap email via Microsoft Graph API `POST /users/{sender}/sendMail` when `BOOTSTRAP_SENDER_EMAIL`, `TEAMS_BOT_APP_ID`, `TEAMS_BOT_APP_SECRET`, and `TEAMS_TENANT_ID` are all configured (requires `Mail.Send` app permission), or (b) prints step-by-step manual instructions. `--wait` flag polls `cam_sessions.json` every 30s until all sessions appear or `BOOTSTRAP_WAIT_TIMEOUT_SEC` elapses. `--cam <name>` filters to a single CAM. Gracefully skips if `msal`/`requests` are not installed.
+
+---
+
+## Phase 8.4 — Latency & Reliability Sprint (2026-05-05)
+
+### TD-037 — Validation backwards-movement rule raised false failures when blocker was documented — **RESOLVED**
+**Resolved:** 2026-05-05 — Phase 8.4 sprint  
+**File:** `agent/validation.py` — `ScheduleValidator.validate()`  
+**Severity:** Medium  
+**Description:** The backwards-movement validation rule in `ScheduleValidator.validate()` always emitted a hard failure (`ValidationFailure` added to `failures` list) whenever `new_pct < prev_pct`, regardless of whether the CAM had provided an explanation in the `blocker` or `risk_description` fields. This caused 4 false-positive holds per cycle — all 4 tasks had documented blockers that fully explained the regression, but all 4 required manual PM approval before the IMS write could proceed.  
+**Fix:** Added explanation check immediately after detecting a backwards move: `explanation = (inp.get("blocker") or "").strip() or (inp.get("risk_description") or "").strip()`. When a non-empty explanation is found, the issue is downgraded to a `warnings` entry (detail includes the blocker text truncated to 120 chars) — the IMS write proceeds, the PM is informed via the Validation Alert panel but is not blocked. Only genuinely unexplained decreases remain hard failures. No new tests added (the existing `TestBackwardsMovement` suite was updated to cover both the explained-warning and unexplained-failure paths).
+
+---
+
+### TD-038 — `SIMULATOR_MODEL` / `CLASSIFIER_MODEL` env vars pointed at unavailable model ID — **RESOLVED**
+**Resolved:** 2026-05-05 — Phase 8.4 sprint; code-level default also fixed 2026-05-06  
+**File:** `.env`, `agent/voice/cam_simulator.py`, `agent/voice/interview_agent.py`  
+**Severity:** High (production outage — all CAM responses failed)  
+**Description:** Both `SIMULATOR_MODEL` and `CLASSIFIER_MODEL` in `.env` were set to `claude-3-5-haiku-20241022`. The Anthropic API for this account tier returns HTTP 404 for date-stamped model IDs in the 3.x series. Every CAM simulator call and every NLU classification call failed with `Error code: 404 — model: claude-3-5-haiku-20241022`, causing the responder to fall into retry/error loops (30-60s per turn) before ultimately generating no interview data.  
+**Fix:** Changed both env vars to `claude-haiku-4-5` (the correct 4.x naming convention). Additionally, the code-level fallback default in `cam_simulator.py` (`_SIM_MODEL = os.getenv("SIMULATOR_MODEL", "claude-3-5-haiku-20241022")`) was also updated to `claude-haiku-4-5` so the default is consistent even without `.env` override. Production latency dropped from 30-60s/turn to ~5s/turn after the fix. `CONFIGURATION.md` updated with a note about the naming convention requirement.
+
+---
+
+### TD-039 — Dead `_SIMULATOR_SYSTEM_PROMPT` variable caused markdown asterisks in CAM responses — **RESOLVED**
+**Resolved:** 2026-05-06  
+**File:** `agent/voice/cam_simulator.py`, `agent/llm_interface.py`  
+**Severity:** Medium (CAM interview responses contained markdown formatting; asterisks appeared in live Teams conversations)  
+**Description:** `cam_simulator.py` defined `_SIMULATOR_SYSTEM_PROMPT` containing the correct "No Markdown — plain speech only. No bold, no bullets, no headers." instruction, but this variable was never passed to the API. `CAMSimulator.respond()` called `self._llm.ask(full_prompt, context="")` without a `system` override; `LLMInterface.ask()` hardcoded `system=_SYSTEM_PROMPT` (the PM-analyst prompt), completely ignoring the simulator's plain-speech prompt. Result: simulated CAM responses contained `**bold**` and other markdown that appeared verbatim in live Teams messages.  
+**Fix:** Added optional `system: str | None = None` parameter to `LLMInterface.ask()`. When provided, it replaces the default PM-analyst system prompt (`system=system or _SYSTEM_PROMPT`). `CAMSimulator.respond()` now passes `system=_SIMULATOR_SYSTEM_PROMPT` explicitly. Verified: CAM responses are plain speech with no markdown formatting.
+
+---
+
+## Phase 8.5 — CI & Infrastructure (2026-05-06)
+
+### TD-040 — No CI pipeline; regressions not automatically blocked — **RESOLVED**
+**Resolved:** 2026-05-06 — Phase 8.5 sprint  
+**File:** `.github/workflows/ci.yml` (new)  
+**Severity:** High (structural gap — any commit could introduce a regression with no automated catch)  
+**Description:** The project had 445 unit tests and a `conftest.py` that registered the `integration` mark with a comment "Skipped in CI" — but no CI existed to skip them in. A broken commit could go undetected until a manual test run.  
+**Fix:** Created `.github/workflows/ci.yml`. Windows runner (`windows-latest`) matching the production environment. Python 3.13, Java 21 (for MPXJ/jpype1). Installs full `requirements.txt`. Runs `pytest tests/ -q -m "not integration" --tb=short` on every push and PR to main/master. Requires `ANTHROPIC_API_KEY` GitHub secret (LLM-backed unit tests make real API calls for NLU classification and Q&A). Sets `SIMULATOR_CALL_DELAY_MS=0` to skip inter-call throttle in CI.
+
+---
+
+### TD-041 — `Dockerfile` base image Python version mismatch — **RESOLVED**
+**Resolved:** 2026-05-06 — Phase 8.5 sprint  
+**File:** `Dockerfile`  
+**Severity:** Medium (containerized deploy would use Python 3.11 while codebase targets 3.13)  
+**Description:** `Dockerfile` used `FROM python:3.11-slim` while all development, testing, and production operation runs on Python 3.13.3. The mismatch risked incompatibilities with 3.12+ syntax (f-string expression nesting, `zoneinfo`, `tomllib`, type union syntax) and could produce hard-to-diagnose failures only visible in containerized deployment.  
+**Fix:** Changed base image to `FROM python:3.13-slim`. One-line change; no other Dockerfile modifications required.
 
 ---
 
@@ -306,6 +353,37 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 **Fix:**  
 1. Added post-call output-file verification in both `_com_mpp_to_xml` and `_com_xml_to_mpp`: if the file is missing or zero-size after `FileSaveAs`, a `RuntimeError` is raised with a diagnostic message.  
 2. Increased `_LAUNCH_WAIT_SEC` from 8 → 12 seconds to give Click-to-Run more time to initialise.
+
+---
+
+## Phase 9 — EVM / DCMA / Briefing / Portfolio Sprint (2026-05-06)
+
+### TD-042 — `test_flat_denial_retry_limit_still_works` is flaky in full-suite runs
+**File:** `tests/test_interview_agent.py` — `TestFlatDenialRetryLimit`  
+**Severity:** Low (test reliability; feature is correct)  
+**Description:** This test passes reliably when run in isolation (`pytest tests/test_interview_agent.py -k flat_denial`) but sporadically fails when run in the full 611-test suite. Root cause is LLM mock state leaking between tests: another test that monkeypatches `agent.voice.interview_agent.LLMInterface` does not fully restore the original before this test runs, causing the `_classify_response` call to return a real API response instead of the patched one.  
+**Why deferred:** The feature is correct; the test passes in isolation. Full-suite failures have zero impact on production correctness.  
+**Suggested fix:** Add `autouse=True` fixture in `test_interview_agent.py` that wraps each test in a `monkeypatch` scope for `LLMInterface`, ensuring a clean mock state regardless of test order. Alternatively, use `pytest-randomly` with a fixed seed to identify the ordering that triggers the failure.
+
+---
+
+### TD-043 — Module-level `os.getenv()` constants break `monkeypatch.setenv()` isolation
+**File:** `agent/executive_briefing.py`, `agent/portfolio.py`, `agent/variance_analyst.py`, `agent/dashboard/server.py` (partially resolved)  
+**Severity:** Medium (test isolation; can cause subtle false-passes/failures in new tests)  
+**Description:** Several modules read environment variables into module-level constants at import time (e.g., `_REPORTS_DIR = os.getenv("REPORTS_DIR", "reports")`). When tests use `monkeypatch.setenv()` after import, the constant is already set. Three instances were fixed in Phase 9: `_save_briefing()` reads `REPORTS_DIR` at call time; `_portfolio_file()` helper reads `PORTFOLIO_FILE` at call time; `LLMInterface` import moved to module level in `variance_analyst.py`. The `server.py` `load_dotenv(override=True)` at module level also overrides test monkeypatching — tests must explicitly set `srv._STATE_FILE` after `importlib.reload()`.  
+**Why deferred:** The three most impactful instances were resolved in Phase 9. Remaining cases are lower-risk or already handled by explicit post-reload overrides in test fixtures.  
+**Suggested fix:** Audit all modules for `_CONST = os.getenv(...)` patterns. Replace with `_get_const()` helper functions or move all env reads into constructor/call bodies. Long-term: use a dependency injection pattern for config values so tests can supply them directly without env var manipulation.
+
+---
+
+## Phase 11 — Dashboard UI Test Suite (2026-05-07)
+
+### TD-044 — Graph CAM Responder lookback window too short to catch messages from mid-cycle restart
+**Resolved:** 2026-05-07  
+**File:** `agent/graph_cam_responder.py` — `__init__`, `_last_check` initialization  
+**Severity:** High (responder restart during active cycle caused complete interview stall)  
+**Description:** `_last_check` was initialized to `datetime.now(timezone.utc) - timedelta(seconds=30)`. This 30-second lookback was designed to catch greetings sent immediately before the responder started. However, if the responder process was offline when a cycle started (e.g., manual restart, process crash, first-time startup), all greeting messages sent more than 30 seconds earlier were filtered as "too old." The responder would poll indefinitely without finding messages to reply to, stalling the interview phase until the cycle timeout.  
+**Fix:** Changed lookback from 30 seconds to 2 hours (`timedelta(hours=2)`). A 2-hour window reliably catches any current-cycle greeting while not reaching back to the previous day's completed interviews (last cycle was 2+ days prior in testing). The seen-message-ID deduplication set prevents double-replies on subsequent polls.
 
 ---
 

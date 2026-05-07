@@ -280,7 +280,9 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>Network design: 3 VLANs (MGMT/10.0.0.0/24, DATA/10.1.0.0/24, AI/10.2.0.0/24). 25GbE intra-rack, 10GbE uplink. Cisco Catalyst 9300 top-of-rack switch selected.</Notes>
+            <Notes>BLOCKER: Waiting on David to deliver network topology document with VLAN assignments; blocks start of NET-01 switch configuration. | RISK: Honestly, it just comes down to David finishing the network topology document. He needs to map out all the physical and logical connections, call out the VLAN assignments for management, data, and AI traffic, and get that locked down so I know exactly what I'm configuring on the switch side.
+
+I've already given him the finalized requirements, so it's not like we're waiting on anything from my end. It's really just a matter of him getting the bandwidth to sit down and do the work. I'm planning to follow up with him tomorrow — if he can get me that doc by end of week, we can still stay ahead of that one-week window before this becomes a real crunch. But yeah, that's the critical path right there.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -554,7 +556,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>80</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -571,7 +573,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Waiting on procurement final sign-off for cost allocation; vendor confirmation still pending.</Notes></Task>
         <Task>
             <UID>10</UID>
             <ID>10</ID>
@@ -598,7 +600,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>80</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -615,7 +617,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Procurement sign-off on cost allocation is holding up the PO; should be resolved by end of day tomorrow.</Notes></Task>
         <Task>
             <UID>11</UID>
             <ID>11</ID>
@@ -642,7 +644,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>80</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -659,7 +661,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Procurement cost allocation sign-off is holding up PO submission; expected resolution by end of day tomorrow, with order going out Wednesday.</Notes></Task>
         <Task>
             <UID>12</UID>
             <ID>12</ID>
@@ -775,7 +777,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>80</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -792,7 +794,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Waiting on procurement cost allocation sign-off; expected resolution by end of day tomorrow, with PO issuance on Wednesday.</Notes></Task>
         <Task>
             <UID>15</UID>
             <ID>15</ID>
@@ -819,7 +821,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>40</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -857,7 +859,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Formal order confirmations not yet received; POs have not been issued, and vendor availability (especially CPUs and GPUs) remains uncertain until written confirmations are in hand.</Notes></Task>
         <Task>
             <UID>16</UID>
             <ID>16</ID>
@@ -935,7 +937,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -952,7 +954,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task cannot start until PO is issued (end of day tomorrow), vendor ships, and hardware arrives (estimated mid-February).</Notes></Task>
         <Task>
             <UID>18</UID>
             <ID>18</ID>
@@ -979,7 +981,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -996,7 +998,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task cannot start until POs are issued (dependent on procurement sign-off expected end of day tomorrow, with orders going out Wednesday); hardware lead times are 3-4 weeks, with arrival expected mid-February.</Notes></Task>
         <Task>
             <UID>19</UID>
             <ID>19</ID>
@@ -1505,7 +1507,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1529,7 +1531,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked waiting on chassis hardware delivery from vendor, expected mid-February.</Notes></Task>
         <Task>
             <UID>30</UID>
             <ID>30</ID>
@@ -1556,7 +1558,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1573,7 +1575,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked waiting for compute components (PROC-10) to arrive in mid-February, which depends on POs going out Wednesday.</Notes></Task>
         <Task>
             <UID>31</UID>
             <ID>31</ID>
@@ -1600,7 +1602,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1617,7 +1619,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: RAM modules must arrive first via PROC-10 order (mid-February); no work can begin until parts clear inspection.</Notes></Task>
         <Task>
             <UID>32</UID>
             <ID>32</ID>
@@ -1644,7 +1646,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1661,7 +1663,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked waiting for NVMe modules to arrive with other compute components in mid-February, dependent on PROC-10.</Notes></Task>
         <Task>
             <UID>33</UID>
             <ID>33</ID>
@@ -1688,14 +1690,14 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>GPU risers installed and torqued to spec. PCIe x16 slot verification passed on all 4 nodes. NVLink bridges installed on nodes 1 and 2.</Notes>
+            <Notes>BLOCKER: GPU cards are on a separate PO with 4-5 week lead time from specialized vendor; procurement sign-off must clear Wednesday before PO can go out.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -1835,7 +1837,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1859,7 +1861,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: UPS hardware has not yet arrived; task is blocked waiting on PROC-06 order to be placed Wednesday and lead time of early to mid-February.</Notes></Task>
         <Task>
             <UID>37</UID>
             <ID>37</ID>
@@ -1886,7 +1888,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -1903,7 +1905,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked on HW-08 completion (UPS mounted and PDU connected); chassis and UPS hardware must arrive first.</Notes></Task>
         <Task>
             <UID>38</UID>
             <ID>38</ID>
@@ -1930,14 +1932,14 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>POST passed on all 4 nodes. BIOS updated to latest firmware. IPMI/iDRAC configured on management VLAN. Node 3 had a loose RAM slot — reseated and cleared.</Notes>
+            <Notes>BLOCKER: POST cannot start until all hardware (HW-02 through HW-09) is installed and power infrastructure is connected, which depends on component deliveries in mid-February and UPS work completion.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -2057,7 +2059,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Architecture documentation finalization blocked pending Alice's orchestration layer API contracts.</Notes></Task>
         <Task>
             <UID>41</UID>
             <ID>41</ID>
@@ -3020,7 +3022,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: The remaining 15% integration work connecting to the API gateway layer depends on AI-07 closing out before it can be completed.</Notes>
+            <Notes>BLOCKER: AI-06 cannot fully close until Carol's certificate infrastructure work (mutual TLS authentication) is complete, as it is required for the integration testing with the inference pipeline.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3072,7 +3074,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Auth layer completion is blocked on mutual TLS cert infrastructure being stood up by Carol, preventing gateway finalization. | RISK: If AI-07 does not close by mid-May, Eva's end-to-end inference test cannot start, and that test is on the acceptance critical path.</Notes>
+            <Notes>BLOCKER: Authentication layer is blocked by Carol's certificate infrastructure; cannot finalize TLS mutual authentication until that work is ready. | RISK: </Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3127,7 +3129,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Progress is slow due to resource constraints, and the task is expected to accelerate only after AI-12 advances further.</Notes></Task>
+        <Notes>BLOCKER: Container integration and security scanning sign-off (AI-12) must be completed before full pipeline validation can accelerate.</Notes></Task>
         <Task>
             <UID>64</UID>
             <ID>64</ID>
@@ -3171,7 +3173,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: GPU tuning has a sequencing dependency on AI-07 closing out, as meaningful optimization runs require the full inference pipeline to be stable first.</Notes></Task>
+        <Notes>BLOCKER: Waiting on AI-10 (model versioning tooling decision: MLflow vs. custom S3) to be locked down before parameter sweep work can begin.</Notes></Task>
         <Task>
             <UID>65</UID>
             <ID>65</ID>
@@ -3215,7 +3217,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: An unresolved architecture decision between MLflow and a custom S3-backed scheme is blocking real implementation from starting.</Notes></Task>
+        <Notes>BLOCKER: Architecture decision between MLflow and custom S3-backed versioning scheme is completely blocking implementation start.</Notes></Task>
         <Task>
             <UID>66</UID>
             <ID>66</ID>
@@ -3249,7 +3251,7 @@
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Task is blocked on Alice finalizing the API contracts for the orchestration layer before the architecture document can be completed.</Notes>
+            <Notes>BLOCKER: Orchestration layer API contracts from Alice are still in flux and must be finalized before the architecture document can be completed.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3304,7 +3306,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Nothing's holding it up — no blockers. Just steady progress. We're on track.</Notes></Task>
+        <Notes>BLOCKER: AI-12 (container security sign-off) must complete before full pipeline validation can proceed; if AI-12 slips beyond early April, it will compress the timeline significantly.</Notes></Task>
         <Task>
             <UID>68</UID>
             <ID>68</ID>
@@ -3413,7 +3415,9 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-01 is blocked on David's topology document being delivered. | RISK: ATLAS — same answer as before: David needs to finalize the network topology doc with VLAN assignments locked. We covered this already! We're done! 👋</Notes></Task>
+        <Notes>BLOCKER: Blocked waiting on David to complete network topology documentation needed for VLAN assignments before switch configuration can proceed. | RISK: Yeah, so really just one thing — I need David to get me that network topology documentation. That's the gating item. Once I have those VLAN assignments locked in from him, I can push the config to the switch and knock this out pretty quickly. I'm probably looking at two, three days of work on my end once I have the topology in hand.
+
+So the ask is just — I need to escalate getting David's attention on that doc. I can hound him directly, but if the scheduler can surface this as a blocker to whoever's managing his workload, that would help move it up his queue. The sooner that topology doc lands, the sooner I can get back to the original timeline and take the pressure off everything downstream.</Notes></Task>
         <Task>
             <UID>70</UID>
             <ID>70</ID>
@@ -3457,7 +3461,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-02 is blocked behind NET-01 due to the same VLAN dependency requiring David's finalized network topology document.</Notes></Task>
+        <Notes>BLOCKER: NET-02 is blocked waiting on NET-01 (Configure VLANs) to clear; cannot start firewall config until VLAN assignments are finalized.</Notes></Task>
         <Task>
             <UID>71</UID>
             <ID>71</ID>
@@ -3484,7 +3488,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>10</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3501,7 +3505,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by NET-06 dependency; no environment is available to deploy into until Vault is operational.</Notes></Task>
+        <Notes>BLOCKER: NET-05 is at zero percent and must be further along before Suricata IDS rules can be fully validated against hardened network policies.</Notes></Task>
         <Task>
             <UID>72</UID>
             <ID>72</ID>
@@ -3528,7 +3532,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>20</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3545,7 +3549,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-04 is blocked behind NET-07, which must provide TLS certificates before work can begin.</Notes></Task>
+        <Notes>BLOCKER: NET-04 is blocked on NET-07 (TLS certificate infrastructure), which is also at 20% and must be completed before VPN gateway setup can finish.</Notes></Task>
         <Task>
             <UID>73</UID>
             <ID>73</ID>
@@ -3589,7 +3593,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by the NET-06 issue, with no progress made.</Notes></Task>
+        <Notes>BLOCKER: Waiting on finalized requirements from the architecture team on data flows between AI cluster and backend services; requirements expected early next week.</Notes></Task>
         <Task>
             <UID>74</UID>
             <ID>74</ID>
@@ -3616,7 +3620,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>25</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3633,7 +3637,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: No one has been assigned ownership of this task, leaving it unstarted despite being identified as the root cause of a known network issue (NET-06).</Notes></Task>
+        <Notes>BLOCKER: Waiting on final secrets inventory from the application team to lock in final policies and access controls.</Notes></Task>
         <Task>
             <UID>75</UID>
             <ID>75</ID>
@@ -3660,7 +3664,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>20</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3684,7 +3688,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by a FAC (Facilities/Infrastructure) dependency, preventing any progress.</Notes></Task>
+        <Notes>BLOCKER: CAM is the bottleneck—slow execution on CA setup, cert generation, trust chain validation, and end-to-end testing; no upstream blocker but coordination complexity is slowing progress.</Notes></Task>
         <Task>
             <UID>76</UID>
             <ID>76</ID>
@@ -3728,7 +3732,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by the NET-06 dependency and cannot progress until Vault is deployed.</Notes></Task>
+        <Notes>BLOCKER: NET-08 cannot start until AI-12 (container image scanning) is complete.</Notes></Task>
         <Task>
             <UID>77</UID>
             <ID>77</ID>
@@ -3772,7 +3776,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-09 is blocked on NET-08 — remediation cannot begin until the Nessus scan report is completed and in hand.</Notes></Task>
+        <Notes>BLOCKER: NET-09 is blocked on NET-08 (Run full vulnerability scan) completing; cannot start remediation until Nessus scan report is available.</Notes></Task>
         <Task>
             <UID>78</UID>
             <ID>78</ID>
@@ -3816,7 +3820,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by the NET-06 dependency with no progress made.</Notes></Task>
+        <Notes>BLOCKER: NET-10 is blocked on NET-05 (hardened network policies) — integration work cannot proceed without finalized network segmentation.</Notes></Task>
         <Task>
             <UID>79</UID>
             <ID>79</ID>
@@ -3867,7 +3871,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Vendor coordination is stalled with two firms in scope, neither having confirmed dates for the penetration test. | RISK: Pen test vendor unconfirmed — two firms in scope, neither has confirmed dates. If not completed by end of May, NET-15 slips with it.</Notes></Task>
+        <Notes>BLOCKER: Vendor coordination with two firms is taking longer than expected; neither has confirmed engagement dates. | RISK: </Notes></Task>
         <Task>
             <UID>80</UID>
             <ID>80</ID>
@@ -3894,7 +3898,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>5</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3911,7 +3915,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: A FAC (Facilities/Access/Configuration) dependency is preventing any progress on this task.</Notes></Task>
+        <Notes>BLOCKER: NET-12 is lower priority and sequentially dependent on completion of upstream tasks (VLANs, firewall rules, TLS infrastructure); CAM is not starting serious work until late May.</Notes></Task>
         <Task>
             <UID>81</UID>
             <ID>81</ID>
@@ -3938,7 +3942,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>5</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -3955,7 +3959,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is downstream of the VLAN chain and cannot progress until NET-01 (VLAN assignments) is resolved.</Notes></Task>
+        <Notes>BLOCKER: NET-13 is indirectly blocked on NET-01 (VLANs and firewall rules) clearing; load balancing cannot be architected until core network hardening is complete.</Notes></Task>
         <Task>
             <UID>82</UID>
             <ID>82</ID>
@@ -3999,7 +4003,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task has not started because the CAM has not yet scheduled coordination time with the network and security team to gather topology details and confirm security controls.</Notes></Task>
+        <Notes>BLOCKER: Task sequenced behind AI-11 work; CAM deprioritized NET-14 to focus on dependency-driven AI architecture first.</Notes></Task>
         <Task>
             <UID>83</UID>
             <ID>83</ID>
@@ -4050,7 +4054,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-15 cannot begin until all upstream tasks are complete, including NET-11 (external pen test), which is currently blocked by unconfirmed vendor coordination and poses a live schedule risk to program completion. | RISK: Final security gate — any slip on NET-15 blocks program completion. Risk is driven by upstream dependency on NET-11.</Notes></Task>
+        <Notes>BLOCKER: NET-11 (external penetration test) vendor coordination is unconfirmed and must complete by end of May; if it slips, NET-15 sign-off is delayed and blocks program acceptance. | RISK: </Notes></Task>
         <Task>
             <UID>84</UID>
             <ID>84</ID>
@@ -4152,7 +4156,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: No hard blockers, but competing priorities and lack of dedicated time are slowing progress.</Notes></Task>
+        <Notes>BLOCKER: Internal sequencing dependency: DOC-01 is deprioritized pending completion of AI-11 and NET-14, and requires alignment with disaster recovery plan and monitoring dashboards runbook.</Notes></Task>
         <Task>
             <UID>86</UID>
             <ID>86</ID>
@@ -4179,7 +4183,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>60</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4196,7 +4200,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-02 cannot begin until AI-07 and AI-10 are further along, as a meaningful ops and troubleshooting guide requires a stable AI stack.</Notes></Task>
+        <Notes>BLOCKER: Documentation is tied to specifications still in flux (AI-07 TLS setup and AI-10 model versioning tooling choice), requiring rework once those decisions are locked down.</Notes></Task>
         <Task>
             <UID>87</UID>
             <ID>87</ID>
@@ -4223,14 +4227,14 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>Hardware maintenance guide complete. Includes: RAM/NVMe hot-swap procedures, GPU removal/re-seat steps, UPS battery replacement schedule, and rack torque specs.</Notes>
+            <Notes>BLOCKER: Resource allocation constraint — task deprioritized while team focuses on purchase orders and vendor coordination.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -4312,7 +4316,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>40</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4329,7 +4333,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Architecture finalization (AI-11) and API contracts must be received before capacity projections can be validated and refined.</Notes></Task>
         <Task>
             <UID>90</UID>
             <ID>90</ID>
@@ -4373,7 +4377,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: An infrastructure dependency is blocking all progress on this task.</Notes></Task>
+        <Notes>BLOCKER: Task cannot start until foundational work on AI-11, NET-14, and DOC-01 is further along to provide full system architecture and operational procedures context.</Notes></Task>
         <Task>
             <UID>91</UID>
             <ID>91</ID>
@@ -4400,7 +4404,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>60</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4417,7 +4421,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-07 cannot start until the AI stack is stable and onboarding flows are defined, creating a sequencing dependency on upstream AI tasks.</Notes></Task>
+        <Notes>BLOCKER: Gateway authentication behavior (AI-07) is not finalized; documentation must be updated once that settles, and user feedback incorporation adds 1–2 weeks of refinement work.</Notes></Task>
         <Task>
             <UID>92</UID>
             <ID>92</ID>
@@ -4496,7 +4500,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: DOC-08 cannot begin until upstream documentation tasks are completed, and if those docs aren't finished at least two weeks before the sign-off window, the review cycle will be compressed and sign-off risks slipping. | RISK: If upstream documentation tasks are not completed at least two weeks before the sign-off window, the review cycle will be compressed and sign-off may slip, putting the System Accepted acceptance gate at risk.</Notes></Task>
+        <Notes>BLOCKER: DOC-08 cannot start until all seven individual documentation tasks are substantially complete; schedule risk exists if multiple upstream docs slip simultaneously into the final review window.</Notes></Task>
         <Task>
             <UID>93</UID>
             <ID>93</ID>
@@ -4540,7 +4544,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: TEST-01 cannot progress fully until AI-08 inference pipeline integration test advances further; detailed test cases and test data requirements are blocked on pipeline visibility.</Notes></Task>
         <Task>
             <UID>94</UID>
             <ID>94</ID>
@@ -4567,7 +4571,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>100</PercentComplete>
+            <PercentComplete>0</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4584,7 +4588,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        </Task>
+        <Notes>BLOCKER: Task is blocked on HW-10 (POST) completion; hardware will not arrive until mid-February, delaying start until late February or early March.</Notes></Task>
         <Task>
             <UID>95</UID>
             <ID>95</ID>
@@ -4611,7 +4615,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>15</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4628,7 +4632,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The inference load testing cannot proceed until the NET-06 environment is operational.</Notes></Task>
+        <Notes>BLOCKER: TEST-03 progress is dependent on AI-08 stabilizing its end-to-end pipeline and container implementation before realistic load scenarios can be executed.</Notes></Task>
         <Task>
             <UID>96</UID>
             <ID>96</ID>
@@ -4655,7 +4659,7 @@
             <IsSubprojectReadOnly>0</IsSubprojectReadOnly>
             <ExternalTask>0</ExternalTask>
             <FixedCostAccrual>3</FixedCostAccrual>
-            <PercentComplete>0</PercentComplete>
+            <PercentComplete>5</PercentComplete>
             <ConstraintType>0</ConstraintType>
             <CalendarUID>-1</CalendarUID>
             <LevelAssignments>0</LevelAssignments>
@@ -4672,7 +4676,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Cannot run throughput and latency tests until network configuration is in place, as this task is downstream of the VLAN chain (blocked by NET-01).</Notes></Task>
+        <Notes>BLOCKER: TEST-04 is blocked indirectly on upstream dependencies NET-01, NET-02, and NET-07 (VLANs, firewall rules, and TLS infrastructure) which must be in place and stable before meaningful throughput and latency tests can be executed.</Notes></Task>
         <Task>
             <UID>97</UID>
             <ID>97</ID>
@@ -4730,7 +4734,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked by the same NET-06 dependency that has prevented any progress.</Notes></Task>
+        <Notes>BLOCKER: TEST-05 execution is blocked waiting on NET-06 (HashiCorp Vault deployment) to reach stability and integration by ~4/25.</Notes></Task>
         <Task>
             <UID>98</UID>
             <ID>98</ID>
@@ -4774,7 +4778,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The NET-06 blocker is preventing any progress on this task.</Notes></Task>
+        <Notes>BLOCKER: NET-11 (external pen test) must complete before TEST-06 detailed test cases can be written; parallel design work is possible but execution is blocked.</Notes></Task>
         <Task>
             <UID>99</UID>
             <ID>99</ID>
@@ -4825,7 +4829,7 @@
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: The same NET-06 blocker that was previously mentioned is preventing any progress on this task.</Notes></Task>
+        <Notes>BLOCKER: TEST-07 cannot start in earnest until TEST-01, TEST-03, TEST-05, and TEST-06 are substantially complete with meaningful results.</Notes></Task>
         <Task>
             <UID>100</UID>
             <ID>100</ID>

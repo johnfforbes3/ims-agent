@@ -26,15 +26,17 @@ ENV/
 # Logs
 logs/
 
-# Generated reports (keep the directory, not the output)
+# Generated reports — all runtime output; keep directory structure but not files
 reports/*.md
 reports/*.txt
 reports/*.html
 reports/cycles/
+reports/briefings/
 
 # Data — real .mpp files are never committed (binary, large)
 data/*.mpp
 data/*.mpp.bak
+data/ims_master/
 
 # CAM delegated auth token caches — contain serialized MSAL tokens
 data/cam_tokens/

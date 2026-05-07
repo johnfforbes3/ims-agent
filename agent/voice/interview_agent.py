@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 _TIMEOUT_SEC = int(os.getenv("INTERVIEW_RESPONSE_TIMEOUT_SEC", "15"))
 _MAX_RETRIES = int(os.getenv("INTERVIEW_MAX_RETRIES", "3"))
 
+# Fast model for NLU classification — Haiku is 5-10× faster than Sonnet and
+# fully capable of JSON classification tasks in the interview loop.
+_CLASSIFY_MODEL: str = os.getenv("CLASSIFIER_MODEL", "claude-3-5-haiku-20241022")
+
 # Words / phrases that map to "I don't know yet"
 _UNKNOWN_PHRASES = {
     "i don't know", "i dont know", "not sure", "unclear", "unknown",
@@ -634,7 +638,7 @@ class InterviewAgent:
 
         try:
             from agent.llm_interface import LLMInterface
-            llm = LLMInterface()
+            llm = LLMInterface(model=_CLASSIFY_MODEL)
             prompt = _CONFIRM_CORRECTION_PROMPT.format(
                 history=history,
                 task_summary=task_summary,
@@ -1394,7 +1398,7 @@ def _classify_eac_date(
     """
     try:
         from agent.llm_interface import LLMInterface
-        llm = LLMInterface()
+        llm = LLMInterface(model=_CLASSIFY_MODEL)
         today_str = datetime.now().strftime("%Y-%m-%d")
         history_str = _format_transcript_for_llm(conversation_history or [], max_turns=8)
         prompt = _EAC_DATE_PROMPT.format(
@@ -1441,7 +1445,7 @@ def _classify_cam_response(
     """
     try:
         from agent.llm_interface import LLMInterface
-        llm = LLMInterface()
+        llm = LLMInterface(model=_CLASSIFY_MODEL)
         history_str = _format_transcript_for_llm(conversation_history or [], max_turns=12)
         prompt = _CLASSIFY_PROMPT.format(
             history=history_str,

@@ -95,14 +95,27 @@ class ScheduleValidator:
             prev_pct = current.get("percent_complete", 0)
 
             if not _allow_backwards() and new_pct < prev_pct:
-                failures.append(ValidationFailure(
-                    task_id=task_id, cam_name=cam_name,
-                    rule="backwards_movement",
-                    detail=(
-                        f"Percent decreased {prev_pct}% → {new_pct}% "
-                        "with no explanation provided"
-                    ),
-                ))
+                # Check if the CAM provided an explanation via the blocker or
+                # risk_description fields.  If so, downgrade to a warning so
+                # the PM is informed but the IMS write is not held.
+                explanation = (inp.get("blocker") or "").strip() or (
+                    inp.get("risk_description") or ""
+                ).strip()
+                decrease_detail = f"Percent decreased {prev_pct}% → {new_pct}%"
+                if explanation:
+                    warnings.append(ValidationFailure(
+                        task_id=task_id, cam_name=cam_name,
+                        rule="backwards_movement",
+                        detail=(
+                            f"{decrease_detail} — blocker: {explanation[:120]}"
+                        ),
+                    ))
+                else:
+                    failures.append(ValidationFailure(
+                        task_id=task_id, cam_name=cam_name,
+                        rule="backwards_movement",
+                        detail=f"{decrease_detail} with no explanation provided",
+                    ))
             elif new_pct - prev_pct > _MAX_JUMP_PCT:
                 warnings.append(ValidationFailure(
                     task_id=task_id, cam_name=cam_name,
