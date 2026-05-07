@@ -387,6 +387,39 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
+### TD-045 — EAC date classifier (and other JSON classifiers) fail on LLM responses with trailing text
+**File:** `agent/voice/interview_agent.py` — `_classify_eac_date()` (line ~1410); also affects `_classify_response()` and `_classify_risk_flag()`  
+**Severity:** Medium (non-fatal — falls back to `eac_uncertain=True`; SRA uses linear estimate; no data loss, but EAC date information from CAMs is silently discarded)  
+**Observed:** Production cycle `20260507T222726Z` — 10+ `eac_date_classify_failed` warnings in `ims_agent.log`, all with `error=Extra data: line 5 column 1 (char 5X)`.  
+**Description:** `_classify_eac_date()` calls the LLM and expects a bare JSON object (`{"eac_date": "...", "eac_uncertain": false}`). The code already strips markdown code fences (` ``` `) before calling `json.loads()`. However, `claude-haiku-4-5` sometimes appends a trailing explanation after the closing brace — e.g.:
+```
+{"eac_date": "2026-08-15", "eac_uncertain": false}
+Note: date inferred from "end of Q3" statement.
+```
+`json.loads()` raises `JSONDecodeError: Extra data` on the trailing text. The `except Exception` block catches it, logs a WARNING, and returns `(None, True)` — meaning the CAM's EAC date is lost and the SRA falls back to linear estimation for that task.  
+**Why deferred:** Non-fatal fallback is safe; no incorrect data enters the IMS. Impact is loss of CAM forecast precision in the SRA, not corruption.  
+**Suggested fix:** Replace `json.loads(raw.strip())` with a helper that extracts the first complete JSON object from the string:
+```python
+def _extract_json_object(text: str) -> dict:
+    """Parse the first {...} JSON object found in text, ignoring trailing content."""
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("No JSON object found in response")
+    # Walk forward tracking brace depth to find the matching closing brace
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(text[start : i + 1])
+    raise ValueError("Unterminated JSON object")
+```
+Apply this helper in `_classify_eac_date()`, `_classify_response()`, and `_classify_risk_flag()` — all three share the same `json.loads(raw.strip())` pattern. Add a unit test covering the "valid JSON + trailing explanation" case.
+
+---
+
 ## How to Use This Register
 
 - When writing new code that cuts a corner, add an entry here in the same PR.
