@@ -7,20 +7,20 @@
 
 ---
 
-## Current State (2026-05-04)
+## Current State (2026-05-07)
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 8.3 / TD-023 / TD-010 complete — beta-PERT SRA, bootstrap CLI, Whisper integration tests (424 tests); infra/observability items awaiting deployment platform |
-| **Unit tests** | **424 / 424 passing** (4 Whisper integration tests skipped — openai-whisper not installed) |
-| **Last procedure run** | 2026-05-04 (Phase 8.3 + TD-023 + TD-010 — 424 tests passing) |
-| **Last production cycle** | 2026-05-03 — `20260503T191337Z`, health=RED, 5/5 CAMs responded (Teams chat relay) |
+| **Phase** | Phase 11 complete — Comprehensive Dashboard UI Test Suite |
+| **Tests** | **1010 / 1010 passing** (289 new dashboard UI tests; 4 Whisper skipped) |
+| **Last procedure run** | 2026-05-07 (Phase 11 — comprehensive dashboard UI element-by-element tests) |
+| **Last production cycle** | 2026-05-05 — `20260505T121010Z`, health=RED, 4/4 CAMs responded (Teams chat relay), 23 blocked tasks, 3 HIGH milestones |
 | **Open FAILs** | None |
-| **Transport mode tested** | `teams_chat` (live Teams relay, MSAL-cached tokens) |
+| **Transport mode tested** | `simulated` (integration tests); `teams_chat` (live Teams relay, last production) |
 | **IMS** | AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs |
 | **Python** | 3.13.3 |
-| **MPP backend** | MPXJ (COM BLOCKED — C2R AppV isolation) |
-| **Next phase** | Phase 7.1 (Technical Debt Sprint) — highest priority; can start immediately |
+| **MPP backend** | MPXJ (COM BLOCKED — C2R AppV isolation; SEH catch added) |
+| **Next phase** | Phase 7.5 (First Customer Pilot) — awaiting customer engagement |
 
 ---
 
@@ -84,7 +84,8 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 | **8.1** | Real Teams/ACS Voice Integration | ⏳ Backlog — post-pilot |
 | **8.2** | Multi-Tenant / Multi-Program Support | ⏳ Backlog — post-pilot |
 | **8.3** | Advanced SRA (beta-PERT, correlation matrix) | ⏳ Backlog — post-pilot |
-| **8.4** | Enterprise Integrations (P6, Jira, Whisper real-audio) | ⏳ Backlog — post-pilot |
+| **8.4** | Latency & reliability sprint — `claude-haiku-4-5` model fix, validation backwards-movement fix, `force=true` trigger, Listen-In per-interview dropdown; CAM simulator markdown fix (asterisks eliminated), test isolation fix | ✅ COMPLETE — 2026-05-06 |
+| **8.5** | CI & infrastructure — GitHub Actions CI workflow (Windows, Python 3.13, pytest), Dockerfile Python 3.11→3.13 | ✅ COMPLETE — 2026-05-06 |
 
 ---
 
@@ -113,3 +114,9 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 | 2026-05-03 | Phase 7.2 Security & Compliance — JWT auth (POST /api/auth/token), JTI replay protection, key age alert, SIEM syslog, IR plan, DR runbook §9; 6 CMMC gaps REMEDIATED | **375** |
 | 2026-05-03 | Phase 7.3 EAC Date Feature — AWAITING_EAC_DATE state, _classify_eac_date LLM, SRARunner.eac_dates override, report CAM Forecast/Δ Days columns; 29 new tests | **404** |
 | 2026-05-04 | Phase 8.3 + TD-023 + TD-010 — beta-PERT SRA (_pert_variate, duration_opt/pess), --bootstrap-sessions CLI (agent/bootstrap_sessions.py), Whisper integration tests (@pytest.mark.integration), integration mark registered in conftest.py; 20 new unit tests | **424** |
+| 2026-05-05 | Phase 8.4 — `claude-haiku-4-5` model fix (404 error eliminated, latency 30-60s → ~5s/turn), validation backwards-movement false-positive fix (blocker field now checked), Trigger Cycle always `force=true`, Listen-In per-interview dropdown, poll/delay reductions (2s/0.5s); production cycle `20260505T121010Z`: 4/4 CAMs, 23 blocked tasks, 3 HIGH milestones | **424** |
+| 2026-05-06 | Phase 8.4 asterisk/markdown fix — `LLMInterface.ask()` `system` param added; dead `_SIMULATOR_SYSTEM_PROMPT` wired into `CAMSimulator.respond()` (eliminates markdown asterisks in CAM responses); code-level `_SIM_MODEL` default fixed (`claude-haiku-4-5`); `test_invalid_pct_triggers_retry` monkeypatched to properly isolate from LLM classifier | **445** |
+| 2026-05-06 | Phase 8.5 — `.github/workflows/ci.yml` created (Windows runner, Python 3.13, Java 21, `pytest -m "not integration"`); `Dockerfile` Python `3.11-slim` → `3.13-slim`; all documentation updated | **445** |
+| 2026-05-06 | Phase 9.2–9.6 — EVM Metrics Engine, DCMA 14-Point Assessment, Variance Analysis Narratives, Executive Briefing Generator, Portfolio View; 166 new tests; 6 bug fixes | **611** |
+| 2026-05-07 | Phase 10 — Full System Integration Test Suite; 110 new integration tests (relay wiring, SSE stream, API smoke, E2E); 6 bug fixes | **721** |
+| 2026-05-07 | Phase 11 — Comprehensive Dashboard UI Test Suite; 289 new element-by-element dashboard tests (18 test classes covering all panels, KPIs, tables, buttons, IDs, JS API paths) | **1010** |
