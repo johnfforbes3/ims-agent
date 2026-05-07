@@ -387,36 +387,29 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-045 — EAC date classifier (and other JSON classifiers) fail on LLM responses with trailing text
-**File:** `agent/voice/interview_agent.py` — `_classify_eac_date()` (line ~1410); also affects `_classify_response()` and `_classify_risk_flag()`  
-**Severity:** Medium (non-fatal — falls back to `eac_uncertain=True`; SRA uses linear estimate; no data loss, but EAC date information from CAMs is silently discarded)  
-**Observed:** Production cycle `20260507T222726Z` — 10+ `eac_date_classify_failed` warnings in `ims_agent.log`, all with `error=Extra data: line 5 column 1 (char 5X)`.  
-**Description:** `_classify_eac_date()` calls the LLM and expects a bare JSON object (`{"eac_date": "...", "eac_uncertain": false}`). The code already strips markdown code fences (` ``` `) before calling `json.loads()`. However, `claude-haiku-4-5` sometimes appends a trailing explanation after the closing brace — e.g.:
-```
-{"eac_date": "2026-08-15", "eac_uncertain": false}
-Note: date inferred from "end of Q3" statement.
-```
-`json.loads()` raises `JSONDecodeError: Extra data` on the trailing text. The `except Exception` block catches it, logs a WARNING, and returns `(None, True)` — meaning the CAM's EAC date is lost and the SRA falls back to linear estimation for that task.  
-**Why deferred:** Non-fatal fallback is safe; no incorrect data enters the IMS. Impact is loss of CAM forecast precision in the SRA, not corruption.  
-**Suggested fix:** Replace `json.loads(raw.strip())` with a helper that extracts the first complete JSON object from the string:
+### TD-045 — EAC date classifier (and other JSON classifiers) fail on LLM responses with trailing text — **RESOLVED**
+**Resolved:** 2026-05-07  
+**File:** `agent/voice/interview_agent.py` — `_classify_eac_date()` and `_classify_cam_response()`  
+**Severity:** Medium → **High** (root cause of one confirmed test failure in addition to EAC date data loss)  
+**Observed:** Production cycle `20260507T222726Z` — 10+ `eac_date_classify_failed` warnings. Also caused `test_after_correction_affirmative_closes` to fail: JSON parse failure in `_classify_cam_response` triggered the regex fallback, which classified "AI-07 should be risk-flagged, not AI-09" as `sentiment=unclear`, closing the interview prematurely instead of applying the correction.  
+**Fix:** Applied the same `re.search(r'\{.*\}', raw, re.DOTALL)` extraction fallback that was already used in `_extract_and_apply_correction()` (lines 654–662) to both `_classify_cam_response()` and `_classify_eac_date()`. When `json.loads(raw)` raises `JSONDecodeError`, the code now extracts the first `{...}` block from the response string and retries — silently tolerating any trailing LLM explanation text. The outer `except Exception` regex fallback is only reached when no JSON object can be found at all.
+
+---
+
+### TD-046 — CAMSimulator eagerly constructs LLMInterface in __init__
+**File:** `agent/voice/cam_simulator.py` — `CAMSimulator.__init__`  
+**Severity:** Low (architectural smell; not causing CI failures when `ANTHROPIC_API_KEY` is present)  
+**Description:** `CAMSimulator.__init__` calls `self._llm = LLMInterface(model=_SIM_MODEL)` immediately at construction time. `LLMInterface.__init__` raises `EnvironmentError` if neither `ANTHROPIC_API_KEY` nor `LLM_BASE_URL` is set. This means any test or offline environment that instantiates a `CAMSimulator` (even to test non-LLM methods) will fail unless credentials are available. The pattern is inconsistent with the rest of the codebase — all other callers create `LLMInterface` inside the method that needs it (`qa_engine.py`, `cycle_runner.py`, `variance_analyst.py`).  
+**Why deferred:** Not blocking — CI has the API key. Affects only completely credential-free environments (local dev without `.env`, pure unit testing of simulator state, offline/ITAR deployments running only the simulator).  
+**Suggested fix:** Move `LLMInterface` construction into `CAMSimulator.respond()`:
 ```python
-def _extract_json_object(text: str) -> dict:
-    """Parse the first {...} JSON object found in text, ignoring trailing content."""
-    start = text.find("{")
-    if start == -1:
-        raise ValueError("No JSON object found in response")
-    # Walk forward tracking brace depth to find the matching closing brace
-    depth = 0
-    for i, ch in enumerate(text[start:], start):
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return json.loads(text[start : i + 1])
-    raise ValueError("Unterminated JSON object")
+def respond(self, conversation: list[dict], cam_question: str) -> str:
+    if self._llm is None:
+        from agent.llm_interface import LLMInterface
+        self._llm = LLMInterface(model=_SIM_MODEL)
+    ...
 ```
-Apply this helper in `_classify_eac_date()`, `_classify_response()`, and `_classify_risk_flag()` — all three share the same `json.loads(raw.strip())` pattern. Add a unit test covering the "valid JSON + trailing explanation" case.
+Set `self._llm = None` in `__init__`. No test changes required — lazy construction is transparent to callers.
 
 ---
 

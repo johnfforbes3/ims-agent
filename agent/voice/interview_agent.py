@@ -1411,7 +1411,16 @@ def _classify_eac_date(
         if raw.startswith("```"):
             raw = re.sub(r"^```[a-z]*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
-        result = json.loads(raw.strip())
+        raw = raw.strip()
+        # Primary parse — try as-is; fall back to extracting the first {...} block
+        # when the LLM appends an explanation after the closing brace (TD-045).
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            m = re.search(r'\{.*\}', raw, re.DOTALL)
+            if not m:
+                raise
+            result = json.loads(m.group(0))
         eac_date = result.get("eac_date") or None
         eac_uncertain = bool(result.get("eac_uncertain", False))
         # Validate ISO format if a date was returned
@@ -1460,7 +1469,15 @@ def _classify_cam_response(
         if raw.startswith("```"):
             raw = re.sub(r"^```[a-z]*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
-        result = json.loads(raw)
+        # Primary parse — try as-is; fall back to extracting the first {...} block
+        # when the LLM appends an explanation after the closing brace (TD-045).
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            m = re.search(r'\{.*\}', raw, re.DOTALL)
+            if not m:
+                raise
+            result = json.loads(m.group(0))
         logger.debug("action=classify state=%s percent=%s blocker=%s sentiment=%s",
                      state, result.get("percent"), result.get("blocker_mentioned"),
                      result.get("sentiment"))
