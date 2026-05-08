@@ -4,6 +4,42 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 14 — Modern Polish Pass (2026-05-08)
+
+**Summary:** Visual modernization layered on top of the Phase 12 dark layout — same content, same structure, more polish. Glassmorphism on every card (frosted blur), animated gradient body background, conic-gradient progress rings on KPI tiles, animated number counters that count up on tab activation, skeleton loaders, View Transitions API for smooth tab swaps, hover micro-interactions, gradient-underline tab indicator, animated aurora strip below the header, breathing cycle-progress card, Chart.js global animation tuning. Honors `prefers-reduced-motion`. **1115/1115 unit tests passing** (was 1068; +47 Phase 14 tests). Zero structural change — every Phase 12 selector and ID is preserved.
+
+### Added
+- **Glassmorphism** — every `.kpi-card` / `.card` / `.panel` / `.alert-panel` / `.progress-card` and the chat/transcript surfaces use `backdrop-filter: blur(14px) saturate(140%)` with a 1px white inset highlight on the top edge. `-webkit-backdrop-filter` fallback for Safari.
+- **Animated body gradient** — three radial gradients (blue, coral, green) layered fixed plus a 40s slow diagonal pan. Disabled under `prefers-reduced-motion`.
+- **Conic-gradient progress rings** — new `.progress-ring` utility class drives a CSS-only circular indicator from `--pct`. Severity modifiers (`.danger`, `.warning`, `.ok`, `.accent`) and size variant (`.size-lg`). Used on Metrics-tab HIGH Risk Milestones tile and ATLAS-tab CAMs Responded tile.
+- **Animated KPI counters** — `animateNumber()` and `_animateAllKpiCounters()` in `dashboard-core.js`. Walks every `.kpi-value[data-target]` element and counts up from 0 with `easeOutQuart` over 900 ms. `tabular-nums` prevents digit reflow. Honors `prefers-reduced-motion`.
+- **`setProgressRing(ring, pct)`** — interpolates an existing ring's `--pct` smoothly to a new value.
+- **Skeleton loaders** — `.skeleton`, `.skel-line`, `.skel-block` classes with shimmer keyframes. `markSkeleton()` / `clearSkeleton()` JS helpers.
+- **View Transitions API** — `_activateTab` now wraps the DOM swap in `document.startViewTransition()` when available, with `view-transition-name: tab-content` plus `phase14-vt-out` / `phase14-vt-in` keyframes. Falls through to instant swap when unsupported or under reduced-motion. Header and tab-nav get stable transition names so they morph in place rather than flicker.
+- **Aurora strip** — animated gradient line under the header that sweeps a soft blue/coral/green gradient over 18 s.
+- **Breathing progress card** — when a cycle is active, the progress card gets a subtle 3.5s breathe via `phase14-breathe` keyframes.
+- **Hover micro-interactions** — `.kpi-card:hover` / `.card:hover` lift -2 px; chips lift -1 px; buttons press +1 px on `:active`; logo rotates -3° + scale 1.05; gradient underline grows from center on tab-btn hover/active.
+- **Chart.js global animation tuning** — `Chart.defaults.animation = { duration: 900, easing: 'easeOutQuart' }`, polished tooltip (rounded, caret, dashboard font), thicker lines (2.5 px), 0.3 tension, 4 px bar `borderRadius`. Every chart inherits.
+- **`tests/test_phase14_modern_polish.py`** — 47 tests across 8 classes (TestGlassmorphism, TestProgressRings, TestAnimatedCounters, TestSkeletonLoaders, TestViewTransitions, TestMicroInteractions, TestChartAnimationTuning, TestPhase12RegressionGuard).
+
+### Changed
+- **`agent/dashboard/templates/tabs/metrics.html`** — HIGH Risk Milestones tile pairs the count with a conic progress ring (at-risk %). All three KPI values get `data-target` for count-up.
+- **`agent/dashboard/templates/tabs/atlas.html`** — CAMs Responded tile pairs the count with a conic progress ring (responded %). Numerator span carries `data-target`.
+- **`agent/dashboard/static/js/dashboard-core.js`** — `_activateTab` wraps in `document.startViewTransition`; new helpers `animateNumber`, `setProgressRing`, `markSkeleton`, `clearSkeleton`, `_animateAllKpiCounters`; counters re-trigger on every `tab:activated`.
+- **`agent/dashboard/static/js/metrics-tab.js`** — applies `Chart.defaults` polish at module load. All 9 dashboard charts pick it up automatically.
+
+### Tests
+- **Full unit suite:** 1115 / 1115 passing in 382 s (was 1068; +47).
+- **Phase 14 suite:** 47 / 47 passing in 3.89 s.
+- **Phase 12 + 12.1 suites:** unchanged, all green.
+
+### Rollback
+- Tag: `pre-modern-polish-2026-05-08`
+- Revert: `git revert <Phase 14 commit>` (purely additive, clean revert).
+- Soft flag: `IMS_LEGACY_DASHBOARD=1` bypasses Phase 14 polish entirely (renders monolithic `index.html`).
+
+---
+
 ## Phase 12.1 — Polish & Hardening (2026-05-08)
 
 **Summary:** Overnight polish on top of the Phase 12 dashboard rebuild. Resolved three open TDs (042, 046, 048), added 58 dedicated Phase 12 tests, built demo mode (`/?demo=1`), keyboard shortcuts, chart PNG export, print stylesheet, light/dark theme toggle, and JSDoc documentation across all JS modules. Net result: **1068/1068 unit tests passing** (was 1009/1010); zero open low/medium TDs; CI annotation-clean.

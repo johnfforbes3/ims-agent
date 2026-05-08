@@ -10,11 +10,20 @@
 
   {# ── CAMs Responded KPI (the one tile moved from old top row) ───────── #}
   {% set cr = state.get('completion_report', {}) %}
+  {% set cr_resp = cr.get('responded', 0) | int(0) %}
+  {% set cr_total = cr.get('total', 0) | int(0) %}
+  {% set cr_pct = (100.0 * cr_resp / cr_total) if cr_total else 0 %}
   <div class="kpi-grid kpi-3">
     <div class="kpi-card">
       <div class="kpi-label">CAMs Responded</div>
-      <div class="kpi-value {% if cr.get('responded', 0) == cr.get('total', 1) %}ok{% elif cr.get('responded', 0) == 0 %}danger{% else %}warning{% endif %}">
-        {{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}
+      <div class="kpi-with-ring">
+        <div class="kpi-value {% if cr_resp == cr_total and cr_total > 0 %}ok{% elif cr_resp == 0 %}danger{% else %}warning{% endif %}">
+          <span data-target="{{ cr_resp }}">{{ cr_resp }}</span>/{{ cr_total or '—' }}
+        </div>
+        <div class="progress-ring {% if cr_pct >= 100 %}ok{% elif cr_pct >= 50 %}warning{% else %}danger{% endif %}"
+             style="--pct: {{ '%.1f' | format(cr_pct) }}">
+          <span>{{ "%.0f%%" | format(cr_pct) }}</span>
+        </div>
       </div>
       <div class="kpi-sub">This cycle</div>
     </div>

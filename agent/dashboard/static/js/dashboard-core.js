@@ -178,17 +178,30 @@ const DEFAULT_TAB = 'metrics';
 /**
  * Show only the requested tab; emit `tab:activated` so tab modules can
  * lazy-init charts on first show.
+ *
+ * Phase 14.3 — Wraps the DOM mutation in `document.startViewTransition()`
+ * when the View Transitions API is available so the tab swap fades/slides
+ * smoothly via the @view-transition-* CSS rules.  Browsers without support
+ * (Firefox <120, Safari <18) fall through to instant swap.
+ *
  * @param {string} tabId One of TAB_ORDER (metrics | pm | atlas).
  */
 function _activateTab(tabId) {
   if (!TAB_ORDER.includes(tabId)) tabId = DEFAULT_TAB;
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
-  document.querySelectorAll('.tab-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.dataset.tab === tabId);
-  });
-  document.dispatchEvent(new CustomEvent('tab:activated', { detail: { tab: tabId } }));
+  const swap = () => {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      panel.classList.toggle('active', panel.dataset.tab === tabId);
+    });
+    document.dispatchEvent(new CustomEvent('tab:activated', { detail: { tab: tabId } }));
+  };
+  if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(swap);
+  } else {
+    swap();
+  }
 }
 
 /**
@@ -430,6 +443,131 @@ function sendChat() {
 }
 
 /* ========================================================================
+ *  PHASE 14 — MODERN POLISH HELPERS
+ *  --------------------------------------------------------------------------
+ *  14.2  Animated number counters
+ *  14.2  Conic progress-ring updater
+ *  14.3  Skeleton loader helpers (markSkeleton / clearSkeleton)
+ * ======================================================================== */
+
+/**
+ * Animate the textContent of an element from 0 (or its current value) to
+ * `target` over `duration` ms with `easeOutQuart` easing.  Pairs with the
+ * `tabular-nums` CSS rule so the digits don't reflow.
+ *
+ * Idempotent — calling it again on an already-animating element cancels the
+ * old run.  Skipped entirely when the user prefers reduced motion.
+ *
+ * @param {HTMLElement} el          Target element.
+ * @param {number}      target      End value.
+ * @param {Object}      [opts]
+ * @param {number}      [opts.from=0]      Start value (default 0).
+ * @param {number}      [opts.duration=900] Milliseconds.
+ * @param {(n:number)=>string} [opts.format] Custom formatter; default integer.
+ */
+function animateNumber(el, target, opts = {}) {
+  if (!el || target == null || isNaN(target)) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = (opts.format || String)(target);
+    return;
+  }
+  const from     = opts.from != null ? opts.from : 0;
+  const duration = opts.duration || 900;
+  const fmt      = opts.format || (n => String(Math.round(n)));
+  if (el._numAnimRaf) cancelAnimationFrame(el._numAnimRaf);
+  const t0 = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - t, 4);  // easeOutQuart
+    el.textContent = fmt(from + (target - from) * eased);
+    if (t < 1) el._numAnimRaf = requestAnimationFrame(step);
+  };
+  el._numAnimRaf = requestAnimationFrame(step);
+}
+
+/**
+ * Walk every `.kpi-value[data-target]` element and animate its number
+ * from 0 to `data-target`.  Called on initial DOM ready and after each
+ * tab activation so KPI numbers count up when they appear.
+ */
+function _animateAllKpiCounters() {
+  document.querySelectorAll('.kpi-value[data-target]').forEach(el => {
+    if (el._numAnimDone) return;
+    const target = parseFloat(el.dataset.target);
+    const fmtAttr = el.dataset.format || 'int';
+    let format;
+    if (fmtAttr === 'pct1')      format = n => n.toFixed(1) + '%';
+    else if (fmtAttr === 'flt2') format = n => n.toFixed(2);
+    else if (fmtAttr === 'flt3') format = n => n.toFixed(3);
+    else                         format = n => String(Math.round(n));
+    animateNumber(el, target, { format });
+    el._numAnimDone = true;
+  });
+}
+
+/**
+ * Update a `.progress-ring` element's `--pct` custom property so the
+ * conic gradient reflows to the new percentage.  Smoothly interpolates
+ * via animateNumber so the arc grows.
+ *
+ * @param {HTMLElement} ring  An element with class .progress-ring.
+ * @param {number}      pct   0–100.
+ */
+function setProgressRing(ring, pct) {
+  if (!ring) return;
+  pct = Math.max(0, Math.min(100, +pct));
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    ring.style.setProperty('--pct', pct.toFixed(1));
+    const label = ring.querySelector('span, strong');
+    if (label) label.textContent = Math.round(pct) + '%';
+    return;
+  }
+  const from = parseFloat(ring.style.getPropertyValue('--pct')) || 0;
+  if (ring._ringRaf) cancelAnimationFrame(ring._ringRaf);
+  const t0 = performance.now();
+  const dur = 700;
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / dur);
+    const eased = 1 - Math.pow(1 - t, 4);
+    const v = from + (pct - from) * eased;
+    ring.style.setProperty('--pct', v.toFixed(1));
+    const label = ring.querySelector('span, strong');
+    if (label) label.textContent = Math.round(v) + '%';
+    if (t < 1) ring._ringRaf = requestAnimationFrame(step);
+  };
+  ring._ringRaf = requestAnimationFrame(step);
+}
+
+/**
+ * Mark an element (or the children matching `selector`) as a skeleton —
+ * shows shimmer placeholders until clearSkeleton() is called.
+ * @param {HTMLElement|string} target    Element or query selector.
+ * @param {string}             [variant] One of "skel-line" | "skel-block" | "skeleton" (default).
+ */
+function markSkeleton(target, variant = 'skeleton') {
+  const el = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!el) return;
+  el.classList.add(variant);
+}
+
+/**
+ * Strip skeleton classes from an element.
+ * @param {HTMLElement|string} target
+ */
+function clearSkeleton(target) {
+  const el = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!el) return;
+  el.classList.remove('skeleton', 'skel-line', 'skel-block');
+}
+
+/* Re-trigger KPI counters whenever a tab becomes active so each tab's
+   numbers count up the first time the user lands on it. */
+document.addEventListener('tab:activated', () => {
+  // Defer one frame so the DOM has the active class applied
+  requestAnimationFrame(_animateAllKpiCounters);
+});
+
+/* ========================================================================
  * DOM-ready bootstrap
  * ======================================================================== */
 
@@ -437,4 +575,6 @@ document.addEventListener('DOMContentLoaded', () => {
   _restoreTheme();
   _activateTab(_tabFromHash());
   _restoreHistory();
+  // Phase 14: animate the initial KPI counters once content is in the DOM
+  requestAnimationFrame(_animateAllKpiCounters);
 });

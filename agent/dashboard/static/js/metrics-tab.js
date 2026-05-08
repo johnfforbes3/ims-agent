@@ -34,6 +34,47 @@ const _gridColor = '#21262d';
 const _tickColor = '#7d8590';
 const _axisColor = '#484f58';
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * PHASE 14.5 — Chart.js global animation tuning
+ * ──────────────────────────────────────────────────────────────────────────
+ *  Every chart in the dashboard picks these up automatically:
+ *    - 900 ms easeOutQuart entry animation (matches CSS .chart-container fadeup)
+ *    - Smooth 250 ms hover transitions
+ *    - Numeric ticks/labels share the dashboard font for visual cohesion
+ *    - Tooltips get rounded corners + caret
+ *  The block runs once at module load (Chart is preloaded by base.html). */
+if (typeof Chart !== 'undefined' && Chart.defaults) {
+  Chart.defaults.font.family = _chartFontFamily;
+  Chart.defaults.color = _tickColor;
+  Chart.defaults.animation = {
+    duration: 900,
+    easing: 'easeOutQuart',
+  };
+  Chart.defaults.animations.colors = { duration: 350, easing: 'easeOutQuad' };
+  Chart.defaults.animations.numbers = { duration: 700, easing: 'easeOutCubic' };
+  Chart.defaults.transitions.active = { animation: { duration: 250, easing: 'easeOutQuad' } };
+  Chart.defaults.plugins.tooltip = Chart.defaults.plugins.tooltip || {};
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: 'rgba(13, 17, 23, 0.92)',
+    borderColor: '#30363d',
+    borderWidth: 1,
+    cornerRadius: 8,
+    caretSize: 6,
+    padding: 10,
+    titleFont: { family: _chartFontFamily, size: 11, weight: '600' },
+    bodyFont:  { family: _chartFontFamily, size: 12 },
+    displayColors: true,
+    boxPadding: 4,
+  });
+  // Slightly thicker default line + smoother tension for a "premium" look
+  Chart.defaults.elements.line.borderWidth = 2.5;
+  Chart.defaults.elements.line.tension = 0.3;
+  Chart.defaults.elements.point.radius = 0;
+  Chart.defaults.elements.point.hoverRadius = 5;
+  Chart.defaults.elements.point.hoverBorderWidth = 2;
+  Chart.defaults.elements.bar.borderRadius = 4;
+}
+
 function _sparklineOptions(yMin, yMax, healthBands) {
   const opts = {
     responsive: true, maintainAspectRatio: false,

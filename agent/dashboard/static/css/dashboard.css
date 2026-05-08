@@ -630,3 +630,357 @@ tr:hover td { background: rgba(177,186,196,0.04); }
   .tab-nav { padding: 0 8px; overflow-x: auto; }
   .tab-btn { padding: 12px 14px; font-size: 12px; }
 }
+
+/* ============================================================================
+ *  PHASE 14 — MODERN POLISH PASS
+ *  ─────────────────────────────────────────────────────────────────────────
+ *  Layered ON TOP of the existing Phase 12 dark palette.  Strategy:
+ *    14.1  Animated gradient body background  (slow, very subtle)
+ *    14.1  Glassmorphism on cards/panels      (backdrop-filter: blur)
+ *    14.2  Conic-gradient progress rings       (utility class)
+ *    14.3  Skeleton loaders                    (shimmer keyframes)
+ *    14.3  View Transitions API hooks          (root-name pseudo-elements)
+ *    14.4  Hover/active micro-interactions     (transform + transition)
+ *    14.5  Chart-export button polish          (already present, restyled)
+ *
+ *  Everything is additive — no Phase 12 selector is removed.  Tests stay green.
+ * ============================================================================ */
+
+/* ── 14.1: Animated subtle gradient background ──────────────────────────────
+ *  A very slow gradient pan adds "alive" feel without distracting.  Visible
+ *  most through the gaps between cards on the dark theme; on a hypothetical
+ *  light theme it would be the dominant background. */
+body {
+  background:
+    radial-gradient(ellipse at 12% -5%,  rgba(31, 111, 235, 0.10), transparent 55%),
+    radial-gradient(ellipse at 92% 12%,  rgba(255, 90,  54, 0.07), transparent 50%),
+    radial-gradient(ellipse at 50% 110%, rgba(63, 185, 80, 0.06), transparent 60%),
+    #0d1117;
+  background-attachment: fixed;
+  background-size: 100% 100%;
+  position: relative;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(135deg, rgba(31, 111, 235, 0.04), transparent 40%, rgba(255, 90, 54, 0.04));
+  background-size: 200% 200%;
+  animation: phase14-bg-pan 40s ease-in-out infinite;
+}
+@keyframes phase14-bg-pan {
+  0%, 100% { background-position:   0%   0%; }
+  50%      { background-position: 100% 100%; }
+}
+header, .container, .tab-nav { position: relative; z-index: 1; }
+
+/* Honour reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── 14.1: Glassmorphism — frosted cards ────────────────────────────────────
+ *  backdrop-filter does the heavy lift.  We keep a solid fallback bg for
+ *  browsers without support (Safari TP, Firefox <103). */
+.kpi-card,
+.card,
+.panel,
+.alert-panel,
+.progress-card {
+  background: linear-gradient(135deg, rgba(22, 27, 34, 0.85) 0%, rgba(22, 27, 34, 0.70) 100%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(177, 186, 196, 0.08);
+  /* Subtle 1px highlight along the top edge — looks like polished aluminum */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.10);
+}
+.kpi-card:hover,
+.card:hover {
+  border-color: rgba(177, 186, 196, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 12px 32px rgba(31, 111, 235, 0.08);
+}
+
+.health-banner {
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+.chat-messages,
+.listenin-transcript,
+.panel-input {
+  background: rgba(13, 17, 23, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── 14.4: Hover micro-interactions ──────────────────────────────────────── */
+.kpi-card,
+.card,
+.panel,
+.btn,
+.chip,
+.chat-chip,
+.tab-btn,
+.history-row {
+  transition:
+    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.15s ease;
+}
+.kpi-card:hover,
+.card:hover {
+  transform: translateY(-2px);
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.chip:hover {
+  background: rgba(31, 111, 235, 0.25);
+  border-color: rgba(88, 166, 255, 0.5);
+  transform: translateY(-1px);
+}
+.chat-chip:hover {
+  background: rgba(31, 111, 235, 0.25);
+  border-color: rgba(88, 166, 255, 0.45);
+  transform: translateY(-1px);
+}
+.history-row:hover {
+  background: rgba(177, 186, 196, 0.04);
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  border-radius: 4px;
+}
+.tab-btn::after {
+  /* Gradient underline that grows on hover; replaces the border-bottom flicker */
+  content: "";
+  position: absolute;
+  left: 50%; right: 50%; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, #1f6feb, #58a6ff, #ff5a36);
+  transition: left 0.25s, right 0.25s;
+}
+.tab-btn:hover::after,
+.tab-btn.active::after { left: 8px; right: 8px; }
+.tab-btn.active { border-bottom-color: transparent !important; } /* gradient owns it now */
+
+/* Buttons get a subtle gradient sheen on the primary CTA */
+.btn-primary {
+  background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 4px 12px rgba(31, 111, 235, 0.20);
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #388bfd 0%, #58a6ff 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 6px 16px rgba(31, 111, 235, 0.30);
+}
+
+/* Logo badge: subtle inner glow on hover */
+.header-logo {
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset, 0 4px 12px rgba(31, 111, 235, 0.20);
+}
+.header-logo:hover {
+  transform: rotate(-3deg) scale(1.05);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10) inset, 0 6px 18px rgba(31, 111, 235, 0.40);
+}
+
+/* ── 14.2: Conic-gradient progress rings (utility) ──────────────────────────
+ *  Drop one of these into a KPI tile via:
+ *    <div class="progress-ring" style="--pct: 87"><span>87%</span></div>
+ *  The ring is a CSS-only conic gradient masked into a circle. */
+.progress-ring {
+  --size: 56px;
+  --thick: 6px;
+  --pct: 0;
+  --ring-color: var(--accent, #1f6feb);
+  --ring-track: rgba(177, 186, 196, 0.12);
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      var(--ring-color) calc(var(--pct) * 1%),
+      var(--ring-track) 0
+    );
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+.progress-ring::before {
+  content: "";
+  position: absolute;
+  inset: var(--thick);
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(22, 27, 34, 0.95), rgba(22, 27, 34, 0.85));
+}
+.progress-ring > span,
+.progress-ring > strong {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e6edf3;
+  letter-spacing: -0.5px;
+}
+.progress-ring.size-lg { --size: 88px; --thick: 8px; }
+.progress-ring.size-lg > span { font-size: 16px; }
+.progress-ring.danger  { --ring-color: #f85149; }
+.progress-ring.warning { --ring-color: #d29922; }
+.progress-ring.ok      { --ring-color: #3fb950; }
+.progress-ring.accent  { --ring-color: #58a6ff; }
+
+/* KPI value variant with inline ring */
+.kpi-with-ring {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+/* ── 14.2: Animated KPI counters ────────────────────────────────────────────
+ *  No CSS needed — the JS layer drives the textContent.  This rule just
+ *  ensures the digits don't reflow during the count-up. */
+.kpi-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ── 14.3: Skeleton loaders ─────────────────────────────────────────────────
+ *  Apply .skeleton (or .skel-line / .skel-block) to any element to show a
+ *  shimmering placeholder.  JS strips the class once data arrives. */
+.skeleton,
+.skel-line,
+.skel-block {
+  background: linear-gradient(
+    90deg,
+    rgba(177, 186, 196, 0.04) 0%,
+    rgba(177, 186, 196, 0.10) 50%,
+    rgba(177, 186, 196, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: phase14-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+  color: transparent !important;
+  pointer-events: none;
+  user-select: none;
+}
+.skel-line {
+  display: inline-block;
+  height: 1em;
+  width: 80%;
+  vertical-align: middle;
+}
+.skel-block { min-height: 60px; }
+@keyframes phase14-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 14.3: View Transitions API hooks ───────────────────────────────────────
+ *  When supported, switching tabs becomes a smooth crossfade rather than an
+ *  instant swap.  Browsers without the API simply ignore these rules. */
+@supports (view-transition-name: none) {
+  ::view-transition-old(tab-content),
+  ::view-transition-new(tab-content) {
+    animation-duration: 0.28s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  ::view-transition-old(tab-content) {
+    animation-name: phase14-vt-out;
+  }
+  ::view-transition-new(tab-content) {
+    animation-name: phase14-vt-in;
+  }
+  @keyframes phase14-vt-out { to { opacity: 0; transform: translateY(-8px); } }
+  @keyframes phase14-vt-in  { from { opacity: 0; transform: translateY(8px); } }
+
+  /* Header keeps a stable identity across transitions */
+  header { view-transition-name: dashboard-header; }
+  /* Tab buttons morph in place */
+  .tab-nav { view-transition-name: tab-nav; }
+  /* Each panel gets an identity so the API knows what's "the same content" */
+  .tab-panel.active { view-transition-name: tab-content; }
+}
+
+/* ── 14.5: Chart-tile entry shimmer ─────────────────────────────────────────
+ *  Briefly fade-in chart tiles when the tab activates — pairs nicely with
+ *  the Chart.js easeOutQuart animation we set in JS. */
+.chart-container {
+  animation: phase14-fadeup 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.spark-tile {
+  animation: phase14-fadeup 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@keyframes phase14-fadeup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 14.x: Aurora accent line on the top of the page ───────────────────────
+ *  A 2px gradient strip just under the header that quietly sweeps colour. */
+header::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(31, 111, 235, 0.4) 25%,
+    rgba(255, 90, 54, 0.4) 50%,
+    rgba(63, 185, 80, 0.4) 75%,
+    transparent 100%);
+  background-size: 200% 100%;
+  animation: phase14-aurora 18s linear infinite;
+  pointer-events: none;
+}
+@keyframes phase14-aurora {
+  0%   { background-position:   0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── 14.x: Live-pulse on the cycle "in progress" card ──────────────────────
+ *  When a cycle is mid-flight, the progress card breathes. */
+.progress-card {
+  animation: phase14-breathe 3.5s ease-in-out infinite;
+}
+@keyframes phase14-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.0), inset 0 1px 0 rgba(255,255,255,0.04); }
+  50%      { box-shadow: 0 0 0 6px rgba(88, 166, 255, 0.06), inset 0 1px 0 rgba(255,255,255,0.04); }
+}
+
+/* ── 14.x: Status badges get a subtle inner glow ───────────────────────────
+ *  Pure CSS — no extra markup. */
+.badge-HIGH,
+.badge-RED { box-shadow: inset 0 0 0 1px rgba(248, 81, 73, 0.30), 0 0 8px rgba(248, 81, 73, 0.12); }
+.badge-MEDIUM,
+.badge-YELLOW { box-shadow: inset 0 0 0 1px rgba(210, 153, 34, 0.30), 0 0 8px rgba(210, 153, 34, 0.10); }
+.badge-LOW,
+.badge-GREEN { box-shadow: inset 0 0 0 1px rgba(63, 185, 80, 0.30), 0 0 8px rgba(63, 185, 80, 0.10); }
+
+/* ── 14.x: Chart export button — restyle to fit glass aesthetic ──────────── */
+.chart-export-btn {
+  background: rgba(13, 17, 23, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: rgba(177, 186, 196, 0.16);
+}
+.chart-export-btn:hover {
+  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  border-color: #1f6feb;
+  color: white;
+}

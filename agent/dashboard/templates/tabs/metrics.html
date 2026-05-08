@@ -55,26 +55,37 @@
   {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
   {% set cp = state.get('critical_path_task_ids', []) %}
   {% set behind = state.get('tasks_behind', []) %}
+  {# Phase 14.2 — KPI tiles get data-target so dashboard-core.js can animate
+     the count-up.  The first tile pairs the value with a conic progress ring
+     showing the at-risk milestone proportion.  All other Phase 12 selectors
+     (kpi-grid, kpi-card, kpi-value, etc.) preserved for parity. #}
+  {% set ms_total = milestones | length %}
+  {% set ms_high_pct = (100.0 * (high_risk | length) / ms_total) if ms_total else 0 %}
   <div class="kpi-grid kpi-3">
     <div class="kpi-card">
       <div class="kpi-label">HIGH Risk Milestones</div>
-      <div class="kpi-value {% if high_risk | length > 0 %}danger{% else %}ok{% endif %}">
-        {{ high_risk | length }}
+      <div class="kpi-with-ring">
+        <div class="kpi-value {% if high_risk | length > 0 %}danger{% else %}ok{% endif %}"
+             data-target="{{ high_risk | length }}">{{ high_risk | length }}</div>
+        <div class="progress-ring {% if ms_high_pct >= 33 %}danger{% elif ms_high_pct >= 10 %}warning{% else %}ok{% endif %}"
+             style="--pct: {{ '%.1f' | format(ms_high_pct) }}">
+          <span>{{ "%.0f%%" | format(ms_high_pct) }}</span>
+        </div>
       </div>
-      <div class="kpi-sub">of {{ milestones | length }} milestones</div>
+      <div class="kpi-sub">of {{ ms_total }} milestones</div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-label">Tasks Behind w/ Blocker</div>
-      <div class="kpi-value {% if behind | length > 0 %}warning{% else %}ok{% endif %}">
-        {{ behind | length }}
-      </div>
+      <div class="kpi-value {% if behind | length > 0 %}warning{% else %}ok{% endif %}"
+           data-target="{{ behind | length }}">{{ behind | length }}</div>
       <div class="kpi-sub">Active blockers</div>
     </div>
 
     <div class="kpi-card">
       <div class="kpi-label">Critical Path Tasks</div>
-      <div class="kpi-value accent">{{ cp | length }}</div>
+      <div class="kpi-value accent"
+           data-target="{{ cp | length }}">{{ cp | length }}</div>
       <div class="kpi-sub">Zero float</div>
     </div>
   </div>
