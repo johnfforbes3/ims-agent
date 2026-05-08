@@ -3,7 +3,7 @@
 **Version:** 1.1  
 **Created:** 2026-04-25  
 **Updated:** 2026-05-08  
-**Status:** Phase 12.1 COMPLETE — **1068/1068 unit tests passing** (clean; zero flakes; zero open low/medium TDs). Phases 7.1–7.4, 8.3–8.5, 9.2–9.6, 10, 11, 12, 12.1 complete. Phase 12 added IMS Command Center 3-tab dashboard overhaul + Chart.js visual data layer; Phase 12.1 added overnight polish (TD-042/046/048 resolved, demo mode, keyboard shortcuts, chart PNG export, print stylesheet, light/dark theme toggle, JSDoc). Phase 7.5 (First Customer Pilot) awaiting customer engagement. Phase 8.1–8.2 backlog.  
+**Status:** Phase 13 COMPLETE — **1115/1115 unit tests passing** (clean; zero flakes; zero open low/medium TDs). Phases 7.1–7.4, 8.3–8.5, 9.2–9.6, 10, 11, 12, 12.1, 13 complete. Phase 13 added the visual Command Center redesign (3-column app-shell, design tokens, light theme default, hero trend chart). Phase 12 added IMS Command Center 3-tab content structure + Chart.js visual data layer. Phase 7.5 (First Customer Pilot) awaiting customer engagement. Phase 8.1–8.2 backlog.  
 **Owner:** John Forbes  
 
 ---

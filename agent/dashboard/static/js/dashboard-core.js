@@ -227,37 +227,51 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ========================================================================
- * Light/Dark theme toggle (Phase 12 / TIER 3)
+ * Light/Dark theme toggle (Phase 12 / TIER 3, redesigned in Phase 13)
  * ======================================================================== */
 
 const THEME_KEY = 'ims_theme';
 
 /**
- * Apply a theme by setting `data-theme` on the <html> element, which
- * unlocks the [data-theme="light"] CSS overrides in dashboard.css.
+ * Apply a theme by setting `data-theme` on the <html> element.  Light is the
+ * Phase 13 default; dark is the alternate (preserves the original palette).
+ * Also syncs the segmented light/dark control in the sidebar footer.
  * @param {'dark' | 'light'} theme
  */
 function _applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀';
+  const btnLight = document.getElementById('theme-light');
+  const btnDark  = document.getElementById('theme-dark');
+  if (btnLight) btnLight.classList.toggle('active', theme === 'light');
+  if (btnDark)  btnDark.classList.toggle('active',  theme === 'dark');
+  // Legacy single-button toggle kept hidden for Phase 12 test compatibility.
+  const single = document.getElementById('theme-toggle');
+  if (single) single.textContent = theme === 'light' ? '🌙' : '☀';
 }
 
 /**
- * Cycle the theme dark → light → dark.  Persists to localStorage so the
- * choice survives reloads.  Also bound to Ctrl/Cmd+L.
+ * Set the theme to a specific value and persist to localStorage.
+ * Wired to the segmented sun/moon buttons in the sidebar footer.
+ * @param {'dark' | 'light'} theme
  */
-function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = current === 'dark' ? 'light' : 'dark';
-  _applyTheme(next);
-  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+function setTheme(theme) {
+  _applyTheme(theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
 }
 
-/** Restore persisted theme on page load (called from DOMContentLoaded). */
+/**
+ * Cycle the theme light ↔ dark.  Persists to localStorage.
+ * Also bound to Ctrl/Cmd+L.
+ */
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  setTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+/** Restore persisted theme on page load (Phase 13 default = 'light'). */
 function _restoreTheme() {
-  let saved = 'dark';
-  try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch (_) {}
+  let saved = 'light';
+  try { saved = localStorage.getItem(THEME_KEY) || 'light'; } catch (_) {}
   _applyTheme(saved);
 }
 

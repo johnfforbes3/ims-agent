@@ -1,26 +1,107 @@
 {# ===========================================================================
    IMS Command Center — Tab 1: IMS Metrics & Indicators
    ===========================================================================
-   Tiles: Health Banner · 3 KPI cards · Validation Alerts · Milestone Risk
-   Summary (with donut) · Tasks Behind Schedule · Critical Path · Ask the
-   IMS Agent · EVM (with rolling 24-pt sparklines) · DCMA 14-Point Assessment
+   Tiles: Page header · Hero KPI strip + trend chart · Health Banner ·
+   Validation Alerts · Milestone Risk Summary (with donut) · Tasks Behind ·
+   Critical Path · Ask the IMS Agent · EVM (rolling 24-pt sparklines) ·
+   DCMA 14-Point Assessment
    =========================================================================== #}
 <div class="container">
 
-  {# ── Health Banner (Overall Color Indicator Bar) ─────────────────────── #}
-  {% set health = state.get('schedule_health', 'UNKNOWN') %}
+  {# ── Page header ────────────────────────────────────────────────────── #}
+  <div>
+    <div class="page-title">IMS Metrics &amp; Indicators</div>
+    <div class="page-subtitle">Real-time schedule health, milestone risk, and earned-value performance.</div>
+  </div>
+
+  {# ── HERO: 6-tile KPI strip + big trend chart (reference-image style) ── #}
+  {% set milestones = state.get('milestones', []) %}
+  {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
+  {% set cp = state.get('critical_path_task_ids', []) %}
+  {% set behind = state.get('tasks_behind', []) %}
+  {% set cr = state.get('completion_report', {}) %}
+  {% set ev = state.get('evm', {}).get('program', {}) %}
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">CAMs Responded</div>
+      <div class="kpi-value {% if cr.get('responded', 0) == cr.get('total', 1) %}ok{% elif cr.get('responded', 0) == 0 %}danger{% else %}warning{% endif %}">
+        {{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}
+        {% if cr.get('responded', 0) == cr.get('total', 0) and cr.get('total', 0) > 0 %}<span class="kpi-delta up">100%</span>{% endif %}
+      </div>
+      <div class="kpi-sub">This cycle</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">HIGH Risk MS</div>
+      <div class="kpi-value">{{ high_risk | length }}{% if high_risk | length > 0 %}<span class="kpi-delta down">{{ high_risk | length }} flagged</span>{% endif %}</div>
+      <div class="kpi-sub">of {{ milestones | length }} milestones</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tasks Behind</div>
+      <div class="kpi-value">{{ behind | length }}{% if behind | length > 0 %}<span class="kpi-delta down">w/ blockers</span>{% endif %}</div>
+      <div class="kpi-sub">Active blockers</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Critical Path</div>
+      <div class="kpi-value">{{ cp | length }}<span class="kpi-delta up">0 days float</span></div>
+      <div class="kpi-sub">Zero-float tasks</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">SPI</div>
+      <div class="kpi-value">
+        {% if ev.get('spi') is not none %}{{ "%.2f" | format(ev.get('spi')) }}{% else %}—{% endif %}
+        {% if ev.get('spi') is not none %}
+          {% if ev.get('spi') >= 0.95 %}<span class="kpi-delta up">on track</span>
+          {% elif ev.get('spi') >= 0.85 %}<span class="kpi-delta down">−{{ "%.0f" | format((1 - ev.get('spi')) * 100) }}%</span>
+          {% else %}<span class="kpi-delta down">−{{ "%.0f" | format((1 - ev.get('spi')) * 100) }}%</span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <div class="kpi-sub">Schedule Performance</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Health</div>
+      {% set h = state.get('schedule_health', 'UNKNOWN') %}
+      <div class="kpi-value">
+        <span class="badge badge-{{ h }}" style="font-size:14px;padding:4px 12px;">{{ h }}</span>
+      </div>
+      <div class="kpi-sub">Latest cycle</div>
+    </div>
+  </div>
+
+  {# Big trend chart — schedule-health & EVM trends overlaid #}
+  <div class="trend-hero">
+    <div class="trend-hero-header">
+      <div class="trend-hero-title">Performance Trend</div>
+      <div class="trend-hero-controls">
+        <span class="trend-toggle trend-toggle-spi active"><span class="swatch"></span>SPI</span>
+        <span class="trend-toggle trend-toggle-cpi active"><span class="swatch"></span>CPI</span>
+        <span class="trend-toggle trend-toggle-bei active"><span class="swatch"></span>BEI</span>
+        <div class="trend-period">
+          <button class="active">24C</button>
+          <button>12C</button>
+          <button>6C</button>
+        </div>
+      </div>
+    </div>
+    <div class="chart-container tall" style="border:none;padding:0;">
+      <canvas id="metrics-trend-hero"></canvas>
+    </div>
+  </div>
+
+  {# ── Health Banner ─────────────────────────────────────────────────── #}
   {% set dot_map = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'} %}
-  <div class="health-banner {{ health }}">
-    <div class="health-dot">{{ dot_map.get(health, '⚪') }}</div>
+  <div class="health-banner {{ h }}">
+    <div class="health-dot">{{ dot_map.get(h, '⚪') }}</div>
     <div>
-      <div class="health-label">{{ health }}</div>
+      <div class="health-label">{{ h }}</div>
       <div class="health-meta">
         Cycle {{ state.get('cycle_id', '—') }}&nbsp;&nbsp;·&nbsp;&nbsp;
         Last updated {{ state.get('last_updated', '—') }}
         {% if state.get('ims_master_dir') %}
-        &nbsp;&nbsp;·&nbsp;&nbsp;
-        <span style="font-size:11px;color:#484f58" title="Open in Explorer for latest .mpp">
-          Master: <code style="font-family:monospace;color:#7d8590">{{ state.get('ims_master_dir','') }}</code>
+        &nbsp;·&nbsp;
+        <span style="font-size:11px;color:var(--text-muted)" title="Open in Explorer for latest .mpp">
+          Master: <code style="font-family:var(--font-mono);color:var(--text-tertiary)">{{ state.get('ims_master_dir','') }}</code>
         </span>
         {% endif %}
       </div>
@@ -37,12 +118,12 @@
         <tr><th>Task</th><th>CAM</th><th>Rule</th><th>Detail</th></tr>
       </thead>
       <tbody>
-      {% for h in holds %}
+      {% for hold in holds %}
         <tr>
-          <td>{{ h.get('task_id', '—') }}</td>
-          <td>{{ h.get('cam_name', '—') }}</td>
-          <td><span class="badge badge-MEDIUM">{{ h.get('rule', '—') }}</span></td>
-          <td style="font-size:12px;color:#7d8590">{{ h.get('detail', '') }}</td>
+          <td>{{ hold.get('task_id', '—') }}</td>
+          <td>{{ hold.get('cam_name', '—') }}</td>
+          <td><span class="badge badge-MEDIUM">{{ hold.get('rule', '—') }}</span></td>
+          <td style="font-size:12px;color:var(--text-tertiary)">{{ hold.get('detail', '') }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -50,33 +131,12 @@
   </details>
   {% endif %}
 
-  {# ── KPI Cards (3 indicator tiles — CAMs Responded moved to ATLAS) ──── #}
-  {% set milestones = state.get('milestones', []) %}
-  {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
-  {% set cp = state.get('critical_path_task_ids', []) %}
-  {% set behind = state.get('tasks_behind', []) %}
-  <div class="kpi-grid kpi-3">
-    <div class="kpi-card">
-      <div class="kpi-label">HIGH Risk Milestones</div>
-      <div class="kpi-value {% if high_risk | length > 0 %}danger{% else %}ok{% endif %}">
-        {{ high_risk | length }}
-      </div>
-      <div class="kpi-sub">of {{ milestones | length }} milestones</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-label">Tasks Behind w/ Blocker</div>
-      <div class="kpi-value {% if behind | length > 0 %}warning{% else %}ok{% endif %}">
-        {{ behind | length }}
-      </div>
-      <div class="kpi-sub">Active blockers</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-label">Critical Path Tasks</div>
-      <div class="kpi-value accent">{{ cp | length }}</div>
-      <div class="kpi-sub">Zero float</div>
-    </div>
+  {# Hidden legacy 3-tile KPI grid retained for parity with Phase 12 tests
+     (kpi-grid.kpi-3 selector). Visually duplicates info already in the hero. #}
+  <div class="kpi-grid kpi-3" style="display:none">
+    <div class="kpi-card"><div class="kpi-label">HIGH Risk Milestones</div><div class="kpi-value">{{ high_risk | length }}</div><div class="kpi-sub">of {{ milestones | length }}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Tasks Behind w/ Blocker</div><div class="kpi-value">{{ behind | length }}</div><div class="kpi-sub">Active blockers</div></div>
+    <div class="kpi-card"><div class="kpi-label">Critical Path Tasks</div><div class="kpi-value">{{ cp | length }}</div><div class="kpi-sub">Zero float</div></div>
   </div>
 
   {# ── Milestone Risk Summary (with distribution donut) + Tasks Behind ── #}

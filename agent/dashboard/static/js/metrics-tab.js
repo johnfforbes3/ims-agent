@@ -27,12 +27,43 @@
 let _evmCharts = {};   // chart-id -> Chart instance (so we can destroy/refresh)
 let _dcmaChart = null;
 let _milestoneDonut = null;
+let _heroTrendChart = null;
 
-/* ── Common chart options (dark theme tuned for our palette) ─────────────── */
-const _chartFontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif';
-const _gridColor = '#21262d';
-const _tickColor = '#7d8590';
-const _axisColor = '#484f58';
+/* ── Theme-aware chart styling helpers (Phase 13) ────────────────────────── */
+const _chartFontFamily = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+/**
+ * Resolve a CSS custom-property at runtime so charts pick up the active
+ * theme (light/dark) without re-loading the page.  Falls back to a sensible
+ * dark-theme default when running outside a browser (tests).
+ */
+function _cssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch (_) { return fallback; }
+}
+
+function _chartTheme() {
+  return {
+    grid:      _cssVar('--border-subtle',  '#e6e8eb'),
+    tick:      _cssVar('--text-tertiary',  '#8b95a1'),
+    axis:      _cssVar('--text-muted',     '#adb5bd'),
+    bg:        _cssVar('--bg-card',        '#ffffff'),
+    fg:        _cssVar('--text-primary',   '#1f2328'),
+    accent:    _cssVar('--accent',         '#ff5a36'),
+    info:      _cssVar('--info',           '#2b7fff'),
+    success:   _cssVar('--hp-green',       '#16a34a'),
+    warning:   _cssVar('--hp-yellow',      '#f59e0b'),
+    danger:    _cssVar('--hp-red',         '#ef4444'),
+  };
+}
+
+/* Legacy shims — many functions below reference these constants directly.
+   Resolved once at module load; see _chartTheme() for live-theme aware. */
+const _gridColor = _cssVar('--border-subtle', '#e6e8eb');
+const _tickColor = _cssVar('--text-tertiary', '#8b95a1');
+const _axisColor = _cssVar('--text-muted',    '#adb5bd');
 
 function _sparklineOptions(yMin, yMax, healthBands) {
   const opts = {
@@ -321,11 +352,80 @@ function _renderMilestoneDonut() {
   });
 }
 
+/* ── Hero trend chart (Phase 13) ─────────────────────────────────────────
+ * Big multi-line chart at the top of the metrics tab, mirroring the
+ * marketing-dashboard reference image.  Plots SPI, CPI, BEI over the
+ * rolling 24-cycle window from /api/evm/history.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+async function _renderHeroTrend() {
+  const canvas = document.getElementById('metrics-trend-hero');
+  if (!canvas) return;
+  const t = _chartTheme();
+  try {
+    const r = await fetch('/api/evm/history?n=24', { headers: _authHeaders() });
+    if (!r.ok) return;
+    const data = await r.json();
+    const history = data.history || [];
+    if (!history.length) {
+      canvas.parentElement.innerHTML = '<p class="empty">No EVM history yet — needs 2+ completed cycles.</p>';
+      return;
+    }
+    const labels = history.map(h => (h.timestamp || '').slice(5, 10));
+    const spi = history.map(h => h.spi);
+    const cpi = history.map(h => h.cpi);
+    const bei = history.map(h => h.bei);
+
+    if (_heroTrendChart) _heroTrendChart.destroy();
+    _heroTrendChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'SPI', data: spi, borderColor: t.accent,  backgroundColor: t.accent  + '14', tension: 0.3, fill: true,  borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5 },
+          { label: 'CPI', data: cpi, borderColor: t.info,    backgroundColor: t.info    + '0a', tension: 0.3, fill: false, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5 },
+          { label: 'BEI', data: bei, borderColor: t.tick,    backgroundColor: 'transparent', tension: 0.3, fill: false, borderWidth: 2,   borderDash: [4,3], pointRadius: 0, pointHoverRadius: 5 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: t.fg, titleColor: t.bg, bodyColor: t.bg,
+            borderColor: t.fg, borderWidth: 1, padding: 10, cornerRadius: 6,
+            titleFont: { family: _chartFontFamily, size: 11, weight: '600' },
+            bodyFont:  { family: _chartFontFamily, size: 12 },
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(3) : 'N/A'}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false }, border: { display: false },
+            ticks: { color: t.tick, font: { family: _chartFontFamily, size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+          },
+          y: {
+            grid: { color: t.grid, drawBorder: false },
+            border: { display: false },
+            ticks: {
+              color: t.tick, font: { family: _chartFontFamily, size: 11 },
+              callback: (v) => v.toFixed(2),
+            },
+          },
+        },
+      },
+    });
+  } catch (_) { /* swallow */ }
+}
+
 /* ── Initialize on tab activation (lazy chart render) ─────────────────────── */
 document.addEventListener('tab:activated', e => {
   if (e.detail.tab === 'metrics') {
     if (typeof Chart !== 'undefined') {
-      Promise.all([loadEvm(), loadDcma()])
+      Promise.all([_renderHeroTrend(), loadEvm(), loadDcma()])
         .then(() => { _renderMilestoneDonut(); _attachExportButtons(); });
     }
   }
