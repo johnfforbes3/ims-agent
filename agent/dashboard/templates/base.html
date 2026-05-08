@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,6 +33,8 @@
       <div class="refresh-badge">Refresh in <span id="countdown">60</span>s</div>
       <div class="last-updated">{{ state.get('last_updated', 'No data yet') }}</div>
     </div>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle" onclick="toggleTheme()"
+            title="Toggle light/dark theme (Ctrl+L)">☀</button>
     <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
       ▶ Trigger Cycle
     </button>

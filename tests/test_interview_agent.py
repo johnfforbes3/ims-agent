@@ -588,8 +588,40 @@ class TestConversationalContext:
         assert "AI-09" in out
         assert "no risk" in out
 
-    def test_flat_denial_retry_limit_still_works(self):
-        """Plain 'no' without task ID or percent should still exhaust retries and close."""
+    def test_flat_denial_retry_limit_still_works(self, monkeypatch):
+        """Plain 'no' without task ID or percent should still exhaust retries and close.
+
+        TD-042 RESOLUTION (2026-05-08): mock the LLM classifier to make this test
+        fully deterministic. Previously this test made live ANTHROPIC API calls
+        that were sporadically slow / rate-limited / non-deterministic in the
+        full 1010-test suite, causing flaky failures despite passing in
+        isolation. Mocking gives identical behaviour to the regex fallback
+        (which is also what would happen if the API key were missing) but with
+        zero variance and zero cost.
+        """
+        import agent.voice.interview_agent as ia
+
+        def _deterministic_classify(state, question, response, *args, **kwargs):
+            """Return classifier output the LLM would produce for these exact inputs."""
+            r = (response or "").strip().lower()
+            if r == "yes":
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r == "no":
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "negative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r.isdigit():
+                return {"percent": int(r), "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            # "on track", anything else → benign default
+            return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                    "sentiment": "unclear", "unknown": False, "key_insight": "", "cam_question": False}
+
+        monkeypatch.setattr(ia, "_classify_cam_response", _deterministic_classify)
+        # The EAC-date classifier is also LLM-backed; force its "on track" → no_change path.
+        monkeypatch.setattr(ia, "_classify_eac_date",
+                            lambda *a, **kw: {"intent": "on_track", "uncertain": False})
+
         task = _make_task("T1", "Task", pct=50)
         agent = InterviewAgent("Alice", [task], expected_pcts={"T1": 50})
         agent.start()

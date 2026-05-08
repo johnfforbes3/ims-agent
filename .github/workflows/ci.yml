@@ -23,6 +23,14 @@ jobs:
     name: Unit Tests (Python 3.13 · Windows)
     runs-on: windows-latest
 
+    # TD-048 RESOLUTION (2026-05-08): silence Node.js 20 deprecation warnings.
+    # actions/checkout@v4, setup-python@v5, setup-java@v4 ship with Node.js 20
+    # which is deprecated from 2026-06-02 (forced switch to Node.js 24) and
+    # removed entirely on 2026-09-16. Setting the runner-level flag forces
+    # JavaScript actions to run on Node.js 24 now, well ahead of the deadline.
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

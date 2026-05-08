@@ -1,12 +1,37 @@
-/* ============================================================================
- * IMS Command Center — Core JS
- * ============================================================================
- * Shared utilities: polling, manual trigger, escapeHtml, _authHeaders,
- * tab navigation (hash routing), Q&A chat widget with sessionStorage
- * persistence.  Loaded on every page; tab-specific JS modules layer on top.
- * ============================================================================ */
+/**
+ * @file dashboard-core.js
+ * @description IMS Command Center — Core JavaScript module.
+ *
+ * Loaded on every page; tab-specific modules (metrics-tab.js, pm-tab.js,
+ * atlas-tab.js) layer on top.  This file owns:
+ *
+ *   - HTML escape helper (used by every renderer)
+ *   - Authenticated fetch headers (`_authHeaders`)
+ *   - Status / state polling with adaptive cadence (60 s idle, 5 s active cycle)
+ *   - Cycle progress card live update from /api/state
+ *   - Manual cycle trigger button handler (`triggerCycle`)
+ *   - Tab navigation: hash routing (#/metrics, #/pm, #/atlas) + keyboard
+ *     shortcuts (Ctrl/Cmd+1/2/3) — Phase 12 / TIER 2F
+ *   - Q&A chat widget with sessionStorage persistence (Phase 4)
+ *   - Chart export to PNG (`exportChart`) — Phase 12 / TIER 2G
+ *   - Light/dark theme toggle with localStorage persistence — Phase 12 / TIER 3
+ *
+ * @module dashboard-core
+ * @see /static/js/metrics-tab.js
+ * @see /static/js/pm-tab.js
+ * @see /static/js/atlas-tab.js
+ */
 
-/* ── HTML escape helper (used by every renderer) ─────────────────────────── */
+/* ========================================================================
+ * HTML escape helper
+ * ======================================================================== */
+
+/**
+ * Escape a string for safe HTML insertion.
+ * Newlines become `<br>` so multi-line text renders naturally.
+ * @param {*} str Anything stringable.
+ * @returns {string} HTML-escaped output.
+ */
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -14,25 +39,42 @@ function escapeHtml(str) {
     .replace(/\n/g, '<br>');
 }
 
-/* ── Auth headers (placeholder — server injects api_key into window.__IMS) ── */
+/* ========================================================================
+ * Auth headers
+ * ======================================================================== */
+
+/**
+ * Return Authorization headers if an API key is present in window.__IMS.
+ * Server injects the key into the page; tab modules pass these into fetch().
+ * @returns {Object} Header dict (empty when no key set).
+ */
 function _authHeaders() {
   const key = (window.__IMS && window.__IMS.api_key) || '';
   return key ? { 'X-API-Key': key } : {};
 }
 
-/* ── Polling & countdown ─────────────────────────────────────────────────── */
+/* ========================================================================
+ * Polling & countdown
+ * ======================================================================== */
+
 const countdownEl = document.getElementById('countdown');
-let _pollMs     = 60000;
+let _pollMs     = 60000;            // 60 s when idle
 let _nextPollAt = Date.now() + _pollMs;
 let _wasActive  = false;
 let _polling    = false;
 
+/** Map a CAM live-status enum to a status-cell HTML fragment. */
 const _statusHtml = {
   complete:  '<span class="dot dot-ok"></span>Responded',
   no_answer: '<span class="dot dot-miss"></span>No Response',
   pending:   '<span class="dot dot-pend"></span>Interviewing…',
 };
 
+/**
+ * Update the Cycle In Progress card from a freshly-fetched state object.
+ * Hides the card entirely when no cycle is in flight.
+ * @param {Object} state Full /api/state response.
+ */
 function _updateCycleCard(state) {
   const cur   = state.current_cycle || {};
   const phase = (cur.phase || '').toLowerCase();
@@ -73,6 +115,12 @@ function _updateCycleCard(state) {
   }
 }
 
+/**
+ * Single poll round — checks /api/status; if a cycle is active, fetches
+ * /api/state and updates the live progress card.  When a cycle completes
+ * (was active, now isn't), do a full reload so the page re-renders all
+ * server-side templated regions.
+ */
 async function _poll() {
   if (_polling) return;
   _polling = true;
@@ -98,7 +146,14 @@ setInterval(() => {
 }, 1000);
 _poll();
 
-/* ── Manual cycle trigger ────────────────────────────────────────────────── */
+/* ========================================================================
+ * Manual cycle trigger
+ * ======================================================================== */
+
+/**
+ * Click handler for the prominent "▶ Trigger Cycle" button in the header.
+ * POSTs /api/trigger?force=true and reloads after the response lands.
+ */
 function triggerCycle() {
   const btn = document.getElementById('trigger-btn');
   if (!btn) return;
@@ -113,10 +168,18 @@ function triggerCycle() {
     .catch(() => { btn.textContent = '✗ Error — check logs'; btn.disabled = false; });
 }
 
-/* ── Tab Navigation (hash routing: #/metrics, #/pm, #/atlas) ─────────────── */
+/* ========================================================================
+ * Tab Navigation — hash routing + keyboard shortcuts (Phase 12 / TIER 2F)
+ * ======================================================================== */
+
 const TAB_ORDER = ['metrics', 'pm', 'atlas'];
 const DEFAULT_TAB = 'metrics';
 
+/**
+ * Show only the requested tab; emit `tab:activated` so tab modules can
+ * lazy-init charts on first show.
+ * @param {string} tabId One of TAB_ORDER (metrics | pm | atlas).
+ */
 function _activateTab(tabId) {
   if (!TAB_ORDER.includes(tabId)) tabId = DEFAULT_TAB;
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -125,14 +188,19 @@ function _activateTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(panel => {
     panel.classList.toggle('active', panel.dataset.tab === tabId);
   });
-  // Notify tab modules so they can lazy-init charts on first show
   document.dispatchEvent(new CustomEvent('tab:activated', { detail: { tab: tabId } }));
 }
 
+/**
+ * Public tab switcher — updates the URL hash; the hashchange listener
+ * actually swaps panels.  Use this from button onclick or keyboard handler.
+ * @param {string} tabId One of TAB_ORDER.
+ */
 function switchTab(tabId) {
   window.location.hash = '#/' + tabId;
 }
 
+/** @returns {string} Current tab from URL hash, or DEFAULT_TAB. */
 function _tabFromHash() {
   const m = (window.location.hash || '').match(/^#\/(\w+)$/);
   return m ? m[1] : DEFAULT_TAB;
@@ -140,13 +208,122 @@ function _tabFromHash() {
 
 window.addEventListener('hashchange', () => _activateTab(_tabFromHash()));
 
-/* ── Q&A Chat with sessionStorage persistence ────────────────────────────── */
+/**
+ * Global keyboard shortcuts:
+ *   Ctrl/Cmd + 1  → IMS Metrics & Indicators tab
+ *   Ctrl/Cmd + 2  → PM Dashboard tab
+ *   Ctrl/Cmd + 3  → ATLAS Agent Control tab
+ *   Ctrl/Cmd + L  → Toggle light/dark theme
+ */
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // Ignore if user is typing in an input/textarea
+  const tag = (e.target && e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (e.key === '1') { e.preventDefault(); switchTab('metrics'); }
+  else if (e.key === '2') { e.preventDefault(); switchTab('pm'); }
+  else if (e.key === '3') { e.preventDefault(); switchTab('atlas'); }
+  else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); toggleTheme(); }
+});
+
+/* ========================================================================
+ * Light/Dark theme toggle (Phase 12 / TIER 3)
+ * ======================================================================== */
+
+const THEME_KEY = 'ims_theme';
+
+/**
+ * Apply a theme by setting `data-theme` on the <html> element, which
+ * unlocks the [data-theme="light"] CSS overrides in dashboard.css.
+ * @param {'dark' | 'light'} theme
+ */
+function _applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀';
+}
+
+/**
+ * Cycle the theme dark → light → dark.  Persists to localStorage so the
+ * choice survives reloads.  Also bound to Ctrl/Cmd+L.
+ */
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  _applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+}
+
+/** Restore persisted theme on page load (called from DOMContentLoaded). */
+function _restoreTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch (_) {}
+  _applyTheme(saved);
+}
+
+/* ========================================================================
+ * Chart export to PNG (Phase 12 / TIER 2G)
+ * ======================================================================== */
+
+/**
+ * Download a Chart.js chart as a PNG file.  Bound to the small ⬇ button
+ * each tab module places on the chart container.
+ *
+ * @param {string} canvasId DOM id of the <canvas> element rendering the chart.
+ * @param {string} [filename] Suggested download filename (without extension).
+ */
+function exportChart(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  let dataUrl;
+  // Prefer Chart.js's helper which respects retina + background — falls back
+  // to canvas.toDataURL when Chart isn't yet attached.
+  if (window.Chart && typeof Chart.getChart === 'function') {
+    const c = Chart.getChart(canvas);
+    if (c && typeof c.toBase64Image === 'function') {
+      dataUrl = c.toBase64Image('image/png', 1.0);
+    }
+  }
+  if (!dataUrl) dataUrl = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = (filename || canvasId) + '.png';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/**
+ * Idempotently inject a tiny 📥 export button into every chart container.
+ * Tab modules call `_attachExportButtons()` after Chart.js mounts so each
+ * chart picks up an export action.  Re-running the function is safe.
+ */
+function _attachExportButtons() {
+  document.querySelectorAll('.chart-container canvas[id]').forEach(canvas => {
+    const container = canvas.closest('.chart-container');
+    if (!container || container.querySelector('.chart-export-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'chart-export-btn';
+    btn.title = 'Download chart as PNG';
+    btn.textContent = '📥';
+    btn.onclick = () => exportChart(canvas.id, canvas.id);
+    container.appendChild(btn);
+  });
+}
+
+/* ========================================================================
+ * Q&A Chat widget with sessionStorage persistence (Phase 4)
+ * ======================================================================== */
+
 const CHAT_KEY = 'ims_chat_history';
 
+/** @returns {Array<Object>} Persisted chat history (or []). */
 function _loadHistory() {
   try { return JSON.parse(sessionStorage.getItem(CHAT_KEY) || '[]'); }
   catch { return []; }
 }
+
+/** Persist current rendered chat to sessionStorage so it survives reloads. */
 function _saveHistory() {
   const msgs = document.getElementById('chat-messages');
   if (!msgs) return;
@@ -160,8 +337,10 @@ function _saveHistory() {
     entries.push({ role, html: bubble.innerHTML, source: source ? source.textContent : '' });
   }
   try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(entries)); }
-  catch { /* quota */ }
+  catch { /* storage quota exceeded */ }
 }
+
+/** Re-hydrate the chat widget from sessionStorage on initial load. */
 function _restoreHistory() {
   const history = _loadHistory();
   if (!history.length) return;
@@ -178,6 +357,8 @@ function _restoreHistory() {
   }
   msgs.scrollTop = msgs.scrollHeight;
 }
+
+/** Reset the chat to its empty greeting. */
 function clearChat() {
   sessionStorage.removeItem(CHAT_KEY);
   const msgs = document.getElementById('chat-messages');
@@ -187,12 +368,18 @@ function clearChat() {
   </div>`;
 }
 
+/**
+ * Convenience for the suggestion chips — paste the chip text into the input
+ * and immediately submit.
+ * @param {string} q Question text.
+ */
 function askQuestion(q) {
   const inp = document.getElementById('chat-input');
   if (inp) inp.value = q;
   sendChat();
 }
 
+/** Submit the current chat input to /api/ask and render the response. */
 function sendChat() {
   const input    = document.getElementById('chat-input');
   const btn      = document.getElementById('chat-send-btn');
@@ -242,8 +429,12 @@ function sendChat() {
     });
 }
 
-/* ── DOM ready: activate tab from hash, restore chat history ─────────────── */
+/* ========================================================================
+ * DOM-ready bootstrap
+ * ======================================================================== */
+
 document.addEventListener('DOMContentLoaded', () => {
+  _restoreTheme();
   _activateTab(_tabFromHash());
   _restoreHistory();
 });

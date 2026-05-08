@@ -358,7 +358,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 9 — EVM / DCMA / Briefing / Portfolio Sprint (2026-05-06)
 
-### TD-042 — `test_flat_denial_retry_limit_still_works` is flaky in full-suite runs
+### TD-042 — `test_flat_denial_retry_limit_still_works` is flaky in full-suite runs — **RESOLVED**
+**Resolved:** 2026-05-08 — Mocked `_classify_cam_response` and `_classify_eac_date` directly in the test via `monkeypatch.setattr`, removing the live-API dependency and giving the test deterministic per-input behaviour identical to the regex fallback. Test runtime dropped from ~20s (real LLM calls) to <0.2s and is now reliable in the full suite. Same pattern is recommended for any other LLM-backed unit test that doesn't intentionally exercise live classification.
+
+
 **File:** `tests/test_interview_agent.py` — `TestFlatDenialRetryLimit`  
 **Severity:** Low (test reliability; feature is correct)  
 **Description:** This test passes reliably when run in isolation (`pytest tests/test_interview_agent.py -k flat_denial`) but sporadically fails when run in the full 611-test suite. Root cause is LLM mock state leaking between tests: another test that monkeypatches `agent.voice.interview_agent.LLMInterface` does not fully restore the original before this test runs, causing the `_classify_response` call to return a real API response instead of the patched one.  
@@ -396,7 +399,10 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ---
 
-### TD-046 — CAMSimulator eagerly constructs LLMInterface in __init__
+### TD-046 — CAMSimulator eagerly constructs LLMInterface in __init__ — **RESOLVED**
+**Resolved:** 2026-05-08 — Moved `LLMInterface(model=_SIM_MODEL)` construction from `CAMSimulator.__init__` into `respond()`. `__init__` now sets `self._llm = None`; `respond()` lazily builds the LLM client on first call. Pattern matches the rest of the codebase (qa_engine, cycle_runner, variance_analyst, interview_agent). `CAMSimulator` can now be instantiated in any environment regardless of API-key availability — `EnvironmentError` is only raised when `respond()` actually needs to make an LLM call.
+
+
 **File:** `agent/voice/cam_simulator.py` — `CAMSimulator.__init__`  
 **Severity:** Low (architectural smell; not causing CI failures when `ANTHROPIC_API_KEY` is present)  
 **Description:** `CAMSimulator.__init__` calls `self._llm = LLMInterface(model=_SIM_MODEL)` immediately at construction time. `LLMInterface.__init__` raises `EnvironmentError` if neither `ANTHROPIC_API_KEY` nor `LLM_BASE_URL` is set. This means any test or offline environment that instantiates a `CAMSimulator` (even to test non-LLM methods) will fail unless credentials are available. The pattern is inconsistent with the rest of the codebase — all other callers create `LLMInterface` inside the method that needs it (`qa_engine.py`, `cycle_runner.py`, `variance_analyst.py`).  
@@ -441,7 +447,10 @@ Set `self._llm = None` in `__init__`. No test changes required — lazy construc
 
 ---
 
-### TD-048 — GitHub Actions CI uses deprecated Node.js 20 action versions (breaking June 2026)
+### TD-048 — GitHub Actions CI uses deprecated Node.js 20 action versions (breaking June 2026) — **RESOLVED**
+**Resolved:** 2026-05-08 — Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` to the workflow's job-level `env` block in `.github/workflows/ci.yml`. This forces all JavaScript actions (`actions/checkout@v4`, `setup-python@v5`, `setup-java@v4`) to run on Node.js 24 immediately, well ahead of the 2026-06-02 forced switch and the 2026-09-16 Node.js 20 removal. Deprecation-warning annotations no longer appear on CI runs.
+
+
 **File:** `.github/workflows/ci.yml` — `actions/checkout@v4`, `actions/setup-python@v5`, `actions/setup-java@v4`  
 **Severity:** Medium (warning today; will hard-fail CI in September 2026)  
 **Observed:** Every CI run includes the annotation: "Node.js 20 actions are deprecated. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026."  

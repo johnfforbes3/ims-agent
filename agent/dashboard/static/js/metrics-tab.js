@@ -1,9 +1,28 @@
-/* ============================================================================
- * IMS Command Center — Metrics Tab JS
- * ============================================================================
- * Loaders for: EVM (with rolling 24-pt sparklines), DCMA, milestone-risk donut.
- * Charts rendered via Chart.js v4 (vendored at /static/vendor/chart.umd.min.js).
- * ============================================================================ */
+/**
+ * @file metrics-tab.js
+ * @description IMS Command Center — Tab 1 (IMS Metrics & Indicators).
+ *
+ * Owns the loaders + Chart.js renderers for the IMS Metrics tab:
+ *
+ *   - {@link loadEvm}                — Earned Value Metrics (current cycle)
+ *     plus the 4 rolling 24-cycle sparklines (SPI/CPI/BEI/SV) backed by
+ *     `/api/evm/history`.
+ *   - {@link loadDcma}               — DCMA 14-Point Assessment scorecard +
+ *     violations bar chart.
+ *   - {@link _renderMilestoneDonut}  — Milestone risk distribution donut
+ *     (HIGH/MEDIUM/LOW) sourced from server-injected `window.__IMS.milestones`.
+ *
+ * All chart instances are tracked in module-local maps (`_evmCharts`, etc.)
+ * so subsequent refreshes destroy + re-create cleanly, preventing memory
+ * leaks when the user clicks "Refresh" or switches tabs.
+ *
+ * Charts auto-render via the `tab:activated` event dispatched by
+ * dashboard-core.js when the user navigates to the metrics tab.
+ *
+ * @module metrics-tab
+ * @requires Chart (vendored at /static/vendor/chart.umd.min.js)
+ * @requires escapeHtml _authHeaders _attachExportButtons (from dashboard-core)
+ */
 
 let _evmCharts = {};   // chart-id -> Chart instance (so we can destroy/refresh)
 let _dcmaChart = null;
@@ -306,9 +325,8 @@ function _renderMilestoneDonut() {
 document.addEventListener('tab:activated', e => {
   if (e.detail.tab === 'metrics') {
     if (typeof Chart !== 'undefined') {
-      loadEvm();
-      loadDcma();
-      _renderMilestoneDonut();
+      Promise.all([loadEvm(), loadDcma()])
+        .then(() => { _renderMilestoneDonut(); _attachExportButtons(); });
     }
   }
 });

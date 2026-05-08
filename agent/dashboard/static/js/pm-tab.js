@@ -1,10 +1,24 @@
-/* ============================================================================
- * IMS Command Center — PM Dashboard Tab JS
- * ============================================================================
- * Loaders for: Schedule Health History trend chart (with R/Y/G zones),
- * Schedule Variance Narrative, Portfolio View (with health donut),
- * Generate Executive Briefing button.
- * ============================================================================ */
+/**
+ * @file pm-tab.js
+ * @description IMS Command Center — Tab 2 (PM Dashboard).
+ *
+ * Decision-support views for the program manager:
+ *
+ *   - {@link loadHealthHistoryChart} — 24-cycle Schedule Health trend line
+ *     with **green/yellow/red zone backgrounds** painted by the custom
+ *     `_healthZonesPlugin`.  Y-axis is a numeric health score; ticks are
+ *     formatted back to "RED"/"YELLOW"/"GREEN".  Source: `/api/health/history`.
+ *   - {@link loadVariance}           — Schedule Variance Narrative (CPR Format 5).
+ *   - {@link openBriefing}           — Opens the Executive Briefing HTML in a
+ *     new tab via `/api/briefing`.
+ *   - {@link loadPortfolio}          — Portfolio tile grid + health-distribution
+ *     donut chart sourced from `/api/portfolio`.
+ *
+ * Charts auto-render on `tab:activated` (event dispatched by dashboard-core).
+ *
+ * @module pm-tab
+ * @requires Chart escapeHtml _authHeaders _attachExportButtons
+ */
 
 let _healthTrendChart = null;
 let _portfolioDonut = null;
@@ -216,9 +230,8 @@ async function loadPortfolio() {
 document.addEventListener('tab:activated', e => {
   if (e.detail.tab === 'pm') {
     if (typeof Chart !== 'undefined') {
-      loadHealthHistoryChart();
-      loadVariance();
-      loadPortfolio();
+      Promise.all([loadHealthHistoryChart(), loadVariance(), loadPortfolio()])
+        .then(() => _attachExportButtons());
     }
   }
 });

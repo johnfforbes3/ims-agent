@@ -481,6 +481,144 @@ tr:hover td { background: rgba(177,186,196,0.04); }
 ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
+/* ── Chart export button (Phase 12 / TIER 2G) ─────────────────────────────── */
+.chart-container { position: relative; }
+.chart-export-btn {
+  position: absolute;
+  top: 6px; right: 6px;
+  background: rgba(22, 27, 34, 0.85);
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.45;
+  transition: opacity 0.15s, background 0.15s;
+  z-index: 10;
+}
+.chart-container:hover .chart-export-btn { opacity: 1; }
+.chart-export-btn:hover { background: #1f6feb; color: white; border-color: #1f6feb; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * LIGHT THEME (Phase 12 / TIER 3)
+ * Activated via <html data-theme="light">; toggled by toggleTheme() in core.
+ * Palette tuned for executive briefings + printed reports — keeps the same
+ * accent colors but flips dark surfaces to light, inverts text contrast.
+ * ────────────────────────────────────────────────────────────────────────── */
+[data-theme="light"] body {
+  background: #f6f8fa;
+  color: #1f2328;
+}
+[data-theme="light"] header {
+  background: #ffffff;
+  border-bottom-color: #d0d7de;
+}
+[data-theme="light"] .header-title { color: #1f2328; }
+[data-theme="light"] .header-sub,
+[data-theme="light"] .refresh-badge,
+[data-theme="light"] .last-updated { color: #57606a; }
+[data-theme="light"] .tab-nav {
+  background: #ffffff;
+  border-bottom-color: #d0d7de;
+}
+[data-theme="light"] .tab-btn { color: #57606a; }
+[data-theme="light"] .tab-btn:hover { color: #1f2328; background: rgba(0,0,0,0.04); }
+[data-theme="light"] .tab-btn.active { color: #0969da; border-bottom-color: #0969da; }
+[data-theme="light"] .card,
+[data-theme="light"] .panel,
+[data-theme="light"] .kpi-card,
+[data-theme="light"] .spark-tile {
+  background: #ffffff;
+  border-color: #d0d7de;
+}
+[data-theme="light"] .card h2 { color: #57606a; }
+[data-theme="light"] .kpi-label,
+[data-theme="light"] .spark-label { color: #57606a; }
+[data-theme="light"] .kpi-value { color: #1f2328; }
+[data-theme="light"] .kpi-sub { color: #6e7781; }
+[data-theme="light"] th {
+  background: #f6f8fa;
+  color: #57606a;
+  border-bottom-color: #d0d7de;
+}
+[data-theme="light"] td {
+  color: #1f2328;
+  border-bottom-color: #eaeef2;
+}
+[data-theme="light"] tr:hover td { background: rgba(31,35,40,0.04); }
+[data-theme="light"] .panel summary { color: #1f2328; }
+[data-theme="light"] .panel summary:hover { background: rgba(0,0,0,0.04); }
+[data-theme="light"] .panel[open] summary { border-bottom-color: #d0d7de; }
+[data-theme="light"] .panel-input,
+[data-theme="light"] .chat-input,
+[data-theme="light"] .chat-messages,
+[data-theme="light"] .listenin-transcript,
+[data-theme="light"] #variance-text {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+  color: #1f2328;
+}
+[data-theme="light"] .chat-msg.assistant .chat-bubble {
+  background: #ffffff; border-color: #d0d7de; color: #1f2328;
+}
+[data-theme="light"] .empty,
+[data-theme="light"] .narrative,
+[data-theme="light"] .panel-status,
+[data-theme="light"] .panel-label { color: #6e7781; }
+[data-theme="light"] .chip { background: rgba(9,105,218,0.10); border-color: rgba(9,105,218,0.30); color: #0969da; }
+[data-theme="light"] .chart-container { background: #ffffff; border-color: #d0d7de; }
+[data-theme="light"] .chart-export-btn {
+  background: rgba(255,255,255,0.85);
+  color: #57606a;
+  border-color: #d0d7de;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #d0d7de; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #afb8c1; }
+[data-theme="light"] .health-banner.RED    { background: rgba(248,81,73,0.06); }
+[data-theme="light"] .health-banner.YELLOW { background: rgba(210,153,34,0.06); }
+[data-theme="light"] .health-banner.GREEN  { background: rgba(63,185,80,0.06); }
+[data-theme="light"] .health-meta { color: #57606a; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * PRINT STYLESHEET (Phase 12 / TIER 2H)
+ * Hides interactive chrome (tab nav, buttons, chat) and cascades all three
+ * tab panels so the entire dashboard prints in a single PDF for executive
+ * distribution.  Force light theme regardless of current setting so text is
+ * readable on white paper.
+ * ────────────────────────────────────────────────────────────────────────── */
+@media print {
+  body { background: #ffffff !important; color: #1f2328 !important; }
+  header { position: static !important; box-shadow: none; }
+  .tab-nav { display: none !important; }
+  .tab-panel { display: block !important; page-break-before: always; }
+  .tab-panel:first-of-type { page-break-before: auto; }
+  #trigger-btn,
+  #theme-toggle,
+  .chart-export-btn,
+  .chat-chips,
+  .chat-input-row,
+  .panel-controls,
+  #listenin-controls,
+  #listenin-panel { display: none !important; }
+  .card, .panel, .kpi-card, .spark-tile {
+    background: #ffffff !important;
+    border-color: #d0d7de !important;
+    color: #1f2328 !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .panel-body { padding: 12px 8px !important; }
+  details.panel { open: true; }
+  details:not([open]) > *:not(summary) { display: block !important; }
+  th { background: #f6f8fa !important; color: #57606a !important; }
+  td, .kpi-value, .card h2 { color: #1f2328 !important; }
+  .chart-container { box-shadow: none !important; }
+  /* Make sure SVG/canvas charts print at full opacity */
+  canvas { -webkit-print-color-adjust: exact; color-adjust: exact; }
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .grid-2, .grid-3, .kpi-grid, .chart-grid-2, .chart-grid-4 { grid-template-columns: 1fr; }

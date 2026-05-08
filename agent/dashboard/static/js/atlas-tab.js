@@ -1,10 +1,28 @@
-/* ============================================================================
- * IMS Command Center — ATLAS Agent Control Tab JS
- * ============================================================================
- * Loaders for: What Changed Diff Viewer, Change History (cumulative),
- * Baseline Drift (with horizontal bar chart of top slips), Live Interview
- * Listen-In (SSE stream + audio playback queue).
- * ============================================================================ */
+/**
+ * @file atlas-tab.js
+ * @description IMS Command Center — Tab 3 (ATLAS Agent Control).
+ *
+ * Operational views for the agent operator:
+ *
+ *   - {@link loadDiff}               — "What Changed" single-cycle diff viewer
+ *     (`/api/diff/{cycle}`).
+ *   - {@link loadChanges}            — Cumulative diff across a cycle range
+ *     (`/api/changes?from_cycle=…&to_cycle=…`) with CSV export link.
+ *   - {@link loadBaselineDrift}      — Baseline drift table + horizontal bar
+ *     chart of the top-10 most-slipped tasks (`/api/baseline-drift`).
+ *   - {@link autoInitPanels}         — On DOM ready, pre-loads the most recent
+ *     diff, the cumulative-diff table, and the baseline-drift table so each
+ *     panel has data before the user opens it.
+ *   - **Live Interview Listen-In** — SSE stream from `/api/interview-stream`
+ *     plus a serialised audio playback queue.  Architecture:
+ *       1. Fetch /api/interview-recent for transcript-only backfill (no
+ *          audio prefetch — avoids browser freeze from 30 concurrent fetches).
+ *       2. EventSource from `current_seq` for live turns (audio prefetch +
+ *          natural conversational pause between turns).
+ *
+ * @module atlas-tab
+ * @requires Chart escapeHtml _authHeaders _attachExportButtons
+ */
 
 let _baselineDriftChart = null;
 
@@ -474,8 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('tab:activated', e => {
   if (e.detail.tab === 'atlas') {
     if (typeof Chart !== 'undefined') {
-      // Charts may have been hidden when off-screen — re-render baseline drift bar
-      loadBaselineDrift();
+      loadBaselineDrift().then(() => _attachExportButtons());
     }
   }
 });

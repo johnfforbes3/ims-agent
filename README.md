@@ -4,7 +4,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 12 complete — IMS Command Center 3-tab dashboard overhaul (IMS Metrics & Indicators \| PM Dashboard \| ATLAS Agent Control) with Chart.js v4 visual data layer (9 charts: trend lines, sparklines, donuts, bars). 1009/1010 unit tests passing (1 pre-existing TD-042 flake). Phase 11: Comprehensive Dashboard UI Test Suite. Phase 10: Full System Integration Test Suite. Phase 9.6: EVM/DCMA/Briefing/Portfolio. Phase 8.5: GitHub Actions CI, Dockerfile Python 3.13. Production cycle `20260507T222726Z`: 5/5 CAMs (Teams chat relay), health=RED.**
+**Current status: Phase 12.1 complete — IMS Command Center 3-tab dashboard overhaul + overnight polish: demo mode (`/?demo=1`), keyboard shortcuts (Ctrl/Cmd+1/2/3 + L for theme), chart PNG export, print stylesheet, light/dark theme toggle. **1068/1068 unit tests passing.** Zero open low/medium TDs (TD-042/046/048 all resolved). Phase 12 added the 3-tab IMS Command Center with Chart.js v4 visual data layer (9 charts). Phase 11: Comprehensive Dashboard UI Test Suite. Phase 10: Full System Integration Test Suite. Phase 9.6: EVM/DCMA/Briefing/Portfolio. Phase 8.5: GitHub Actions CI, Dockerfile Python 3.13. Production cycle `20260507T222726Z`: 5/5 CAMs (Teams chat relay), health=RED.**
 
 ---
 
@@ -202,6 +202,8 @@ ims-agent/
 **Phase 11 note:** Comprehensive Dashboard UI Test Suite — 289 element-by-element dashboard tests across 18 test classes covering all panels, KPIs, tables, EVM/DCMA/briefing/portfolio UI paths, and JavaScript API paths. Graph CAM Responder lookback window fix (30s→2h) to prevent interview stall on responder restart during active cycle. 1010 tests passing.
 
 **Phase 12 note:** IMS Command Center 3-tab dashboard overhaul — monolithic 1822-line `index.html` split into `base.html` + 3 tab partials (`tabs/metrics.html`, `tabs/pm.html`, `tabs/atlas.html`). All CSS/JS extracted to `agent/dashboard/static/`. Chart.js v4 vendored locally (no CDN, ITAR-friendly). New visual data layer: 4 EVM rolling-24-cycle sparklines (SPI/CPI/BEI/SV), schedule-health trend line with G/Y/R zone bands, milestone-risk and portfolio donuts, DCMA violations and baseline-drift bar charts. Two new endpoints: `GET /api/evm/history?n=24`, `GET /api/health/history?n=24`. Soft-rollback flag `IMS_LEGACY_DASHBOARD=1`. Rollback snapshot at tag `pre-dashboard-overhaul-2026-05-08`.
+
+**Phase 12.1 note:** Overnight polish on top of Phase 12. Resolved TD-042 (interview-test flake → mocked LLM in test, deterministic), TD-046 (CAMSimulator eager LLM construction → lazy in `respond()`), TD-048 (CI Node.js 20 deprecation → `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`). Added demo mode (`GET /?demo=1` injects 24 cycles of synthetic data so all charts populate without a real run), keyboard shortcuts (Ctrl/Cmd+1/2/3 jumps between tabs; Ctrl/Cmd+L toggles theme), chart PNG export (📥 button on each chart, uses Chart.js `toBase64Image`), print stylesheet (`@media print` cascades all tab panels onto pages for executive PDF export), light/dark theme toggle (`[data-theme="light"]` palette, persisted in `localStorage`). 58 dedicated Phase 12 tests added. **1068/1068 unit tests passing.**
 
 ---
 

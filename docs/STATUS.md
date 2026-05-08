@@ -11,9 +11,9 @@
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 12 complete — IMS Command Center 3-tab dashboard overhaul |
-| **Tests** | **1009 / 1010 passing** (1 pre-existing flake — TD-042; 4 Whisper skipped) |
-| **Last procedure run** | 2026-05-08 (Phase 12 — dashboard parity audit + full unit suite) |
+| **Phase** | Phase 12.1 complete — IMS Command Center 3-tab overhaul + overnight polish |
+| **Tests** | **1068 / 1068 passing** (clean — no flakes; 4 Whisper skipped) |
+| **Last procedure run** | 2026-05-08 (Phase 12.1 — TD resolution + polish + full unit suite) |
 | **Last production cycle** | 2026-05-07 — `20260507T222726Z`, health=RED, 5/5 CAMs responded (Teams chat relay), no approval required |
 | **Open FAILs** | None |
 | **Transport mode tested** | `simulated` (integration tests); `teams_chat` (live Teams relay, last production) |
@@ -122,3 +122,4 @@ Multi-phase plan written 2026-05-03. See `IMS-AGENT-PROGRAM-PLAN.md §Phase 7` a
 | 2026-05-07 | Phase 11 — Comprehensive Dashboard UI Test Suite; 289 new element-by-element dashboard tests (18 test classes covering all panels, KPIs, tables, buttons, IDs, JS API paths) | **1010** |
 | 2026-05-08 | Bug-fix session — TD-044 resolved (CAM responder 30s→2h lookback); TD-045 resolved (JSON parse fallback for LLM trailing text); TD-047 resolved (CI green after `ANTHROPIC_API_KEY` secret configured); TD-046/048 documented; CI passing 1010/1010 | **1010** |
 | 2026-05-08 | Phase 12 — IMS Command Center 3-tab dashboard overhaul. Monolithic 1822-line index.html → base.html + 3 tab partials (IMS Metrics & Indicators \| PM Dashboard \| ATLAS Agent Control). Chart.js v4 vendored locally; 9 new visual data charts (4 EVM sparklines, schedule-health trend, 2 donuts, 2 bar charts). 2 new endpoints: `/api/evm/history`, `/api/health/history`. Static asset mount at `/static/`. 81/81 element ID parity preserved. Soft-rollback flag `IMS_LEGACY_DASHBOARD=1`. | **1010** |
+| 2026-05-08 | Phase 12.1 — Overnight polish. TD-042/046/048 all resolved. Added 58 dedicated Phase 12 tests (`test_phase12_dashboard_overhaul.py`), demo mode (`/?demo=1`), keyboard shortcuts (Ctrl/Cmd+1/2/3 tabs, +L theme), chart PNG export (📥 buttons), print stylesheet (`@media print` cascades all tabs), light/dark theme toggle (☀/🌙 with localStorage persistence), JSDoc on all 4 JS modules. Zero open low/medium TDs. | **1068** |

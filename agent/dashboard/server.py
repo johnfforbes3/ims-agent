@@ -390,22 +390,172 @@ async def api_metrics(format: str = "json"):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request, demo: int = 0):
     """Render the IMS Command Center 3-tab dashboard.
 
     Phase 12 — switched from monolithic ``index.html`` to ``base.html`` which
     includes three tab partials (``tabs/metrics.html``, ``tabs/pm.html``,
     ``tabs/atlas.html``).  Set ``IMS_LEGACY_DASHBOARD=1`` to fall back to the
     pre-overhaul single-page layout for emergency rollback.
+
+    Query params:
+        demo=1 — render with realistic synthetic data (5 CAMs, 8 milestones,
+                 24 cycles of EVM history) so charts populate even when no
+                 production cycle has run.  Read-only — never persists to disk.
     """
-    state = _load_json(_STATE_FILE) or {}
-    history = _load_json(_HISTORY_FILE) or []
+    if demo:
+        state, history = _demo_state(), _demo_history()
+    else:
+        state = _load_json(_STATE_FILE) or {}
+        history = _load_json(_HISTORY_FILE) or []
     template_name = "index.html" if os.getenv("IMS_LEGACY_DASHBOARD") else "base.html"
     return templates.TemplateResponse(
         request,
         template_name,
         {"state": state, "history": history},
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — Demo mode synthetic data generators
+#
+# Provide realistic-looking state + 24 cycles of history so the auditor /
+# stakeholder sees populated charts (sparklines, donuts, trend) even when
+# no production cycle has run yet.  Pure functions — no side effects, no
+# disk writes.
+# ---------------------------------------------------------------------------
+
+
+def _demo_state() -> dict:
+    """Realistic single-cycle state for /?demo=1 rendering."""
+    return {
+        "cycle_id": "20260508T120000Z",
+        "timestamp": "2026-05-08T12:00:00Z",
+        "schedule_health": "YELLOW",
+        "last_updated": "2026-05-08T12:00:00Z",
+        "ims_master_dir": "C:/IMS/master/",
+        "validation_holds": [],
+        "completion_report": {"responded": 4, "total": 5},
+        "milestones": [
+            {"milestone_name": "PDR",  "baseline_date": "2026-06-15",
+             "p50_date": "2026-06-20", "p95_date": "2026-07-05",
+             "prob_on_baseline": 0.35, "risk_level": "HIGH"},
+            {"milestone_name": "CDR",  "baseline_date": "2026-09-01",
+             "p50_date": "2026-09-05", "p95_date": "2026-09-22",
+             "prob_on_baseline": 0.55, "risk_level": "MEDIUM"},
+            {"milestone_name": "TRR",  "baseline_date": "2026-11-15",
+             "p50_date": "2026-11-15", "p95_date": "2026-11-28",
+             "prob_on_baseline": 0.78, "risk_level": "LOW"},
+            {"milestone_name": "FRR",  "baseline_date": "2027-02-01",
+             "p50_date": "2027-02-04", "p95_date": "2027-02-18",
+             "prob_on_baseline": 0.71, "risk_level": "LOW"},
+        ],
+        "critical_path_task_ids": ["SE-01", "SE-04", "INT-02", "INT-07", "TEST-03"],
+        "tasks_behind": [
+            {"task_id": "SE-04", "cam_name": "Alice Nguyen",
+             "percent_complete": 40, "blocker": "Vendor part delivery delayed 2 weeks"},
+            {"task_id": "NET-12", "cam_name": "Bob Chen",
+             "percent_complete": 55, "blocker": "Firewall config approval pending"},
+        ],
+        "cam_response_status": {
+            "Alice Nguyen": {"responded": True,  "attempts": 1, "last_outcome": "complete"},
+            "Bob Chen":     {"responded": True,  "attempts": 1, "last_outcome": "complete"},
+            "Carol Smith":  {"responded": True,  "attempts": 2, "last_outcome": "complete"},
+            "Dave Patel":   {"responded": True,  "attempts": 1, "last_outcome": "complete"},
+            "Eve Rodriguez":{"responded": False, "attempts": 3, "last_outcome": "no_answer"},
+        },
+        "top_risks": (
+            "1. SE-04 hardware vendor delay threatens PDR slip\n"
+            "2. NET-12 firewall config blocked on approval\n"
+            "3. INT-02 critical-path task at 35% with 14 days remaining"
+        ),
+        "recommended_actions": (
+            "• Escalate SE-04 vendor issue to procurement director\n"
+            "• Schedule NET-12 firewall review with InfoSec this week\n"
+            "• Add INT-02 to next steering committee agenda"
+        ),
+        "evm": {
+            "program": {
+                "spi": 0.91, "cpi": 0.94, "bei": 0.88, "sv": -8.2,
+                "completion_pct": 47.3, "bac": 1240.0, "eac": 1318.5,
+                "vac": -78.5, "bcwp": 586.5, "health": "YELLOW",
+            },
+            "by_cam": {
+                "Alice Nguyen":  {"spi": 0.85, "sv": -3.2, "bac": 240, "bcwp": 102, "bcws": 120, "completion_pct": 42.5, "health": "YELLOW"},
+                "Bob Chen":      {"spi": 0.92, "sv": -2.1, "bac": 280, "bcwp": 130, "bcws": 142, "completion_pct": 46.4, "health": "YELLOW"},
+                "Carol Smith":   {"spi": 0.97, "sv": -0.6, "bac": 220, "bcwp": 121, "bcws": 122, "completion_pct": 55.0, "health": "GREEN"},
+                "Dave Patel":    {"spi": 0.99, "sv":  0.1, "bac": 250, "bcwp": 130, "bcws": 130, "completion_pct": 52.0, "health": "GREEN"},
+                "Eve Rodriguez": {"spi": 0.78, "sv": -2.4, "bac": 250, "bcwp":  99, "bcws": 122, "completion_pct": 39.6, "health": "RED"},
+            },
+        },
+        "dcma": {
+            "score": 11, "total_checks": 14, "health": "YELLOW",
+            "summary": "11 of 14 checks pass; logic, leads, and float failing thresholds.",
+            "checks": [
+                {"check_id": 1,  "name": "Logic",                "passed": False, "violations": 7,  "note": "7 tasks missing predecessors/successors"},
+                {"check_id": 2,  "name": "Leads",                "passed": False, "violations": 3,  "note": "3 negative leads detected"},
+                {"check_id": 3,  "name": "Lags",                 "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 4,  "name": "Relationship Types",   "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 5,  "name": "Hard Constraints",     "passed": True,  "violations": 1,  "note": "1 within tolerance"},
+                {"check_id": 6,  "name": "High Float",           "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 7,  "name": "Negative Float",       "passed": False, "violations": 5,  "note": "5 tasks with negative float"},
+                {"check_id": 8,  "name": "High Duration",        "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 9,  "name": "Invalid Dates",        "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 10, "name": "Resources",            "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 11, "name": "Missed Tasks",         "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 12, "name": "Critical Path Test",   "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 13, "name": "Critical Path Length", "passed": True,  "violations": 0,  "note": ""},
+                {"check_id": 14, "name": "BEI",                  "passed": True,  "violations": 0,  "note": "BEI 0.88 (target ≥0.85)"},
+            ],
+        },
+        "variance": {
+            "narrative": (
+                "Schedule Variance Analysis (CPR Format 5) — 2026-05-08\n\n"
+                "Program is YELLOW with SPI 0.91 and SV -8.2 days.  Primary contributor "
+                "is the SE-04 vendor delay impacting the critical path through INT-02.  "
+                "Mitigation: procurement escalation initiated 2026-05-06.  Recovery "
+                "plan reduces PDR slip risk from HIGH to MEDIUM by EAC."
+            ),
+        },
+    }
+
+
+def _demo_history() -> list:
+    """24 cycles of synthetic history so EVM sparklines + health trend populate.
+
+    Generates a slow YELLOW→GREEN drift with realistic week-over-week noise.
+    """
+    import random
+    random.seed(42)  # deterministic — same demo every render
+    out = []
+    base_date = "2026-04-15"
+    from datetime import datetime, timedelta
+    start = datetime.fromisoformat(base_date)
+    for i in range(24):
+        ts = (start + timedelta(days=i)).strftime("%Y-%m-%dT12:00:00Z")
+        # Health trends from RED → YELLOW → GREEN as project recovers
+        health = "RED" if i < 6 else "YELLOW" if i < 18 else "GREEN"
+        spi = 0.78 + (i / 24) * 0.18 + random.uniform(-0.02, 0.02)
+        cpi = 0.82 + (i / 24) * 0.14 + random.uniform(-0.02, 0.02)
+        bei = 0.75 + (i / 24) * 0.20 + random.uniform(-0.02, 0.02)
+        sv  = -15.0 + (i * 0.6) + random.uniform(-1.5, 1.5)
+        out.append({
+            "timestamp":       ts,
+            "cycle_id":        f"2026{(start + timedelta(days=i)).strftime('%m%d')}T120000Z",
+            "schedule_health": health,
+            "cams_responded":  random.choice([4, 5, 5, 5]),
+            "cams_total":      5,
+            "evm": {
+                "program": {
+                    "spi": round(spi, 3),
+                    "cpi": round(cpi, 3),
+                    "bei": round(bei, 3),
+                    "sv":  round(sv, 1),
+                    "completion_pct": round((i / 24) * 60 + 10, 1),
+                },
+            },
+        })
+    return out
 
 
 @app.get("/api/state", dependencies=[Depends(_require_api_key)])

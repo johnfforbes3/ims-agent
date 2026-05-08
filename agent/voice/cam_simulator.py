@@ -204,10 +204,17 @@ class CAMSimulator:
         """
         Args:
             persona: The CAMPersona definition for this simulated CAM.
+
+        TD-046 RESOLUTION (2026-05-08): ``LLMInterface`` is now constructed
+        lazily in :meth:`respond` rather than eagerly in ``__init__``.  The
+        previous eager construction made ``CAMSimulator`` unusable in any
+        environment without ``ANTHROPIC_API_KEY`` (it raised ``EnvironmentError``
+        at instantiation), even for tests that never called ``respond()``.
+        Lazy construction matches the pattern used everywhere else in the
+        codebase (qa_engine, cycle_runner, variance_analyst, interview_agent).
         """
-        from agent.llm_interface import LLMInterface
         self._persona = persona
-        self._llm = LLMInterface(model=_SIM_MODEL)
+        self._llm = None  # lazy — built on first respond() call
         self._conversation_history: list[dict[str, str]] = []
         logger.info("action=simulator_init cam=%s model=%s", persona.cam_name, _SIM_MODEL)
 
@@ -226,6 +233,11 @@ class CAMSimulator:
         )
         context = self._build_context()
         full_prompt = f"{context}\n\nAgent just said: {agent_utterance!r}\n\nRespond as {self._persona.cam_name}:"
+
+        # TD-046: lazy LLM construction — only fail if respond() is actually called.
+        if self._llm is None:
+            from agent.llm_interface import LLMInterface
+            self._llm = LLMInterface(model=_SIM_MODEL)
 
         # TD-009: throttle successive API calls to avoid rate limiting.
         delay = _call_delay_s()

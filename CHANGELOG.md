@@ -4,6 +4,32 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 12.1 — Polish & Hardening (2026-05-08)
+
+**Summary:** Overnight polish on top of the Phase 12 dashboard rebuild. Resolved three open TDs (042, 046, 048), added 58 dedicated Phase 12 tests, built demo mode (`/?demo=1`), keyboard shortcuts, chart PNG export, print stylesheet, light/dark theme toggle, and JSDoc documentation across all JS modules. Net result: **1068/1068 unit tests passing** (was 1009/1010); zero open low/medium TDs; CI annotation-clean.
+
+### Resolved
+- **TD-042** — `test_flat_denial_retry_limit_still_works` flake. Mocked LLM classifiers in-test via `monkeypatch.setattr`. Test went from 20s flaky to 0.2s deterministic.
+- **TD-046** — CAMSimulator eager LLM construction. Moved to lazy `respond()`-time construction matching the rest of the codebase.
+- **TD-048** — GitHub Actions Node.js 20 deprecation. Set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` in workflow env.
+
+### Added
+- **`tests/test_phase12_dashboard_overhaul.py`** (58 tests, 11 test classes) — TestTabNavigation, TestStaticAssets, TestEvmHistoryEndpoint, TestHealthHistoryEndpoint, TestChartCanvasPresence, TestDemoMode, TestThemeToggle, TestPrintStylesheet, TestChartPngExport, TestKeyboardShortcuts, TestCodeQuality, TestLegacyRollback.
+- **Demo mode** — `GET /?demo=1` renders the dashboard with realistic synthetic data (5 CAMs, 4 milestones, 2 blocked tasks, full EVM/DCMA, 24 cycles of EVM history). Read-only — never persists. Functions: `_demo_state()`, `_demo_history()` in server.py.
+- **Keyboard shortcuts** — Ctrl/Cmd+1/2/3 jump between tabs; Ctrl/Cmd+L toggles theme. Ignored when typing in inputs.
+- **Chart PNG export** — Floating 📥 button on each chart. Uses Chart.js's `toBase64Image()` with retina-respecting fallback to `canvas.toDataURL()`. Auto-attached via `_attachExportButtons()` after each tab activates.
+- **Print stylesheet** — `@media print` rules hide tab-nav / buttons / chat / listen-in panel and cascade all 3 tab panels onto pages with `page-break-before` for executive PDF export.
+- **Light/dark theme toggle** — `[data-theme="light"]` palette in dashboard.css; toggle button in header (☀/🌙) + Ctrl/Cmd+L shortcut. Choice persists to `localStorage` under key `ims_theme`.
+- **JSDoc + module-level comments** on all 4 JS modules with `@module`, `@requires`, function doc blocks.
+- **Chart export CSS** styling (corner button with hover state, container `:hover` reveal).
+
+### Tests
+- **Full unit suite:** 1068 / 1068 passing — clean (was 1009/1010 with TD-042 flake).
+- **Phase 12 suite:** 58 / 58 passing.
+- **Dashboard suite:** 305 / 305 passing.
+
+---
+
 ## Phase 12 — IMS Command Center 3-Tab Dashboard Overhaul (2026-05-08)
 
 **Summary:** Replaced the monolithic 1822-line `agent/dashboard/templates/index.html` with a 3-tab IMS Command Center: **IMS Metrics & Indicators** | **PM Dashboard** | **ATLAS Agent Control**. Added a visual data layer with Chart.js v4 (vendored locally, 201 KB) for trend lines, sparklines, donuts, and bar charts. Full parity preserved (81/81 element IDs, 18/18 JS functions). 1009/1010 unit tests passing (the 1 failure is the pre-existing TD-042 flake, unrelated).

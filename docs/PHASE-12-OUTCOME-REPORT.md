@@ -219,3 +219,109 @@ Three escalating options if anything looks wrong tomorrow:
 **Build session duration:** ~2 hours (start-to-commit).
 **Lines added (net):** 2,562.
 **Risk level:** Medium — comprehensive test coverage but visual layout changes. Soft-rollback flag available.
+
+---
+
+# Phase 12.1 — Overnight Polish (2026-05-08)
+
+Continuation of Phase 12 the same evening, while the auditor's review was pending in the morning.  Focus: close out remaining open TDs, add comprehensive Phase 12 test coverage, and ship audit-ready quality-of-life features.
+
+## 11. Tier 1 outcomes (TD resolution + Phase 12 tests)
+
+| TD | Title | Resolution |
+|---|---|---|
+| **TD-042** | `test_flat_denial_retry_limit_still_works` flake | Mocked `_classify_cam_response` and `_classify_eac_date` directly via `monkeypatch.setattr` inside the test.  Runtime dropped 20s → 0.2s.  Test is now deterministic in any suite ordering. |
+| **TD-046** | CAMSimulator eager `LLMInterface` construction | Moved `LLMInterface(model=_SIM_MODEL)` from `__init__` to `respond()`.  `__init__` sets `self._llm = None`; lazy-built on first call.  Matches pattern used everywhere else (qa_engine, cycle_runner, variance_analyst, interview_agent). |
+| **TD-048** | CI Node.js 20 deprecation | Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` to job-level `env` in `.github/workflows/ci.yml`.  Forces all v4/v5 actions to run on Node.js 24 immediately.  Annotation-clean CI. |
+
+**Net result:** Zero open low/medium TDs.
+
+## 12. New Phase 12 test class (Tier 1D)
+
+`tests/test_phase12_dashboard_overhaul.py` — 58 tests across 11 classes:
+
+| Class | Coverage |
+|---|---|
+| `TestTabNavigation` | 12 tests: 3 buttons, 3 panels, default-active state, hash-routing fn refs, role attrs |
+| `TestStaticAssets` | 8 tests: all 6 asset paths return 200, Chart.js v4 banner, no CDN refs |
+| `TestEvmHistoryEndpoint` | 5 tests: 200 status, response shape, n=24 default, n cap at 100, n minimum |
+| `TestHealthHistoryEndpoint` | 3 tests: 200 status, response shape, n cap |
+| `TestChartCanvasPresence` | 7 tests: every `<canvas id="…">` declared in tab partials |
+| `TestDemoMode` | 4 tests: 200 status, IMS Command Center title, milestone names render, no state-file write |
+| `TestThemeToggle` | 3 tests: button present, `data-theme` on `<html>`, `[data-theme="light"]` selectors in CSS |
+| `TestPrintStylesheet` | 3 tests: `@media print` exists, hides `.tab-nav`, references `.tab-panel` |
+| `TestChartPngExport` | 2 tests: `exportChart` defined, uses `toBase64Image` |
+| `TestKeyboardShortcuts` | 2 tests: keydown listener, digit-key + ctrl/meta refs |
+| `TestCodeQuality` | 8 tests: all 4 JS modules have header comment + at least one function decl |
+| `TestLegacyRollback` | 1 test: `IMS_LEGACY_DASHBOARD=1` falls back to monolithic `index.html` |
+
+**Total:** 58/58 passing in 4.83s.
+
+## 13. Tier 1E — Demo mode (`/?demo=1`)
+
+Read-only synthetic data path so the dashboard renders fully populated even when no production cycle has run.
+
+- `_demo_state()` — single-cycle state with 5 CAMs, 4 milestones (HIGH/MEDIUM/LOW/LOW), 2 blocked tasks, full EVM/DCMA/variance, recommended actions.
+- `_demo_history()` — 24 cycles of synthetic history with seeded RNG (`random.seed(42)`).  Health trends RED → YELLOW → GREEN as project recovers.  SPI/CPI/BEI sweep 0.78 → 0.96 with realistic noise.
+- Read-only — never persists to disk.  Verified by test that asserts `state.json` byte-equality before / after a demo render.
+
+**For the auditor:** open `http://<host>/?demo=1` to see every chart populated in 0 ms.
+
+## 14. Tier 2 outcomes (UX polish)
+
+### F. Keyboard shortcuts
+- **Ctrl/Cmd + 1** → IMS Metrics & Indicators tab
+- **Ctrl/Cmd + 2** → PM Dashboard tab
+- **Ctrl/Cmd + 3** → ATLAS Agent Control tab
+- **Ctrl/Cmd + L** → Toggle light/dark theme
+- Ignored when typing in inputs/textareas/selects (event-target tag check).
+
+### G. Chart PNG export
+- Floating 📥 button auto-injected into every `.chart-container` after Chart.js mounts.
+- Uses `Chart.getChart(canvas).toBase64Image('image/png', 1.0)` for retina-correct export, with `canvas.toDataURL()` fallback when Chart.js isn't yet attached.
+- Container `:hover` reveals the button (40% → 100% opacity).
+- Idempotent — `_attachExportButtons()` skips containers that already have a button.
+
+### H. Print stylesheet (`@media print`)
+- Hides `.tab-nav`, header buttons (`#trigger-btn`, `#theme-toggle`, `.chart-export-btn`), chat input, listen-in panel.
+- Cascades all 3 tab panels onto pages with `page-break-before: always` (first tab gets `auto`).
+- Forces light theme regardless of user setting (`background: #ffffff`, `color: #1f2328`).
+- Auto-opens collapsed `<details>` panels so cumulative diff / drift / EVM tables print fully.
+- `-webkit-print-color-adjust: exact` ensures chart colors render in PDF.
+
+### I. JSDoc + module-level comments
+All 4 JS modules now lead with a `/** @file ... @description ... @module ... @requires ... */` banner.  Function-level JSDoc on every public function (`escapeHtml`, `triggerCycle`, `switchTab`, `toggleTheme`, `exportChart`, `loadEvm`, `loadDcma`, `loadHealthHistoryChart`, `loadVariance`, `loadPortfolio`, `loadDiff`, `loadChanges`, `loadBaselineDrift`, listen-in functions, etc.).
+
+## 15. Tier 3 — Light/dark theme toggle
+
+- Header button (☀/🌙) plus Ctrl/Cmd+L shortcut.
+- `[data-theme="light"]` palette in `dashboard.css` flips backgrounds (#0d1117 → #f6f8fa, #161b22 → #ffffff), text (#e6edf3 → #1f2328), and borders (#21262d → #d0d7de).  Accent / health colors unchanged.
+- Persists to `localStorage["ims_theme"]`; restored on every page load via `_restoreTheme()` in DOMContentLoaded.
+- Print stylesheet always uses light palette.
+
+## 16. Final test results
+
+```
+Full unit suite:    1068 / 1068 passing in 345.64s   (was 1009/1010 with TD-042 flake)
+Phase 12 suite:       58 /   58 passing in   4.83s   (NEW)
+Dashboard suite:     305 /  305 passing                (unchanged from Phase 12)
+Integration smoke:   144 /  144 passing                (unchanged)
+```
+
+Test count increased by **+58** (Phase 12 class).  The previously flaky `test_flat_denial_retry_limit_still_works` is now deterministic and runs in 0.18s (vs 20s prior with live API calls).
+
+## 17. Updated rollback plan
+
+Phase 12.1 changes layer cleanly on top of Phase 12 — the rollback story is identical:
+
+1. **Soft (no redeploy):** `IMS_LEGACY_DASHBOARD=1` → renders original `index.html`.
+2. **Branch:** `git checkout backup/pre-dashboard-overhaul`.
+3. **Hard:** `git revert <Phase 12.1 commit>` then `git revert b1301f6` to peel off both phases.
+
+Rollback tag and branch from Phase 12 are still pushed to remote.
+
+---
+
+**Phase 12.1 build session duration:** ~1.5 hours (TD resolution + tests + Tier 2/3 features + docs).
+**Lines added (net):** ~1,200 (estimate: 58 new tests + 200 lines of CSS for light/print + 250 lines of JS for shortcuts/export/theme + 250 lines demo data + 150 lines of JSDoc).
+**Risk level:** Low — purely additive, every change covered by tests, soft rollback unchanged.

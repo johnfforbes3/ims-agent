@@ -633,9 +633,11 @@ pytest tests/ -k "interview"  # filter by keyword
 pytest tests/ --tb=short      # short tracebacks on failure
 ```
 
-**Current count:** 1009/1010 tests passing as of 2026-05-08 (4 Whisper integration tests skipped — `openai-whisper` not installed; 1 pre-existing TD-042 flake — `test_flat_denial_retry_limit_still_works` passes in isolation, sporadically fails in full suite from LLM-mock state leakage).
+**Current count:** 1068/1068 tests passing as of 2026-05-08 (4 Whisper integration tests skipped — `openai-whisper` not installed). Zero open low/medium TDs.
 
 **Phase 12 dashboard restructure (2026-05-08):** the dashboard moved from a monolithic 1822-line `index.html` to `base.html` + 3 tab partials (`tabs/metrics.html`, `tabs/pm.html`, `tabs/atlas.html`) with all CSS/JS extracted to `agent/dashboard/static/`. Chart.js v4.4.6 vendored at `static/vendor/chart.umd.min.js`. New endpoints `/api/evm/history` and `/api/health/history` power the 24-cycle rolling sparklines and the schedule-health trend chart. The `dash_html` test fixture concatenates HTML + linked static assets so existing string-search assertions keep working without rewrite. Soft rollback: set `IMS_LEGACY_DASHBOARD=1`.
+
+**Phase 12.1 polish (2026-05-08):** Demo mode (`GET /?demo=1`) renders the dashboard with 24 cycles of synthetic data via the read-only `_demo_state()` / `_demo_history()` generators in `server.py`. Keyboard shortcuts: Ctrl/Cmd+1/2/3 switch tabs, Ctrl/Cmd+L toggles theme. Chart PNG export via floating 📥 button on each chart container, attached idempotently by `_attachExportButtons()` in `dashboard-core.js`. Light/dark theme: `[data-theme="light"]` palette in CSS, toggle button in header, persistence via `localStorage["ims_theme"]`. Print stylesheet: `@media print` rules cascade all 3 tab panels onto pages with `page-break-before: always` so the dashboard exports cleanly to PDF. Test class `tests/test_phase12_dashboard_overhaul.py` (58 tests across 11 classes) covers all of the above. TD-042/046/048 resolved.
 
 ### Test File Map
 
