@@ -413,7 +413,8 @@ Set `self._llm = None` in `__init__`. No test changes required — lazy construc
 
 ---
 
-### TD-047 — CI unit tests consistently fail because `ANTHROPIC_API_KEY` GitHub secret is not configured
+### TD-047 — CI unit tests consistently fail because `ANTHROPIC_API_KEY` GitHub secret is not configured — **RESOLVED**
+**Resolved:** 2026-05-08 — Added `ANTHROPIC_API_KEY` repository secret in GitHub Actions settings; CI immediately went green (1010/1010 unit tests passing).
 **File:** `.github/workflows/ci.yml` — `env.ANTHROPIC_API_KEY`; `agent/voice/interview_agent.py` — `_classify_cam_response()`  
 **Severity:** High (CI is permanently broken; every push produces a failing run)  
 **Observed:** GitHub Actions job "Unit Tests (Python 3.13 · Windows)" fails across all recent commits (`ab0162b`, `3ebcf75`, `da87ecd`). Step "Run unit tests" completes in ~27 seconds — far shorter than the 6–7 minutes it takes when the Anthropic API is actually called. This timing mismatch is definitive proof no real LLM call is being made.
