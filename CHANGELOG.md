@@ -4,38 +4,6 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
-## Phase 13 — Visual Command Center Redesign (2026-05-08)
-
-**Summary:** Major visual overhaul inspired by modern marketing-intelligence dashboards. Replaced the single-column tab strip layout with a 3-column **app-shell**: left sidebar (primary nav + theme switch + quick actions), top bar (search + notifications + profile + Trigger Cycle CTA), main content (active tab), right widget panel (cycle status + active interviews + recent-cycles timeline + top risks). Light theme is now the default; dark theme accessible via segmented toggle in sidebar footer. Inter web font, design-token-driven CSS (colors, spacing, radius, typography scale via CSS custom properties), warm coral accent. New hero trend chart on metrics tab plots SPI/CPI/BEI overlaid across 24 cycles. **1115/1115 unit tests passing** (added 47 Phase 13 tests; zero flakes).
-
-### Added
-- **`agent/dashboard/templates/base.html`** — completely rebuilt with `<div class="app-shell">` 3-column grid, left `<aside class="app-sidebar">`, top `<header class="app-topbar">`, main `<main class="app-main">`, right `<aside class="app-rightbar">`.
-- **Left sidebar** — brand block (logo + Command Center / ATLAS Program subtitle), Workspace section with the 3 primary tabs as `tab-btn sidebar-link` buttons (active state shows accent left-border + elevated card), Quick Actions section (Executive Briefing + Demo Mode), spacer, footer with segmented light/dark theme switch + version attribution.
-- **Top bar** — pill-shaped search input with 🔍 icon and ⌘K hint, refresh countdown chip, notification bell (red dot when validation holds present), Trigger Cycle primary CTA, profile avatar (gradient circle with initials).
-- **Right widget panel** — Cycle Status card (latest cycle ID, CAMs Responded, Tasks Behind, Critical Path, High-Risk Milestones), Active Interviews card (live pills), Recent Cycles card (last 6 cycles with badges), Top Risks card (truncated preview).
-- **Hero trend chart** — large multi-line Chart.js canvas on the metrics tab plotting SPI (filled accent), CPI (info blue line), BEI (dashed gray) over 24 cycles. Header includes legend toggles + 24C/12C/6C period selector.
-- **Design tokens** — full CSS custom-property system in `:root`: surfaces (`--bg-app`, `--bg-card`, `--bg-subtle`, `--bg-hover`, `--bg-active`, `--bg-sidebar`), text (`--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-muted`), borders (`--border-subtle`, `--border-default`, `--border-strong`), accents (`--accent: #ff5a36`, `--info`, `--success`, `--warning`, `--danger`), health palette, typography scale (xs/sm/base/md/lg/xl/2xl/3xl/4xl), spacing scale (1–12), radius (sm/md/lg/xl/pill), shadow tokens.
-- **Inter font** — loaded via Google Fonts (preconnect + display=swap) for crisp modern type.
-- **`tests/test_phase13_visual_redesign.py`** — 47 tests across 8 classes (TestAppShell, TestSidebar, TestTopbar, TestRightbar, TestDesignTokens, TestThemeDefaults, TestMetricsHeroTrend, TestPhase12RegressionGuard) covering every new structural element + design-token contract + Phase 12 regression guard.
-
-### Changed
-- **`agent/dashboard/static/css/dashboard.css`** — complete rewrite around design tokens. Light theme is default (`:root` palette); `[data-theme="dark"]` block flips surfaces back to dark. Card system uses subtle `box-shadow: 0 0 0 1px var(--border-subtle)` instead of stark borders. Buttons, badges, panels, tables, charts all restyled. Print stylesheet retuned for new layout (hides app-sidebar, app-topbar, app-rightbar; cascades tab panels).
-- **`agent/dashboard/static/js/dashboard-core.js`** — new `setTheme(theme)` function for the segmented control; `_applyTheme` syncs both the legacy single-button toggle (Phase 12 test compat) and the new sun/moon segment buttons. Default theme = `'light'` instead of `'dark'`.
-- **`agent/dashboard/static/js/metrics-tab.js`** — new `_chartTheme()` helper resolves CSS custom properties at runtime so charts pick up active theme without reload. New `_renderHeroTrend()` populates the hero trend canvas. Sparkline / DCMA / donut color callouts now reference tokens via the helper.
-- **`agent/dashboard/templates/tabs/metrics.html`** — page-title header, 6-tile hero KPI strip (CAMs Responded · HIGH Risk MS · Tasks Behind · Critical Path · SPI · Health badge) with delta chips, big trend hero card. Phase 12 3-tile `kpi-grid kpi-3` retained hidden for test parity.
-
-### Tests
-- **Full unit suite:** 1115 / 1115 passing in 426.30s (was 1068; +47 Phase 13 tests).
-- **Phase 13 suite:** 47 / 47 passing in 8.05s.
-- **Dashboard suite:** 305 / 305 passing (regression-clean — fixture works against new layout).
-- **Phase 12 suite:** 58 / 58 passing (all element/feature parity preserved).
-
-### Rollback
-- Tag: `pre-visual-redesign-2026-05-08`
-- Soft flag: `IMS_LEGACY_DASHBOARD=1` still falls back to monolithic `index.html` (now also bypasses Phase 13 layout entirely).
-
----
-
 ## Phase 12.1 — Polish & Hardening (2026-05-08)
 
 **Summary:** Overnight polish on top of the Phase 12 dashboard rebuild. Resolved three open TDs (042, 046, 048), added 58 dedicated Phase 12 tests, built demo mode (`/?demo=1`), keyboard shortcuts, chart PNG export, print stylesheet, light/dark theme toggle, and JSDoc documentation across all JS modules. Net result: **1068/1068 unit tests passing** (was 1009/1010); zero open low/medium TDs; CI annotation-clean.

@@ -1,16 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IMS Command Center</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/dashboard.css">
   <script src="/static/vendor/chart.umd.min.js"></script>
   <script>
-    /* Server-injected state for client JS (charts read milestones, history, etc.) */
+    // Inject server-side state for client JS (charts read milestones, history, etc.)
     window.__IMS = {
       api_key:    "{{ api_key | default('') }}",
       cycle_id:   "{{ state.get('cycle_id', '') }}",
@@ -22,211 +19,56 @@
 </head>
 <body>
 
-<div class="app-shell">
-
-  {# ── LEFT SIDEBAR ─────────────────────────────────────────────────────── #}
-  <aside class="app-sidebar" role="navigation" aria-label="Primary">
-
-    <div class="sidebar-brand">
-      <div class="header-logo">IMS</div>
-      <div class="sidebar-brand-text">
-        <div class="sidebar-brand-name">Command Center</div>
-        <div class="sidebar-brand-sub">ATLAS Program · AI Agent Server Rack</div>
-      </div>
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-brand">
+    <div class="header-logo">IMS</div>
+    <div>
+      <div class="header-title">IMS Command Center</div>
+      <div class="header-sub">ATLAS Program · AI Agent Server Rack</div>
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Workspace</div>
-      <div class="sidebar-nav" role="tablist">
-        <button class="tab-btn sidebar-link active" data-tab="metrics" onclick="switchTab('metrics')">
-          <span class="sidebar-icon tab-icon">📊</span>
-          <span>IMS Metrics &amp; Indicators</span>
-        </button>
-        <button class="tab-btn sidebar-link" data-tab="pm" onclick="switchTab('pm')">
-          <span class="sidebar-icon tab-icon">📋</span>
-          <span>PM Dashboard</span>
-        </button>
-        <button class="tab-btn sidebar-link" data-tab="atlas" onclick="switchTab('atlas')">
-          <span class="sidebar-icon tab-icon">🤖</span>
-          <span>ATLAS Agent Control</span>
-          {% if state.get('current_cycle', {}).get('phase') and state.get('current_cycle', {}).get('phase') not in ['complete', 'failed'] %}
-          <span class="sidebar-link-badge" id="sidebar-active-badge">live</span>
-          {% endif %}
-        </button>
-      </div>
+  </div>
+  <div class="header-right">
+    <div class="header-meta">
+      <div class="refresh-badge">Refresh in <span id="countdown">60</span>s</div>
+      <div class="last-updated">{{ state.get('last_updated', 'No data yet') }}</div>
     </div>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle" onclick="toggleTheme()"
+            title="Toggle light/dark theme (Ctrl+L)">☀</button>
+    <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
+      ▶ Trigger Cycle
+    </button>
+  </div>
+</header>
 
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Quick Actions</div>
-      <div class="sidebar-nav">
-        <button class="sidebar-link" onclick="openBriefing()" title="Generate executive briefing">
-          <span class="sidebar-icon">📄</span>
-          <span>Executive Briefing</span>
-        </button>
-        <a class="sidebar-link" href="/?demo=1" title="Open dashboard with synthetic demo data">
-          <span class="sidebar-icon">🎬</span>
-          <span>Demo Mode</span>
-        </a>
-      </div>
-    </div>
+<!-- ── Tab Navigation ────────────────────────────────────────────────────── -->
+<nav class="tab-nav" role="tablist">
+  <button class="tab-btn active" data-tab="metrics" onclick="switchTab('metrics')" role="tab">
+    <span class="tab-icon">📊</span>IMS Metrics &amp; Indicators
+  </button>
+  <button class="tab-btn" data-tab="pm" onclick="switchTab('pm')" role="tab">
+    <span class="tab-icon">📋</span>PM Dashboard
+  </button>
+  <button class="tab-btn" data-tab="atlas" onclick="switchTab('atlas')" role="tab">
+    <span class="tab-icon">🤖</span>ATLAS Agent Control
+  </button>
+</nav>
 
-    <div class="sidebar-spacer"></div>
+<!-- ── Tab Panels ────────────────────────────────────────────────────────── -->
 
-    <div class="sidebar-footer">
-      <div class="sidebar-theme-switch" role="group" aria-label="Theme">
-        <button class="theme-icon-btn active" id="theme-light" onclick="setTheme('light')" title="Light theme">☀</button>
-        <button class="theme-icon-btn" id="theme-dark" onclick="setTheme('dark')" title="Dark theme">🌙</button>
-        <button class="theme-icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme (Ctrl+L)" style="display:none">⇆</button>
-      </div>
-      <div class="sidebar-attribution">IMS Command Center v13</div>
-    </div>
+<section class="tab-panel active" data-tab="metrics" role="tabpanel">
+  {% include 'tabs/metrics.html' %}
+</section>
 
-  </aside>
+<section class="tab-panel" data-tab="pm" role="tabpanel">
+  {% include 'tabs/pm.html' %}
+</section>
 
+<section class="tab-panel" data-tab="atlas" role="tabpanel">
+  {% include 'tabs/atlas.html' %}
+</section>
 
-  {# ── TOP BAR ──────────────────────────────────────────────────────────── #}
-  <header class="app-topbar">
-    <label class="topbar-search">
-      <span class="topbar-search-icon">🔍</span>
-      <input type="search" placeholder="Search tasks, CAMs, milestones, cycle IDs…"
-             id="topbar-search-input"
-             onkeydown="if(event.key==='Enter') askQuestion(this.value)">
-      <span class="topbar-search-hint">⌘K</span>
-    </label>
-
-    <div class="topbar-spacer"></div>
-
-    <div class="topbar-refresh">
-      <span>Refresh in <strong><span id="countdown">60</span>s</strong></span>
-      <span class="topbar-last-updated">{{ state.get('last_updated', 'No data yet') }}</span>
-    </div>
-
-    <div class="topbar-actions">
-      <button class="topbar-icon-btn" title="Notifications" aria-label="Notifications">
-        🔔
-        {% set holds = state.get('validation_holds', []) %}
-        {% if holds %}<span class="notification-dot"></span>{% endif %}
-      </button>
-      <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
-        <span>▶</span> Trigger Cycle
-      </button>
-      <div class="topbar-profile" title="John Forbes — Program Manager">JF</div>
-    </div>
-  </header>
-
-
-  {# ── MAIN CONTENT AREA ────────────────────────────────────────────────── #}
-  <main class="app-main">
-
-    {# Tab panels — each one self-contained.  Phase 12 nav bar removed
-       (sidebar now drives the active tab); but the panels themselves
-       still use the same data-tab attributes and IDs. #}
-
-    <section class="tab-panel active" data-tab="metrics" role="tabpanel" aria-label="IMS Metrics and Indicators">
-      {% include 'tabs/metrics.html' %}
-    </section>
-
-    <section class="tab-panel" data-tab="pm" role="tabpanel" aria-label="PM Dashboard">
-      {% include 'tabs/pm.html' %}
-    </section>
-
-    <section class="tab-panel" data-tab="atlas" role="tabpanel" aria-label="ATLAS Agent Control">
-      {% include 'tabs/atlas.html' %}
-    </section>
-
-  </main>
-
-
-  {# ── RIGHT WIDGET PANEL ───────────────────────────────────────────────── #}
-  <aside class="app-rightbar" aria-label="Activity">
-
-    {# Cycle status snapshot #}
-    <div class="rightbar-card">
-      <div class="rightbar-card-header">
-        <div class="rightbar-card-title">Cycle Status</div>
-        {% set h = state.get('schedule_health', 'UNKNOWN') %}
-        <span class="badge badge-{{ h }}">{{ h }}</span>
-      </div>
-      <div class="rightbar-stat">
-        <div class="rightbar-stat-label">Latest Cycle</div>
-        <div class="rightbar-stat-value" style="font-family:var(--font-mono);font-size:13px;">
-          {{ state.get('cycle_id', '—') }}
-        </div>
-      </div>
-      <div class="rightbar-stat-row">
-        <span class="label">CAMs Responded</span>
-        <span class="value">{{ state.get('completion_report', {}).get('responded', '—') }}/{{ state.get('completion_report', {}).get('total', '—') }}</span>
-      </div>
-      <div class="rightbar-stat-row">
-        <span class="label">Tasks Behind</span>
-        <span class="value">{{ state.get('tasks_behind', []) | length }}</span>
-      </div>
-      <div class="rightbar-stat-row">
-        <span class="label">Critical Path</span>
-        <span class="value">{{ state.get('critical_path_task_ids', []) | length }} tasks</span>
-      </div>
-      {% set high_risk = state.get('milestones', []) | selectattr('risk_level', 'equalto', 'HIGH') | list %}
-      <div class="rightbar-stat-row">
-        <span class="label">High-Risk Milestones</span>
-        <span class="value">{{ high_risk | length }}</span>
-      </div>
-    </div>
-
-    {# Active interviews live pills #}
-    <div class="rightbar-card">
-      <div class="rightbar-card-header">
-        <div class="rightbar-card-title">Active Interviews</div>
-        <span class="rightbar-card-period" id="rightbar-active-count">live</span>
-      </div>
-      <div id="rightbar-listenin-sessions" class="listenin-sessions" style="margin-bottom:0">
-        <span class="listenin-session-pill idle">
-          <span class="live-dot"></span>No active interviews
-        </span>
-      </div>
-    </div>
-
-    {# Recent cycles mini timeline (sparkline-style) #}
-    <div class="rightbar-card">
-      <div class="rightbar-card-header">
-        <div class="rightbar-card-title">Recent Cycles</div>
-        <span class="rightbar-card-period">{{ history | length }} total</span>
-      </div>
-      <div id="rightbar-history" style="display:flex;flex-direction:column;gap:4px;">
-      {% for entry in (history[-6:] | reverse) %}
-        {% set h2 = entry.get('schedule_health', 'UNKNOWN') %}
-        <div style="display:flex;align-items:center;gap:8px;font-size:11px;">
-          <span class="badge badge-{{ h2 }}" style="min-width:54px;justify-content:center">{{ h2 }}</span>
-          <span style="font-family:var(--font-mono);color:var(--text-secondary);font-size:10px;">
-            {{ entry.get('timestamp', '')[:10] }}
-          </span>
-          <span style="margin-left:auto;color:var(--text-tertiary);font-size:10px;">
-            {{ entry.get('cams_responded', '?') }}/{{ entry.get('cams_total', '?') }}
-          </span>
-        </div>
-      {% else %}
-        <div class="empty" style="font-size:11px;padding:8px 0;">No history yet.</div>
-      {% endfor %}
-      </div>
-    </div>
-
-    {# Top risks one-liner #}
-    {% if state.get('top_risks') %}
-    <div class="rightbar-card">
-      <div class="rightbar-card-header">
-        <div class="rightbar-card-title">Top Risks</div>
-      </div>
-      <div style="font-size:12px;line-height:1.6;color:var(--text-secondary);max-height:120px;overflow:hidden;">
-        {{ state.get('top_risks', '') | truncate(220) }}
-      </div>
-    </div>
-    {% endif %}
-
-  </aside>
-
-</div>{# /app-shell #}
-
-
-{# ── Scripts (load order: vendor → core → tabs) ─────────────────────────── #}
+<!-- ── Scripts (load order: vendor → core → tabs) ────────────────────────── -->
 <script src="/static/js/dashboard-core.js"></script>
 <script src="/static/js/metrics-tab.js"></script>
 <script src="/static/js/pm-tab.js"></script>
