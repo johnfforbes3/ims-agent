@@ -633,7 +633,9 @@ pytest tests/ -k "interview"  # filter by keyword
 pytest tests/ --tb=short      # short tracebacks on failure
 ```
 
-**Current count:** 1010 tests passing (4 Whisper integration tests skipped — `openai-whisper` not installed) as of 2026-05-07.
+**Current count:** 1009/1010 tests passing as of 2026-05-08 (4 Whisper integration tests skipped — `openai-whisper` not installed; 1 pre-existing TD-042 flake — `test_flat_denial_retry_limit_still_works` passes in isolation, sporadically fails in full suite from LLM-mock state leakage).
+
+**Phase 12 dashboard restructure (2026-05-08):** the dashboard moved from a monolithic 1822-line `index.html` to `base.html` + 3 tab partials (`tabs/metrics.html`, `tabs/pm.html`, `tabs/atlas.html`) with all CSS/JS extracted to `agent/dashboard/static/`. Chart.js v4.4.6 vendored at `static/vendor/chart.umd.min.js`. New endpoints `/api/evm/history` and `/api/health/history` power the 24-cycle rolling sparklines and the schedule-health trend chart. The `dash_html` test fixture concatenates HTML + linked static assets so existing string-search assertions keep working without rewrite. Soft rollback: set `IMS_LEGACY_DASHBOARD=1`.
 
 ### Test File Map
 

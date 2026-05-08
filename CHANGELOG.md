@@ -4,6 +4,53 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 12 — IMS Command Center 3-Tab Dashboard Overhaul (2026-05-08)
+
+**Summary:** Replaced the monolithic 1822-line `agent/dashboard/templates/index.html` with a 3-tab IMS Command Center: **IMS Metrics & Indicators** | **PM Dashboard** | **ATLAS Agent Control**. Added a visual data layer with Chart.js v4 (vendored locally, 201 KB) for trend lines, sparklines, donuts, and bar charts. Full parity preserved (81/81 element IDs, 18/18 JS functions). 1009/1010 unit tests passing (the 1 failure is the pre-existing TD-042 flake, unrelated).
+
+### Added
+- **`agent/dashboard/templates/base.html`** — shared shell with header, tab nav (hash routing), 3 partial includes, footer.
+- **`agent/dashboard/templates/tabs/metrics.html`** — IMS Metrics tab: health banner, 3 KPI tiles, validation alerts, milestone-risk summary (with risk-distribution donut), tasks behind, critical path, Q&A chat, EVM panel (with rolling 24-cycle SPI/CPI/BEI/SV sparklines), DCMA panel (with violations bar chart).
+- **`agent/dashboard/templates/tabs/pm.html`** — PM Dashboard tab: top risks, recommended actions, Schedule Health History trend chart (R/Y/G zone-banded line), prominent Generate Executive Briefing button, variance narrative, portfolio view (with health-distribution donut).
+- **`agent/dashboard/templates/tabs/atlas.html`** — ATLAS Agent Control tab: CAMs Responded KPI, cycle in progress, CAM response status table, what-changed diff viewer, change history (cumulative), baseline drift report (with top-10 slip horizontal bar chart), live interview listen-in (SSE + audio queue).
+- **`agent/dashboard/static/css/dashboard.css`** — extracted styles + new tab nav + chart container styles (494 lines).
+- **`agent/dashboard/static/js/dashboard-core.js`** — polling, manual trigger, hash routing, Q&A chat with sessionStorage persistence (249 lines).
+- **`agent/dashboard/static/js/metrics-tab.js`** — EVM, DCMA, milestone-risk donut loaders + sparkline renderer (314 lines).
+- **`agent/dashboard/static/js/pm-tab.js`** — health trend chart with G/Y/R zones, portfolio donut, variance, briefing (224 lines).
+- **`agent/dashboard/static/js/atlas-tab.js`** — diff viewer, change history, baseline drift bar chart, live interview listen-in (481 lines).
+- **`agent/dashboard/static/vendor/chart.umd.min.js`** — Chart.js v4.4.6 vendored locally (no CDN dependency, ITAR-friendly).
+- **`GET /api/evm/history?n=24`** — rolling EVM program-level metrics for sparkline rendering.
+- **`GET /api/health/history?n=24`** — schedule-health history for trend chart.
+- **`docs/PHASE-12-OUTCOME-REPORT.md`** — full audit trail of the overhaul, parity map, rollback plan, morning verification steps.
+
+### Changed
+- **`agent/dashboard/server.py`** — mounted `/static` static asset directory; switched `/` route to render `base.html` (with `IMS_LEGACY_DASHBOARD=1` soft-rollback flag); added two new history endpoints; renamed app title from "IMS Agent Dashboard" to "IMS Command Center".
+- **`tests/test_integration_dashboard_ui.py`** — `dash_html` fixture concatenates HTML + linked static CSS/JS so existing string-search assertions work whether content is inline or external; 3 content-label tests updated for renamed text.
+- **`tests/test_integration_api_smoke.py`** — added `_html_plus_js` helper for path-reference tests in `TestDashboardHTML`.
+
+### Visual data layer (9 charts)
+| Tab | Chart | Type |
+|---|---|---|
+| Metrics | Milestone Risk Distribution | Donut |
+| Metrics | SPI / CPI / BEI / SV Trend (24 cycles) | Line sparklines |
+| Metrics | DCMA Violations by Check | Bar |
+| PM | Schedule Health History | Line w/ G/Y/R zones |
+| PM | Portfolio Health Distribution | Donut |
+| ATLAS | Top 10 Baseline Drift | Horizontal bar |
+
+### Rollback safety
+- Tag: `pre-dashboard-overhaul-2026-05-08`
+- Branch: `backup/pre-dashboard-overhaul`
+- Soft flag: `IMS_LEGACY_DASHBOARD=1` env var falls back to original `index.html`
+- Original `templates/index.html` retained for 2-week soak
+
+### Tests
+- **Dashboard suite:** 305/305 passing (`test_integration_dashboard_ui.py` + `test_phase92_endpoints.py`)
+- **Full unit suite:** 1009/1010 passing (1 pre-existing TD-042 flake — `test_flat_denial_retry_limit_still_works` passes in isolation but sporadically fails in full suite due to LLM mock state leakage; not Phase 12-related)
+- **Parity audit:** 81/81 element IDs, 18/18 JS functions, 6/6 static assets serve 200 OK
+
+---
+
 ## Phase 11 — Comprehensive Dashboard UI Test Suite (2026-05-07)
 
 **Summary:** 289 new element-by-element dashboard HTML tests bringing total to 1010. New `tests/test_integration_dashboard_ui.py` covers every visible panel, card, label, button, table column, data value, element ID, and JavaScript API-path reference in the dashboard template. Three consecutive runs confirmed deterministic green (289/289 each time).

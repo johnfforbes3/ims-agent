@@ -4,7 +4,7 @@
 
 An AI agent that autonomously manages Integrated Master Schedule (IMS) updates for defense programs. It conducts structured voice interviews with Cost Account Managers (CAMs), updates the schedule, runs critical path and Monte Carlo SRA analysis, synthesizes schedule intelligence, and delivers output via a live dashboard, Slack, email, and a natural language Q&A interface.
 
-**Current status: Phase 11 complete — Full System Integration Test Suite (Phase 10), Comprehensive Dashboard UI Test Suite (Phase 11). 1010 tests passing. Phase 9.6: EVM/DCMA/Briefing/Portfolio. Phase 8.5: GitHub Actions CI, Dockerfile Python 3.13. Production cycle `20260505T121010Z`: 4/4 CAMs, 23 blocked tasks, health=RED.**
+**Current status: Phase 12 complete — IMS Command Center 3-tab dashboard overhaul (IMS Metrics & Indicators \| PM Dashboard \| ATLAS Agent Control) with Chart.js v4 visual data layer (9 charts: trend lines, sparklines, donuts, bars). 1009/1010 unit tests passing (1 pre-existing TD-042 flake). Phase 11: Comprehensive Dashboard UI Test Suite. Phase 10: Full System Integration Test Suite. Phase 9.6: EVM/DCMA/Briefing/Portfolio. Phase 8.5: GitHub Actions CI, Dockerfile Python 3.13. Production cycle `20260507T222726Z`: 5/5 CAMs (Teams chat relay), health=RED.**
 
 ---
 
@@ -200,6 +200,8 @@ ims-agent/
 **Phase 10 note:** Full System Integration Test Suite — 110 new integration tests covering Teams relay wiring, SSE stream endpoint, full API smoke suite, and end-to-end cycle integration. 6 bug fixes discovered and resolved during integration testing. 721 tests passing.
 
 **Phase 11 note:** Comprehensive Dashboard UI Test Suite — 289 element-by-element dashboard tests across 18 test classes covering all panels, KPIs, tables, EVM/DCMA/briefing/portfolio UI paths, and JavaScript API paths. Graph CAM Responder lookback window fix (30s→2h) to prevent interview stall on responder restart during active cycle. 1010 tests passing.
+
+**Phase 12 note:** IMS Command Center 3-tab dashboard overhaul — monolithic 1822-line `index.html` split into `base.html` + 3 tab partials (`tabs/metrics.html`, `tabs/pm.html`, `tabs/atlas.html`). All CSS/JS extracted to `agent/dashboard/static/`. Chart.js v4 vendored locally (no CDN, ITAR-friendly). New visual data layer: 4 EVM rolling-24-cycle sparklines (SPI/CPI/BEI/SV), schedule-health trend line with G/Y/R zone bands, milestone-risk and portfolio donuts, DCMA violations and baseline-drift bar charts. Two new endpoints: `GET /api/evm/history?n=24`, `GET /api/health/history?n=24`. Soft-rollback flag `IMS_LEGACY_DASHBOARD=1`. Rollback snapshot at tag `pre-dashboard-overhaul-2026-05-08`.
 
 ---
 
