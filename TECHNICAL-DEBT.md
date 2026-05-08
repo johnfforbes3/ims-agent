@@ -413,6 +413,42 @@ Set `self._llm = None` in `__init__`. No test changes required — lazy construc
 
 ---
 
+### TD-047 — CI unit tests consistently fail because `ANTHROPIC_API_KEY` GitHub secret is not configured
+**File:** `.github/workflows/ci.yml` — `env.ANTHROPIC_API_KEY`; `agent/voice/interview_agent.py` — `_classify_cam_response()`  
+**Severity:** High (CI is permanently broken; every push produces a failing run)  
+**Observed:** GitHub Actions job "Unit Tests (Python 3.13 · Windows)" fails across all recent commits (`ab0162b`, `3ebcf75`, `da87ecd`). Step "Run unit tests" completes in ~27 seconds — far shorter than the 6–7 minutes it takes when the Anthropic API is actually called. This timing mismatch is definitive proof no real LLM call is being made.
+
+**Root cause chain:**
+1. `ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}` in `ci.yml` evaluates to `""` (empty string) when the GitHub repository secret is not configured.
+2. `LLMInterface.__init__` raises `EnvironmentError` for any falsy key value.
+3. `_classify_cam_response()` (and `_classify_eac_date()`) wrap the entire LLM call in `except Exception`, catching `EnvironmentError` and falling through to the regex fallback.
+4. The regex fallback correctly handles simple inputs ("yes", "no") but returns `sentiment="unclear"` for complex conversational inputs (e.g. "AI-07 should be risk-flagged, not AI-09").
+5. `_handle_confirm` treats `"unclear"` the same as `"affirmative"` — closing the interview.
+6. Tests that expect `InterviewState.CONFIRM` after a complex denial get `InterviewState.COMPLETE` → `AssertionError`.
+
+**Why deferred:** Requires accessing GitHub repository settings (Settings → Secrets and variables → Actions) to add the secret, and a longer-term refactor to remove the live-API dependency from unit tests.
+
+**Suggested fix (two-step):**
+- **Immediate (unblocks CI):** Add `ANTHROPIC_API_KEY` as a GitHub Actions repository secret with a valid Anthropic API key. This alone will restore green CI.
+- **Long-term (correct fix):** Refactor `TestConversationalContext` tests that rely on `_classify_cam_response` to mock the LLM response:
+  ```python
+  with patch("agent.voice.interview_agent._classify_cam_response",
+             return_value={"sentiment": "negative", "percent": None, ...}):
+      agent.process("AI-07 should be risk-flagged, not AI-09")
+  ```
+  Move any tests that *intentionally* exercise real LLM classification to `@pytest.mark.integration` so they are excluded from the CI unit-test run. This makes the suite fully deterministic and eliminates the API key dependency for `pytest tests/ -m "not integration"`.
+
+---
+
+### TD-048 — GitHub Actions CI uses deprecated Node.js 20 action versions (breaking June 2026)
+**File:** `.github/workflows/ci.yml` — `actions/checkout@v4`, `actions/setup-python@v5`, `actions/setup-java@v4`  
+**Severity:** Medium (warning today; will hard-fail CI in September 2026)  
+**Observed:** Every CI run includes the annotation: "Node.js 20 actions are deprecated. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026."  
+**Why deferred:** Currently only a warning; all three action versions (v4/v5) have Node.js 24 support available via the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` env flag. Not urgent until June 2026.  
+**Suggested fix:** Pin action versions that ship with Node.js 24 support, or add `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` to the workflow env block as an interim measure. Final fix: bump to the latest major versions once they are released with Node.js 24 as the default runtime.
+
+---
+
 ## How to Use This Register
 
 - When writing new code that cuts a corner, add an entry here in the same PR.
