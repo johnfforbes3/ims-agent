@@ -378,7 +378,7 @@ Each entry: what it is, why it was deferred, and a suggested fix.
 
 ## Phase 11 — Dashboard UI Test Suite (2026-05-07)
 
-### TD-044 — Graph CAM Responder lookback window too short to catch messages from mid-cycle restart
+### TD-044 — Graph CAM Responder lookback window too short to catch messages from mid-cycle restart — **RESOLVED**
 **Resolved:** 2026-05-07  
 **File:** `agent/graph_cam_responder.py` — `__init__`, `_last_check` initialization  
 **Severity:** High (responder restart during active cycle caused complete interview stall)  

@@ -137,7 +137,7 @@ through the meeting audio stream.
 | Azure subscription | Free tier sufficient |
 | ElevenLabs API key | Free tier sufficient for demos |
 | ngrok account | Free tier; URL changes each session |
-| Python 3.11+ | With `pip install -r requirements.txt` |
+| Python 3.13 | With `pip install -r requirements.txt` |
 
 ---
 

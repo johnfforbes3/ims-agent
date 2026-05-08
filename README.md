@@ -12,7 +12,7 @@ An AI agent that autonomously manages Integrated Master Schedule (IMS) updates f
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13
 - Anthropic API key (set in `.env`)
 
 ### Setup
