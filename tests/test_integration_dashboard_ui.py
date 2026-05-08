@@ -181,8 +181,25 @@ def dash_client(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def dash_html(dash_client):
-    """Single GET / response text cached for the test session."""
-    return dash_client.get("/").text
+    """Concatenated HTML + linked static CSS/JS for parity assertions.
+
+    Phase 12 — Dashboard was refactored from a single inline-script index.html
+    into base.html + 3 tab partials + external CSS/JS files.  String
+    assertions across the fixture now scan HTML *and* the linked assets so
+    tests can keep their current shape (`"foo" in dash_html`) regardless of
+    whether ``foo`` lives in the HTML or in /static/js/dashboard-core.js.
+    """
+    html = dash_client.get("/").text
+    parts = [html]
+    # Pick up every <link rel="stylesheet"> and <script src="..."> reference
+    import re as _re
+    for url in _re.findall(r'href="(/static/[^"]+)"', html):
+        try: parts.append(dash_client.get(url).text)
+        except Exception: pass
+    for url in _re.findall(r'<script src="(/static/[^"]+)"', html):
+        try: parts.append(dash_client.get(url).text)
+        except Exception: pass
+    return "\n".join(parts)
 
 
 # ===========================================================================
@@ -228,7 +245,8 @@ class TestDashboardHeader:
         assert "IMS Agent" in dash_html
 
     def test_schedule_dashboard_label(self, dash_html):
-        assert "Schedule Dashboard" in dash_html
+        # Phase 12 rename: "IMS Agent — Schedule Dashboard" → "IMS Command Center"
+        assert "IMS Command Center" in dash_html
 
     def test_atlas_program_subtitle(self, dash_html):
         assert "ATLAS Program" in dash_html
@@ -593,7 +611,9 @@ class TestHealthHistory:
         assert "Schedule Health History" in dash_html
 
     def test_last_n_cycles_label(self, dash_html):
-        assert "Cycles" in dash_html
+        # Phase 12: heading became "Schedule Health History — Trend"; the
+        # detailed-history details element keeps "last N cycles" wording.
+        assert "cycles" in dash_html.lower()
 
 
 # ===========================================================================
@@ -817,7 +837,8 @@ class TestExecutiveBriefingButton:
         assert "openBriefing()" in dash_html
 
     def test_one_click_brief_description(self, dash_html):
-        assert "One-click brief" in dash_html
+        # Phase 12: rephrased to "One-click HTML report:" on the PM tab card.
+        assert "One-click" in dash_html
 
     def test_evm_in_description(self, dash_html):
         assert "EVM" in dash_html

@@ -1,0 +1,209 @@
+{# ===========================================================================
+   IMS Command Center — Tab 3: ATLAS Agent Control
+   ===========================================================================
+   Tiles: Trigger Cycle (in header) · CAMs Responded KPI · Cycle In Progress
+   · CAM Response Status table · What Changed Diff Viewer · Change History
+   Cumulative Diff · Baseline Drift Report (with bar chart) · Live Interview
+   Listen-In (Observer View)
+   =========================================================================== #}
+<div class="container">
+
+  {# ── CAMs Responded KPI (the one tile moved from old top row) ───────── #}
+  {% set cr = state.get('completion_report', {}) %}
+  <div class="kpi-grid kpi-3">
+    <div class="kpi-card">
+      <div class="kpi-label">CAMs Responded</div>
+      <div class="kpi-value {% if cr.get('responded', 0) == cr.get('total', 1) %}ok{% elif cr.get('responded', 0) == 0 %}danger{% else %}warning{% endif %}">
+        {{ cr.get('responded', '—') }}/{{ cr.get('total', '—') }}
+      </div>
+      <div class="kpi-sub">This cycle</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Last Cycle</div>
+      <div class="kpi-value accent" style="font-size:14px;font-family:monospace;letter-spacing:0">
+        {{ state.get('cycle_id', '—') }}
+      </div>
+      <div class="kpi-sub">{{ state.get('last_updated', '—') }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Schedule Health</div>
+      {% set h = state.get('schedule_health', 'UNKNOWN') %}
+      <div class="kpi-value {% if h == 'RED' %}danger{% elif h == 'YELLOW' %}warning{% elif h == 'GREEN' %}ok{% endif %}">
+        {{ h }}
+      </div>
+      <div class="kpi-sub">Latest cycle</div>
+    </div>
+  </div>
+
+  {# ── Cycle In Progress ─────────────────────────────────────────────── #}
+  {% set current = state.get('current_cycle', {}) %}
+  {% set _phase = current.get('phase', '') %}
+  {% set _active = _phase and _phase not in ['complete', 'failed'] %}
+  <div class="progress-card" id="cycle-progress-card"
+       style="{{ 'display:none' if not _active else '' }}">
+    <h2>Cycle In Progress</h2>
+    <p style="font-size:13px;color:#8b949e">
+      <strong style="color:#58a6ff">Phase:</strong>
+      <span id="cp-phase">{{ _phase.upper() if _phase else '—' }}</span>
+      &nbsp;·&nbsp;
+      <strong style="color:#58a6ff">Cycle:</strong>
+      <span id="cp-cycle" style="font-family:monospace">{{ current.get('cycle_id', '—') }}</span>
+      &nbsp;·&nbsp;
+      <strong style="color:#58a6ff">CAMs:</strong>
+      <span id="cp-cams">{{ current.get('cams_responded', 0) }}/{{ current.get('cams_total', 0) }}</span>
+    </p>
+    <div id="cp-cam-progress" style="margin-top:10px;font-size:12px;line-height:2.2"></div>
+  </div>
+
+  {# ── CAM Response Status ───────────────────────────────────────────── #}
+  <div class="card">
+    <h2>CAM Response Status</h2>
+    {% set cam_status = state.get('cam_response_status', {}) %}
+    {% if cam_status %}
+    <table id="cam-status-table">
+      <thead>
+        <tr><th>CAM</th><th>Status</th><th>Attempts</th><th>Outcome</th></tr>
+      </thead>
+      <tbody>
+      {% for cam, info in cam_status.items() %}
+        <tr data-cam="{{ cam }}">
+          <td style="font-weight:500;color:#e6edf3">{{ cam }}</td>
+          <td class="cam-status-cell">
+            {% if info.responded %}
+              <span class="dot dot-ok"></span>Responded
+            {% else %}
+              <span class="dot dot-miss"></span>No Response
+            {% endif %}
+          </td>
+          <td style="color:#7d8590">{{ info.attempts }}</td>
+          <td style="color:#7d8590">{{ info.last_outcome or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No CAM status data yet.</p>
+    {% endif %}
+  </div>
+
+  {# ── What Changed — IMS Diff Viewer ─────────────────────────────────── #}
+  <details class="panel" id="what-changed-panel">
+    <summary>
+      <span class="panel-icon">🔄</span>
+      <span>What Changed — IMS Diff Viewer</span>
+      <span class="panel-badge" id="diff-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <span class="panel-label">Cycle ID:</span>
+        <input class="panel-input" id="diff-cycle-input" type="text"
+               value="{{ state.get('cycle_id', '') }}"
+               placeholder="e.g. 20260505T004516Z">
+        <button class="btn btn-primary btn-sm" onclick="loadDiff()">Load</button>
+        <span class="panel-status" id="diff-status"></span>
+      </div>
+      <div id="diff-table-container" style="overflow-x:auto"></div>
+    </div>
+  </details>
+
+  {# ── Change History — Cumulative Diff ───────────────────────────────── #}
+  <details class="panel" id="change-history-panel">
+    <summary>
+      <span class="panel-icon">📋</span>
+      <span>Change History — Cumulative Diff</span>
+      <span class="panel-badge" id="ch-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <span class="panel-label">From:</span>
+        <input class="panel-input" id="ch-from" type="text" placeholder="earliest (blank = all)">
+        <span class="panel-label">To:</span>
+        <input class="panel-input" id="ch-to" type="text" placeholder="latest (blank = all)">
+        <button class="btn btn-primary btn-sm" onclick="loadChanges()">Load</button>
+        <a id="ch-csv-link" href="#" style="display:none;font-size:12px;color:#58a6ff;margin-left:4px">⬇ CSV</a>
+        <span class="panel-status" id="ch-status"></span>
+      </div>
+      <div id="ch-table-container" style="overflow-x:auto"></div>
+    </div>
+  </details>
+
+  {# ── Baseline Drift Report (with horizontal bar chart of top slips) ── #}
+  <details class="panel" id="baseline-drift-panel">
+    <summary>
+      <span class="panel-icon">📐</span>
+      <span>Baseline Drift Report</span>
+      <span class="panel-badge" id="bd-count-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadBaselineDrift()">Load</button>
+        <span class="panel-status" id="bd-status"></span>
+      </div>
+      <div class="chart-container short" style="height:240px;margin-bottom:12px">
+        <canvas id="baseline-drift-chart"></canvas>
+      </div>
+      <div id="bd-table-container" style="overflow-x:auto"></div>
+    </div>
+  </details>
+
+  {# ── Live Interview Listen-In (Observer View) ───────────────────────── #}
+  <details class="panel" id="listenin-panel">
+    <summary>
+      <span class="panel-icon">🎙️</span>
+      <span>Live Interview Listen-In</span>
+      <span class="panel-badge" id="listenin-session-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+
+      <div class="listenin-sessions" id="listenin-sessions">
+        <span class="listenin-session-pill idle">
+          <span class="live-dot"></span>No active interviews
+        </span>
+      </div>
+
+      <div class="listenin-controls">
+        <button class="btn btn-primary btn-sm" id="listenin-connect-btn" onclick="listenInConnect()">
+          ▶ Connect
+        </button>
+        <button class="btn btn-ghost btn-sm" id="listenin-disconnect-btn" onclick="listenInDisconnect()" style="display:none">
+          ■ Disconnect
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="listenInClear()" title="Clear transcript">✕ Clear</button>
+        <select id="listenin-cam-select" onchange="listenInFilterChange()"
+                style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;
+                       padding:2px 6px;font-size:12px;cursor:pointer;max-width:160px">
+          <option value="all">All interviews</option>
+        </select>
+        <span class="listenin-status" id="listenin-status">Not connected — will auto-connect when panel opens</span>
+        <label class="listenin-autoplay-toggle">
+          <input type="checkbox" id="listenin-autoplay" checked style="accent-color:#58a6ff">
+          Auto-play audio
+        </label>
+        <label class="listenin-vol" title="Playback volume">
+          🔊 <input type="range" id="listenin-volume" min="0" max="1" step="0.05" value="0.85"
+                     style="width:70px;accent-color:#58a6ff" title="Volume">
+        </label>
+      </div>
+
+      <div class="listenin-speaking-row" id="listenin-speaking-row">
+        <div class="speaking-bars">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="speaking-label"><strong id="speaking-name">ATLAS</strong> is speaking…</div>
+      </div>
+
+      <div class="listenin-transcript" id="listenin-transcript">
+        <div class="listenin-empty" id="listenin-empty">
+          Opens automatically — ATLAS questions appear on the left, CAM replies on the right.
+          Audio plays as a natural conversation when ElevenLabs is configured.
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+</div>{# /container #}

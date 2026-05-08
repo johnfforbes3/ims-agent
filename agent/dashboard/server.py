@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -59,7 +60,14 @@ _QA_RATE_LIMIT = int(os.getenv("QA_RATE_LIMIT_PER_HOUR", "60"))
 
 _START_TIME = time.monotonic()
 
-app = FastAPI(title="IMS Agent Dashboard", docs_url=None, redoc_url=None)
+app = FastAPI(title="IMS Command Center", docs_url=None, redoc_url=None)
+
+# Phase 12 — Mount static assets for the 3-tab dashboard rebuild.
+# Path is computed below the templates dir (set further down) — but FastAPI
+# resolves mount paths lazily so this is safe to call here.
+_STATIC_DIR_BOOT = Path(__file__).parent / "static"
+if _STATIC_DIR_BOOT.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR_BOOT)), name="static")
 
 # ---------------------------------------------------------------------------
 # Auth
@@ -188,6 +196,13 @@ def _check_rate_limit(ip: str) -> None:
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+# Phase 12 — IMS Command Center 3-tab overhaul: static asset mount.
+# Serves CSS/JS/vendored Chart.js from agent/dashboard/static/.
+_STATIC_DIR = Path(__file__).parent / "static"
+if _STATIC_DIR.exists():
+    # name="static" must match the URL prefix used in base.html (/static/...)
+    pass  # actual mount happens after `app` is defined below
 
 
 # ---------------------------------------------------------------------------
@@ -376,11 +391,19 @@ async def api_metrics(format: str = "json"):
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    """Render the IMS Command Center 3-tab dashboard.
+
+    Phase 12 — switched from monolithic ``index.html`` to ``base.html`` which
+    includes three tab partials (``tabs/metrics.html``, ``tabs/pm.html``,
+    ``tabs/atlas.html``).  Set ``IMS_LEGACY_DASHBOARD=1`` to fall back to the
+    pre-overhaul single-page layout for emergency rollback.
+    """
     state = _load_json(_STATE_FILE) or {}
     history = _load_json(_HISTORY_FILE) or []
+    template_name = "index.html" if os.getenv("IMS_LEGACY_DASHBOARD") else "base.html"
     return templates.TemplateResponse(
         request,
-        "index.html",
+        template_name,
         {"state": state, "history": history},
     )
 
@@ -1328,6 +1351,79 @@ async def api_evm(
     if not evm:
         return JSONResponse({"error": "No EVM data available yet. Run a cycle first."}, status_code=404)
     return JSONResponse(evm)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — EVM rolling-window history endpoint
+#
+# Walks cycle_history.json and pulls each cycle's program-level EVM snapshot.
+# Used by the Metrics tab to render 24-point sparklines (SPI / CPI / BEI / SV).
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/evm/history")
+async def api_evm_history(
+    n: int = 24,
+    _auth: None = Depends(_require_api_key),
+):
+    """Return last N cycles' EVM program-level metrics for sparkline rendering.
+
+    Each entry: {timestamp, cycle_id, spi, cpi, bei, sv, completion_pct}.
+    Older cycles missing the EVM block are omitted.  Caller can pass ``?n=24``
+    (default), ``?n=12``, etc.  Hard cap of 100 to keep responses bounded.
+    """
+    n = max(1, min(int(n or 24), 100))
+    history = _load_json(_HISTORY_FILE) or []
+    out: list[dict] = []
+    # Newest entries are at the end of the list — walk from the tail
+    for entry in history[-n:]:
+        evm = entry.get("evm") or {}
+        prog = evm.get("program") if isinstance(evm, dict) else None
+        if not prog:
+            continue
+        out.append({
+            "timestamp": entry.get("timestamp", ""),
+            "cycle_id":  entry.get("cycle_id", ""),
+            "spi":       prog.get("spi"),
+            "cpi":       prog.get("cpi"),
+            "bei":       prog.get("bei"),
+            "sv":        prog.get("sv"),
+            "completion_pct": prog.get("completion_pct"),
+        })
+    return JSONResponse({"history": out, "n": len(out)})
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — Schedule-health trend history endpoint
+#
+# Returns last N cycles with timestamp + health label.  Used by the PM tab
+# to plot a line chart with green/yellow/red zone backgrounds.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/health/history")
+async def api_health_history(
+    n: int = 24,
+    _auth: None = Depends(_require_api_key),
+):
+    """Return last N cycles' schedule-health labels for trend chart rendering.
+
+    Each entry: {timestamp, cycle_id, schedule_health, cams_responded,
+    cams_total}.  Caller can pass ``?n=24`` (default) up to a cap of 100.
+    """
+    n = max(1, min(int(n or 24), 100))
+    history = _load_json(_HISTORY_FILE) or []
+    out = [
+        {
+            "timestamp":        entry.get("timestamp", ""),
+            "cycle_id":         entry.get("cycle_id", ""),
+            "schedule_health":  entry.get("schedule_health", "UNKNOWN"),
+            "cams_responded":   entry.get("cams_responded"),
+            "cams_total":       entry.get("cams_total"),
+        }
+        for entry in history[-n:]
+    ]
+    return JSONResponse({"history": out, "n": len(out)})
 
 
 # ---------------------------------------------------------------------------

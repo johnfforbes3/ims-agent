@@ -1,0 +1,123 @@
+{# ===========================================================================
+   IMS Command Center — Tab 2: PM Dashboard
+   ===========================================================================
+   Tiles: Top Risks · Recommended Actions · Schedule Health History trend
+   chart (R/Y/G zones) · Generate Executive Briefing button · Schedule
+   Variance Narrative (CPR Format 5) · Portfolio View (with health donut)
+   =========================================================================== #}
+<div class="container">
+
+  {# ── Top Risks + Recommended Actions ────────────────────────────────── #}
+  <div class="grid-2">
+    <div class="card">
+      <h2>Top Risks</h2>
+      {% set risks = state.get('top_risks', '') %}
+      {% if risks %}
+      <div class="risks-text">{{ risks }}</div>
+      {% else %}
+      <p class="empty">No risk synthesis yet — run a cycle first.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="border-left:3px solid #1f6feb">
+      <h2>Recommended Actions for PM</h2>
+      {% set actions = state.get('recommended_actions', '') %}
+      {% if actions %}
+      <div class="risks-text">{{ actions }}</div>
+      {% else %}
+      <p class="empty">No recommendations yet — run a cycle first.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Schedule Health History trend chart ───────────────────────────── #}
+  <div class="card">
+    <h2>Schedule Health History — Trend</h2>
+    <div class="panel-controls">
+      <button class="btn btn-primary btn-sm" onclick="loadHealthHistoryChart()">Refresh</button>
+      <span class="panel-status" id="health-history-status"></span>
+    </div>
+    <div class="chart-container tall">
+      <canvas id="health-history-chart"></canvas>
+    </div>
+
+    {# Legacy bar-row history view, kept for tests + accessibility #}
+    {% if history %}
+    <details style="margin-top:12px">
+      <summary style="font-size:11px;color:#7d8590;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em">
+        Detailed history — last {{ history | length }} cycles
+      </summary>
+      <div style="margin-top:10px">
+      {% for entry in history | reverse %}
+      <div class="history-row">
+        <div style="width:140px;color:#484f58;font-size:11px;font-family:monospace">
+          {{ entry.get('timestamp', '')[:10] }}
+        </div>
+        {% set h = entry.get('schedule_health', 'UNKNOWN') %}
+        <div class="history-bar bar-{{ h }}" style="width:{{ 56 if h == 'RED' else (32 if h == 'YELLOW' else 16) }}px"></div>
+        <span class="badge badge-{{ h }}">{{ h }}</span>
+        <span style="color:#484f58;font-size:11px;margin-left:auto">
+          {{ entry.get('cams_responded', '?') }}/{{ entry.get('cams_total', '?') }} CAMs
+          &nbsp;·&nbsp;
+          <code style="font-size:10px;color:#30363d">{{ entry.get('cycle_id', '') }}</code>
+        </span>
+      </div>
+      {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+
+  {# ── Generate Executive Briefing button (prominent) ─────────────────── #}
+  <div class="card" style="text-align:center;background:linear-gradient(135deg,#161b22 0%,#1c2229 100%)">
+    <h2 style="margin-bottom:8px">Executive Briefing</h2>
+    <p style="font-size:12px;color:#7d8590;margin-bottom:14px">
+      One-click HTML report: EVM · DCMA · milestones · variance · CAM status
+    </p>
+    <button class="btn btn-primary btn-large" onclick="openBriefing()">
+      📋 Generate Executive Briefing
+    </button>
+  </div>
+
+  {# ── Schedule Variance Narrative (CPR Format 5) ────────────────────── #}
+  <details class="panel" id="variance-panel" open>
+    <summary>
+      <span class="panel-icon">📝</span>
+      <span>Schedule Variance Narrative (CPR Format 5)</span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadVariance()">Refresh</button>
+        <span class="panel-status" id="variance-status"></span>
+      </div>
+      <div id="variance-text" style="margin:10px 0;padding:12px;background:#0d1117;border:1px solid #21262d;
+           border-radius:6px;white-space:pre-wrap;font-size:12px;line-height:1.7;color:#e6edf3;">
+        No variance narrative yet — run a cycle to generate.
+      </div>
+    </div>
+  </details>
+
+  {# ── Portfolio View (tiles + health distribution donut) ─────────────── #}
+  <details class="panel" id="portfolio-panel" open>
+    <summary>
+      <span class="panel-icon">🗂️</span>
+      <span>Portfolio View</span>
+      <span class="panel-badge" id="portfolio-at-risk-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadPortfolio()">Refresh</button>
+        <span class="panel-status" id="portfolio-status"></span>
+      </div>
+      <div class="chart-grid-2">
+        <div id="portfolio-tiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
+        <div class="chart-container short" style="height:220px">
+          <canvas id="portfolio-donut"></canvas>
+        </div>
+      </div>
+    </div>
+  </details>
+
+</div>{# /container #}

@@ -1,0 +1,248 @@
+{# ===========================================================================
+   IMS Command Center — Tab 1: IMS Metrics & Indicators
+   ===========================================================================
+   Tiles: Health Banner · 3 KPI cards · Validation Alerts · Milestone Risk
+   Summary (with donut) · Tasks Behind Schedule · Critical Path · Ask the
+   IMS Agent · EVM (with rolling 24-pt sparklines) · DCMA 14-Point Assessment
+   =========================================================================== #}
+<div class="container">
+
+  {# ── Health Banner (Overall Color Indicator Bar) ─────────────────────── #}
+  {% set health = state.get('schedule_health', 'UNKNOWN') %}
+  {% set dot_map = {'RED': '🔴', 'YELLOW': '🟡', 'GREEN': '🟢', 'UNKNOWN': '⚪'} %}
+  <div class="health-banner {{ health }}">
+    <div class="health-dot">{{ dot_map.get(health, '⚪') }}</div>
+    <div>
+      <div class="health-label">{{ health }}</div>
+      <div class="health-meta">
+        Cycle {{ state.get('cycle_id', '—') }}&nbsp;&nbsp;·&nbsp;&nbsp;
+        Last updated {{ state.get('last_updated', '—') }}
+        {% if state.get('ims_master_dir') %}
+        &nbsp;&nbsp;·&nbsp;&nbsp;
+        <span style="font-size:11px;color:#484f58" title="Open in Explorer for latest .mpp">
+          Master: <code style="font-family:monospace;color:#7d8590">{{ state.get('ims_master_dir','') }}</code>
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Validation Alerts ──────────────────────────────────────────────── #}
+  {% set holds = state.get('validation_holds', []) %}
+  {% if holds %}
+  <details class="alert-panel" open>
+    <summary>⚠&nbsp; Validation Alerts — {{ holds | length }} hold(s) flagged this cycle</summary>
+    <table style="margin-top:14px">
+      <thead>
+        <tr><th>Task</th><th>CAM</th><th>Rule</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+      {% for h in holds %}
+        <tr>
+          <td>{{ h.get('task_id', '—') }}</td>
+          <td>{{ h.get('cam_name', '—') }}</td>
+          <td><span class="badge badge-MEDIUM">{{ h.get('rule', '—') }}</span></td>
+          <td style="font-size:12px;color:#7d8590">{{ h.get('detail', '') }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+
+  {# ── KPI Cards (3 indicator tiles — CAMs Responded moved to ATLAS) ──── #}
+  {% set milestones = state.get('milestones', []) %}
+  {% set high_risk = milestones | selectattr('risk_level', 'equalto', 'HIGH') | list %}
+  {% set cp = state.get('critical_path_task_ids', []) %}
+  {% set behind = state.get('tasks_behind', []) %}
+  <div class="kpi-grid kpi-3">
+    <div class="kpi-card">
+      <div class="kpi-label">HIGH Risk Milestones</div>
+      <div class="kpi-value {% if high_risk | length > 0 %}danger{% else %}ok{% endif %}">
+        {{ high_risk | length }}
+      </div>
+      <div class="kpi-sub">of {{ milestones | length }} milestones</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Tasks Behind w/ Blocker</div>
+      <div class="kpi-value {% if behind | length > 0 %}warning{% else %}ok{% endif %}">
+        {{ behind | length }}
+      </div>
+      <div class="kpi-sub">Active blockers</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Critical Path Tasks</div>
+      <div class="kpi-value accent">{{ cp | length }}</div>
+      <div class="kpi-sub">Zero float</div>
+    </div>
+  </div>
+
+  {# ── Milestone Risk Summary (with distribution donut) + Tasks Behind ── #}
+  <div class="grid-2">
+    <div class="card">
+      <h2>Milestone Risk Summary</h2>
+      {% if milestones %}
+      <div class="chart-grid-2">
+        <div>
+          <table>
+            <thead>
+              <tr><th>Milestone</th><th>P50</th><th>On-Time</th><th>Risk</th></tr>
+            </thead>
+            <tbody>
+            {% for m in milestones | sort(attribute='prob_on_baseline') %}
+              <tr>
+                <td style="color:#e6edf3;font-weight:500">{{ m.milestone_name }}</td>
+                <td>{{ m.p50_date }}</td>
+                <td style="font-weight:600">{{ "%.0f%%" | format(m.prob_on_baseline * 100) }}</td>
+                <td><span class="badge badge-{{ m.risk_level }}">{{ m.risk_level }}</span></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="chart-container short" style="height:200px">
+          <canvas id="milestone-donut"></canvas>
+        </div>
+      </div>
+      {# Hidden full table — preserves the test-expected columns Baseline / P95 #}
+      <details style="margin-top:8px">
+        <summary style="font-size:11px;color:#7d8590;cursor:pointer">Full table</summary>
+        <table style="margin-top:8px">
+          <thead><tr><th>Milestone</th><th>Baseline</th><th>P50</th><th>P95</th><th>On-Time</th><th>Risk</th></tr></thead>
+          <tbody>
+          {% for m in milestones | sort(attribute='prob_on_baseline') %}
+            <tr>
+              <td>{{ m.milestone_name }}</td>
+              <td style="color:#7d8590">{{ m.baseline_date }}</td>
+              <td>{{ m.p50_date }}</td>
+              <td style="color:#7d8590">{{ m.p95_date }}</td>
+              <td>{{ "%.0f%%" | format(m.prob_on_baseline * 100) }}</td>
+              <td><span class="badge badge-{{ m.risk_level }}">{{ m.risk_level }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% else %}
+      <p class="empty">No milestone data — run a cycle first.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2>Tasks Behind Schedule (with Blockers)</h2>
+      {% if behind %}
+      <table>
+        <thead>
+          <tr><th>Task</th><th>CAM</th><th>%</th><th>Blocker</th></tr>
+        </thead>
+        <tbody>
+        {% for t in behind %}
+          <tr>
+            <td style="color:#58a6ff;font-weight:500">{{ t.task_id }}</td>
+            <td>{{ t.cam_name }}</td>
+            <td><span class="badge badge-HIGH">{{ t.percent_complete }}%</span></td>
+            <td style="font-size:12px;color:#7d8590">{{ t.blocker }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">No behind-schedule tasks with blockers.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Critical Path Task IDs ────────────────────────────────────────── #}
+  <div class="card">
+    <h2>Critical Path Task IDs — {{ cp | length }} tasks, 0 days float</h2>
+    {% if cp %}
+    <div style="line-height:2.2">
+      {% for tid in cp %}
+        <span class="chip">{{ tid }}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">No critical path data yet.</p>
+    {% endif %}
+  </div>
+
+  {# ── Ask the IMS Agent (Q&A Chat Widget) ───────────────────────────── #}
+  <div class="card">
+    <h2>Ask the IMS Agent</h2>
+    <div class="chat-chips">
+      <button class="chat-chip" onclick="askQuestion('What is the current critical path?')">Critical path?</button>
+      <button class="chat-chip" onclick="askQuestion('What are the top risks right now?')">Top risks?</button>
+      <button class="chat-chip" onclick="askQuestion('What should I focus on this week?')">Focus this week?</button>
+      <button class="chat-chip" onclick="askQuestion('What is the probability of hitting the terminal milestone on time?')">Terminal milestone?</button>
+      <button class="chat-chip" onclick="askQuestion('What is Alice Nguyen behind on?')">Alice Nguyen?</button>
+      <button class="chat-chip" onclick="askQuestion('What changed since last cycle?')">Changes this cycle?</button>
+      <button class="chat-chip" onclick="askQuestion('What is the schedule health?')">Schedule health?</button>
+      <button class="chat-chip" onclick="askQuestion('Which blockers need PM action today?')">PM actions?</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg assistant">
+        <div class="chat-bubble">Ask me anything about the schedule — critical path, milestone risk, CAM status, blockers, or recommended actions.</div>
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-input" type="text" id="chat-input"
+             placeholder="e.g. What is the probability of hitting CDR on time?"
+             onkeydown="if(event.key==='Enter') sendChat()" maxlength="500">
+      <button class="btn btn-primary" onclick="sendChat()" id="chat-send-btn">Ask</button>
+      <button class="btn btn-ghost" onclick="clearChat()" style="margin-left:2px" title="Clear chat">✕</button>
+    </div>
+  </div>
+
+  {# ── EVM Metrics (current + rolling 24-point sparklines) ───────────── #}
+  <details class="panel" id="evm-panel" open>
+    <summary>
+      <span class="panel-icon">📊</span>
+      <span>Earned Value Metrics (EVM)</span>
+      <span class="panel-badge" id="evm-health-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadEvm()">Refresh</button>
+        <span class="panel-status" id="evm-status"></span>
+      </div>
+      {# Current cycle KPI cards #}
+      <div id="evm-program-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0;"></div>
+
+      {# Rolling 24-pt trend sparklines #}
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">
+          Rolling 24-Cycle Trends
+        </div>
+        <div id="evm-sparklines" class="chart-grid-4"></div>
+      </div>
+
+      {# CAM-level breakdown table #}
+      <div id="evm-cam-table" style="overflow-x:auto;margin-top:14px;"></div>
+    </div>
+  </details>
+
+  {# ── DCMA 14-Point Assessment (with bar chart) ─────────────────────── #}
+  <details class="panel" id="dcma-panel" open>
+    <summary>
+      <span class="panel-icon">✅</span>
+      <span>DCMA 14-Point Assessment</span>
+      <span class="panel-badge" id="dcma-score-badge" style="display:none"></span>
+      <span class="panel-chevron">▼</span>
+    </summary>
+    <div class="panel-body">
+      <div class="panel-controls">
+        <button class="btn btn-primary btn-sm" onclick="loadDcma()">Refresh</button>
+        <span class="panel-status" id="dcma-status"></span>
+      </div>
+      <div id="dcma-scorecard" style="margin:10px 0;"></div>
+      <div class="chart-container short" style="height:180px">
+        <canvas id="dcma-bar-chart"></canvas>
+      </div>
+      <div id="dcma-checks-table" style="overflow-x:auto;margin-top:12px"></div>
+    </div>
+  </details>
+
+</div>{# /container #}

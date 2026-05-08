@@ -493,6 +493,17 @@ class TestTriggerEndpoint:
 # ===========================================================================
 
 class TestDashboardHTML:
+    @staticmethod
+    def _html_plus_js(client) -> str:
+        """Phase 12 — JS moved to /static/js/*.js; tests need both for path checks."""
+        import re as _re
+        html = client.get("/").text
+        parts = [html]
+        for url in _re.findall(r'<script src="(/static/[^"]+)"', html):
+            try: parts.append(client.get(url).text)
+            except Exception: pass
+        return "\n".join(parts)
+
     def test_200(self, smoke_client):
         assert smoke_client.get("/").status_code == 200
 
@@ -529,19 +540,15 @@ class TestDashboardHTML:
         assert "Trigger" in html
 
     def test_references_evm_api_path(self, smoke_client):
-        html = smoke_client.get("/").text
-        assert "/api/evm" in html
+        assert "/api/evm" in self._html_plus_js(smoke_client)
 
     def test_references_dcma_api_path(self, smoke_client):
-        html = smoke_client.get("/").text
-        assert "/api/dcma" in html
+        assert "/api/dcma" in self._html_plus_js(smoke_client)
 
     def test_references_interview_sessions_path(self, smoke_client):
         """Dashboard JS must poll /api/interview-sessions for listen-in panel."""
-        html = smoke_client.get("/").text
-        assert "/api/interview-sessions" in html
+        assert "/api/interview-sessions" in self._html_plus_js(smoke_client)
 
     def test_references_interview_stream_path(self, smoke_client):
         """Dashboard JS must open SSE connection to /api/interview-stream."""
-        html = smoke_client.get("/").text
-        assert "/api/interview-stream" in html
+        assert "/api/interview-stream" in self._html_plus_js(smoke_client)
