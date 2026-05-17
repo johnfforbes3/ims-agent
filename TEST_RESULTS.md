@@ -1,13 +1,46 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 15 — Dashboard rebuild from zip (React 18 + Babel Standalone, all vendored locally)
-**Executed:** 2026-05-08
+**Test Procedure Version:** Phase 15 — Dashboard rebuild from zip + PM Portal alignment fix
+**Executed:** 2026-05-08 (re-run after pill-alignment fix)
 **Tester:** Claude (automated pytest + manual E2E via Chrome MCP)
 **Environment:** Windows 11, Python 3.13.3, React 18.3.1, Babel Standalone 7.29.0, IBM Plex fonts vendored
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs
-**Overall Result:** **PASS** — 770 passing, 1 pre-existing flake (TestTriggerEndpoint, passes in isolation), 407 legacy skipped (intentional — see Phase 15.7), 42 integration deselected
+**Overall Result:** **PASS** — **771 passed, 0 failed**, 407 legacy skipped (intentional via `@pytest.mark.legacy`), 42 integration deselected, in 461 s
 
 ---
+
+> **2026-05-08 (Phase 15 fix — PM Portal enum-list pill alignment)**
+>
+> **§1 — Defect**
+> User reported via screenshot: on the PM Portal tab, the CRITICAL/HIGH/MODERATE
+> pills in the Top Risks panel and the NOW/THIS WEEK/WITHIN 2 CYCLES pills in
+> the Recommended Actions panel were misaligned — left column pills floated
+> under the counter, right column pills sat in the column gap rather than
+> next to each item.
+>
+> **§2 — Root cause**
+> `ol.enum li` is a 3-column grid (`32px 1fr auto`) with a `::before` pseudo
+> filling column 1 (the "01" counter). The Phase 15.2 drop-in JSX from the
+> zip included an empty `<span></span>` as the first JSX child of every
+> `<li>`. That span consumed column 2 (`1fr`), pushed title+body into column 3
+> (`auto` → consumed all space), and spilled the pill div onto a new row.
+>
+> **§3 — Fix (commit `864cca2`)**
+> - `PMPortal.jsx` — removed both empty `<span></span>` placeholders in the
+>   `TOP_RISKS_PROSE` and `PM_ACTIONS_PROSE` map loops.
+> - `styles.css` — added `align-items: start` on `ol.enum li` so the pill
+>   cluster hangs at the top of the row (aligned with the title) instead of
+>   vertically centering down the middle of long body text.
+>
+> **§4 — Verification (Chrome MCP)**
+> - `getComputedStyle(li).gridTemplateColumns` now resolves to `32px 527px 70px`
+>   (was `32px 0px 598px` — `1fr` had collapsed to zero).
+> - All 3 Top Risks pills (Critical · High · Moderate) and all 4 Recommended
+>   Actions pills (Now · This week · Within 2 cycles · Recurring) confirmed
+>   right-aligned and top-aligned in the visible viewport.
+> - Full unit suite re-run: **771 passed, 0 failed** in 461 s.
+>
+> ---
 
 > **2026-05-08 (Phase 15 — Dashboard rebuild from zip)**
 >
