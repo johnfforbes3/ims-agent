@@ -71,25 +71,46 @@ function fmt(v, mode) {
 }
 
 // thin sparkline used in KPI tiles
+// Phase 15.x — hardened against short/empty value arrays.  Previously empty
+// arrays produced ±Infinity (Math.min/max), divide-by-zero on stepX, and
+// crashed on pts[length-1].  Now: empty → friendly "NO HISTORY" message,
+// single-point → flat baseline + dot, normal series unchanged.
 function Sparkline({ values, tone = "neutral", height = 56, axis }) {
   const w = 320;
   const h = height;
   const pad = { t: 8, r: 6, b: axis ? 16 : 6, l: 6 };
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const stepX = (w - pad.l - pad.r) / (values.length - 1);
-  const pts = values.map((v, i) => {
-    const x = pad.l + i * stepX;
-    const y = pad.t + (1 - (v - min) / span) * (h - pad.t - pad.b);
-    return [x, y];
-  });
-  const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
-  const area = line + " L" + pts[pts.length-1][0] + "," + (h - pad.b) + " L" + pts[0][0] + "," + (h - pad.b) + " Z";
   const color =
     tone === "ok"   ? "var(--ok)" :
     tone === "warn" ? "var(--warn)" :
     tone === "bad"  ? "var(--bad)" : "var(--accent)";
+  const safeValues = Array.isArray(values) ? values.filter(v => typeof v === "number" && isFinite(v)) : [];
+
+  // Empty-state: render a baseline + label so the tile doesn't go blank
+  if (safeValues.length === 0) {
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%", height, display:"block"}} className="kpi-spark">
+        <line x1={pad.l} x2={w-pad.r} y1={h-pad.b} y2={h-pad.b} stroke="var(--line)" />
+        <text x={w/2} y={h/2+3} fontSize="10" fill="var(--fg-4)" textAnchor="middle"
+              fontFamily="var(--mono)" letterSpacing="0.06em">NO HISTORY</text>
+      </svg>
+    );
+  }
+
+  const min = Math.min(...safeValues);
+  const max = Math.max(...safeValues);
+  const span = max - min || 1;
+  const stepX = safeValues.length > 1 ? (w - pad.l - pad.r) / (safeValues.length - 1) : 0;
+  const pts = safeValues.map((v, i) => {
+    const x = safeValues.length > 1 ? pad.l + i * stepX : (pad.l + (w - pad.l - pad.r) / 2);
+    const y = pad.t + (1 - (v - min) / span) * (h - pad.t - pad.b);
+    return [x, y];
+  });
+  const line = pts.length > 1
+    ? pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")
+    : "";
+  const area = line && pts.length > 1
+    ? line + " L" + pts[pts.length-1][0] + "," + (h - pad.b) + " L" + pts[0][0] + "," + (h - pad.b) + " Z"
+    : "";
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%", height, display:"block"}} className="kpi-spark">
@@ -102,9 +123,9 @@ function Sparkline({ values, tone = "neutral", height = 56, axis }) {
       {/* baseline grid */}
       <line x1={pad.l} x2={w-pad.r} y1={h-pad.b} y2={h-pad.b} stroke="var(--line)" />
       {axis && <line x1={pad.l} x2={pad.l} y1={pad.t} y2={h-pad.b} stroke="var(--line)" />}
-      <path d={area} fill={`url(#g-${tone})`} />
-      <path d={line} stroke={color} fill="none" strokeWidth="1.5" />
-      {/* last dot */}
+      {area && <path d={area} fill={`url(#g-${tone})`} />}
+      {line && <path d={line} stroke={color} fill="none" strokeWidth="1.5" />}
+      {/* last dot — always render so a single-point series is still visible */}
       <circle cx={pts[pts.length-1][0]} cy={pts[pts.length-1][1]} r="2.5" fill={color} />
       {axis && (
         <g fontSize="9" fill="var(--fg-4)" fontFamily="var(--mono)">

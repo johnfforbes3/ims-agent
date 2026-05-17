@@ -174,14 +174,28 @@ function SummaryScheduleGantt({ schedule, ghost }) {
 }
 
 // SRA: histogram of finish dates + cumulative line up to 100%
+// Phase 15.x — hardened against empty/zero-count data (would previously
+// produce -Infinity from Math.max([]) and NaN from divide-by-zero on
+// totalHits=0, then crash when reading data[length-1].date).
 function SRAProbChart({ data }) {
   const w = 1100, h = 360;
   const pad = { l: 56, r: 110, t: 30, b: 44 };
   const innerW = w - pad.l - pad.r;
   const innerH = h - pad.t - pad.b;
-  const N = data.length;
-  const totalHits = data.reduce((s,d)=>s+d.count,0);
-  const maxPctHits = Math.max(...data.map(d => d.count/totalHits));
+  const safeData = Array.isArray(data) ? data : [];
+  const N = safeData.length;
+  const totalHits = safeData.reduce((s,d)=>s+(d && typeof d.count === "number" ? d.count : 0),0);
+
+  // Empty-state — render a friendly placeholder instead of crashing.
+  if (N === 0 || totalHits === 0) {
+    return (
+      <div style={{position:"relative", padding:"60px 0", textAlign:"center", color:"var(--fg-3)", fontFamily:"var(--mono)", fontSize:12, letterSpacing:"0.06em"}}>
+        ▸ NO SRA DATA · Run a Monte-Carlo simulation to populate the finish-probability histogram.
+      </div>
+    );
+  }
+
+  const maxPctHits = Math.max(...safeData.map(d => d.count/totalHits)) || 1;
   const barW = innerW / N;
 
   const xOf = i => pad.l + i * barW;
@@ -189,14 +203,14 @@ function SRAProbChart({ data }) {
   const yCum = pct => pad.t + (1 - pct) * innerH;
 
   // line points (use right edge of each bar)
-  const linePts = data.map((d, i) => [xOf(i) + barW, yCum(d.pct)]);
+  const linePts = safeData.map((d, i) => [xOf(i) + barW, yCum(d.pct)]);
   const linePath = linePts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
 
   // percentile horizontal markers
-  const percentiles = window.SRA_PCTS;
+  const percentiles = window.SRA_PCTS || [];
   function dateAtPct(p) {
-    for (let i=0; i<data.length; i++) if (data[i].pct >= p) return data[i].date;
-    return data[data.length-1].date;
+    for (let i=0; i<safeData.length; i++) if (safeData[i].pct >= p) return safeData[i].date;
+    return safeData[safeData.length-1].date;
   }
 
   const [hover, setHover] = useState(null);
