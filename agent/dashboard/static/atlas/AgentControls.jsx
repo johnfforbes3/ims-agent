@@ -195,6 +195,15 @@ function AgentControlsTab() {
   const [agentMode, setAgentMode] = useState("auto"); // auto | manual | paused
   const [confirmOpen, setConfirmOpen] = useState(null);
 
+  // Phase 15.x — listen for hero-button events so the DRY-RUN and
+  // KILL SWITCH buttons in the page hero open the same modal as the
+  // in-panel agent control bar.
+  useEffect(() => {
+    const onOpen = (e) => setConfirmOpen(e.detail?.kind || null);
+    window.addEventListener("atlas:open-confirm", onOpen);
+    return () => window.removeEventListener("atlas:open-confirm", onOpen);
+  }, []);
+
   return (
     <div className="page stack" style={{gap: 24}}>
 

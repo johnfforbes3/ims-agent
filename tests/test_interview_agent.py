@@ -476,9 +476,45 @@ class TestConversationalContext:
         assert agent.state == InterviewState.COMPLETE
         assert turn.text  # must produce a response
 
-    def test_correction_applied_stays_in_confirm(self):
-        """When _extract_and_apply_correction succeeds (mocked), bot re-confirms."""
+    def test_correction_applied_stays_in_confirm(self, monkeypatch):
+        """When _extract_and_apply_correction succeeds (mocked), bot re-confirms.
+
+        Phase 15.x fix: deterministic mock of _classify_cam_response and
+        _classify_eac_date (same pattern as TD-042's test_flat_denial fix).
+        Without these mocks the test depends on the live Anthropic API
+        being reachable AND in-credit, which makes it flaky / blocked when
+        credit is exhausted.  The mocks reproduce the LLM's expected
+        classifications without hitting the network.
+        """
         from unittest.mock import patch
+        import agent.voice.interview_agent as ia
+
+        def _classify(state, question, response, *args, **kwargs):
+            import re as _re
+            r = (response or "").strip().lower()
+            if r == "yes" or "that's right" in r or "thats right" in r:
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r == "no":
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "negative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r.isdigit():
+                return {"percent": int(r), "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            # Task-ID correction patterns ("AI-07 should be …", "not AI-09")
+            if _re.search(r"\b[a-z]{2,4}-\d{2}\b", r) and ("should be" in r or "not " in r or "actually" in r):
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "negative", "unknown": False, "key_insight": response, "cam_question": False}
+            if "waiting" in r or "blocked" in r or "blocker" in r:
+                return {"percent": None, "blocker_mentioned": True, "blocker_text": response,
+                        "sentiment": "unclear", "unknown": False, "key_insight": "", "cam_question": False}
+            return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                    "sentiment": "unclear", "unknown": False, "key_insight": "", "cam_question": False}
+
+        monkeypatch.setattr(ia, "_classify_cam_response", _classify)
+        monkeypatch.setattr(ia, "_classify_eac_date",
+                            lambda *a, **kw: {"intent": "on_track", "uncertain": False})
+
         task = _make_task("AI-07", "AI Platform", pct=30)
         agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
         agent.start()
@@ -497,9 +533,41 @@ class TestConversationalContext:
         assert agent.state == InterviewState.CONFIRM
         assert turn.text  # must produce a re-confirmation message
 
-    def test_after_correction_affirmative_closes(self):
-        """After correction is applied and re-confirmed, 'yes' closes properly."""
+    def test_after_correction_affirmative_closes(self, monkeypatch):
+        """After correction is applied and re-confirmed, 'yes' closes properly.
+
+        Phase 15.x fix: same deterministic LLM mock as
+        test_correction_applied_stays_in_confirm above.
+        """
         from unittest.mock import patch
+        import agent.voice.interview_agent as ia
+
+        def _classify(state, question, response, *args, **kwargs):
+            import re as _re
+            r = (response or "").strip().lower()
+            if r == "yes" or "that's right" in r or "thats right" in r:
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r == "no":
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "negative", "unknown": False, "key_insight": "", "cam_question": False}
+            if r.isdigit():
+                return {"percent": int(r), "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "affirmative", "unknown": False, "key_insight": "", "cam_question": False}
+            # Task-ID correction patterns ("AI-07 should be …", "not AI-09")
+            if _re.search(r"\b[a-z]{2,4}-\d{2}\b", r) and ("should be" in r or "not " in r or "actually" in r):
+                return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                        "sentiment": "negative", "unknown": False, "key_insight": response, "cam_question": False}
+            if "waiting" in r or "blocked" in r or "blocker" in r:
+                return {"percent": None, "blocker_mentioned": True, "blocker_text": response,
+                        "sentiment": "unclear", "unknown": False, "key_insight": "", "cam_question": False}
+            return {"percent": None, "blocker_mentioned": False, "blocker_text": "",
+                    "sentiment": "unclear", "unknown": False, "key_insight": "", "cam_question": False}
+
+        monkeypatch.setattr(ia, "_classify_cam_response", _classify)
+        monkeypatch.setattr(ia, "_classify_eac_date",
+                            lambda *a, **kw: {"intent": "on_track", "uncertain": False})
+
         task = _make_task("AI-07", "AI Platform", pct=30)
         agent = InterviewAgent("Alice", [task], expected_pcts={"AI-07": 80})
         agent.start()

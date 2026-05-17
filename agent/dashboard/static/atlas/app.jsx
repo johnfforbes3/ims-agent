@@ -197,8 +197,12 @@ function Hero({ tab }) {
                triggerState === "done"    ? "✓ TRIGGERED"     :
                                             "▶ FORCE CYCLE"}
             </button>
-            <button className="btn">⏵ DRY-RUN</button>
-            <button className="btn danger">■ KILL SWITCH</button>
+            {/* Phase 15.x fix: hero DRY-RUN and KILL SWITCH used to be
+                inert.  Now they dispatch a custom DOM event that the
+                AgentControlsTab confirm-modal listens for, so the hero
+                buttons open the same dialogs as the in-panel buttons. */}
+            <button className="btn" onClick={() => window.dispatchEvent(new CustomEvent("atlas:open-confirm", {detail:{kind:"dry"}}))}>⏵ DRY-RUN</button>
+            <button className="btn danger" onClick={() => window.dispatchEvent(new CustomEvent("atlas:open-confirm", {detail:{kind:"kill"}}))}>■ KILL SWITCH</button>
           </div>
           <HeroStats items={[
             { label: "CAMS RESPONDED", value: String(camsResponded), unit:"/" + camsTotal, tone: camsResponded === camsTotal ? "ok" : "warn" },
