@@ -43,17 +43,27 @@ function AgentControlsTab() {
   const totalCams = window.CAMS.length;
 
   // ---- Interview stream (Phase 15.5 — real SSE from /api/interview-stream) ----
-  // Backfills last 20 turns via /api/interview-recent, then opens an SSE
-  // EventSource for live turns.  Falls back to the scripted demo loop
-  // (INTERVIEW_SCRIPT) when no live turns arrive within 8s so the panel
-  // still has motion during a stand-down.
+  // Backfills last N turns via /api/interview-recent, then opens an SSE
+  // EventSource for live turns.  Demo-loop fallback REMOVED in Phase 15.x
+  // fix — it was prepending fake CAM-102/turbopump dialog on top of real
+  // turns, which read like a bug.  Now: when no live turns arrive, the
+  // panel shows a clear "Waiting for CAM responses" empty state and the
+  // status badge stays accurate.  Demo loop is opt-in via ?demo=1 only.
   const [stream, setStream] = useState([]);
   const [typing, setTyping] = useState(false);
-  const [streamMode, setStreamMode] = useState("connecting"); // connecting | live | demo
+  const [streamMode, setStreamMode] = useState("connecting"); // connecting | live | backfill | empty | error | demo
+  const [streamMeta, setStreamMeta] = useState({ backfilled: 0, liveTurns: 0, activeSessions: 0 });
   const streamRef = useRef(null);
   const evtSourceRef = useRef(null);
   const scriptIdxRef = useRef(0);
   const lastLiveSeqRef = useRef(0);
+
+  // Demo mode is opt-in via ?demo=1 query param so the fake INTERVIEW_SCRIPT
+  // only plays in obvious demo contexts (never in production with a live cycle).
+  const demoModeEnabled = (() => {
+    try { return new URLSearchParams(window.location.search).get("demo") === "1"; }
+    catch (_) { return false; }
+  })();
 
   function fmtTs(t) {
     const d = typeof t === "number" ? new Date(t * 1000) : new Date();
@@ -76,7 +86,8 @@ function AgentControlsTab() {
     let demoTimer = null;
 
     function startDemoLoop() {
-      if (cancelled) return;
+      // Only runs when ?demo=1 — never in production
+      if (cancelled || !demoModeEnabled) return;
       setStreamMode("demo");
       demoTimer = setInterval(() => {
         const script = window.INTERVIEW_SCRIPT || [];
@@ -96,47 +107,69 @@ function AgentControlsTab() {
     }
 
     async function init() {
+      // 1. Backfill — load the last 30 real turns (proactive greetings, prior
+      //    CAM answers, system events) for transcript context.
+      let backfilledCount = 0;
       try {
-        const r = await fetch("/api/interview-recent?n=20");
+        const r = await fetch("/api/interview-recent?n=30");
         if (r.ok) {
           const data = await r.json();
           const events = data.events || [];
           if (!cancelled && events.length > 0) {
             setStream(events.map(evtToMsg));
+            backfilledCount = events.length;
             lastLiveSeqRef.current = data.seq || 0;
           }
         }
       } catch (_) {}
 
+      // 2. Probe active sessions so the empty-state can say something specific
+      //    ("5 CAMs are interviewing — waiting for their replies")
+      let activeSessions = 0;
+      try {
+        const r = await fetch("/api/interview-sessions");
+        if (r.ok) {
+          const sessions = await r.json();
+          if (Array.isArray(sessions)) activeSessions = sessions.length;
+        }
+      } catch (_) {}
+
+      if (!cancelled) {
+        setStreamMeta(m => ({ ...m, backfilled: backfilledCount, activeSessions }));
+        setStreamMode(backfilledCount > 0 ? "backfill" : "empty");
+      }
+
+      // 3. Open SSE for live turns.  Demo loop only kicks in when ?demo=1.
       try {
         const url = `/api/interview-stream?since=${lastLiveSeqRef.current}`;
         const es = new EventSource(url);
         evtSourceRef.current = es;
-        let gotAny = false;
-        const watchdog = setTimeout(() => {
-          if (!gotAny && !cancelled) {
-            es.close();
-            startDemoLoop();
+        let liveCount = 0;
+        es.onopen = () => {
+          if (!cancelled && backfilledCount === 0 && demoModeEnabled) {
+            // Empty production → only start demo if ?demo=1
+            setTimeout(() => {
+              if (!cancelled && liveCount === 0 && backfilledCount === 0) startDemoLoop();
+            }, 4000);
           }
-        }, 8000);
-        es.onopen = () => { if (!cancelled) setStreamMode("live"); };
+        };
         es.onmessage = (e) => {
-          gotAny = true;
-          clearTimeout(watchdog);
+          liveCount++;
           try {
             const ev = JSON.parse(e.data);
             lastLiveSeqRef.current = Math.max(lastLiveSeqRef.current, (ev.seq || 0) + 1);
             setStream(prev => [...prev, evtToMsg(ev)]);
+            if (!cancelled) {
+              setStreamMode("live");
+              setStreamMeta(m => ({ ...m, liveTurns: liveCount }));
+            }
           } catch (_) {}
         };
         es.onerror = () => {
-          if (!gotAny && !cancelled) {
-            clearTimeout(watchdog);
-            startDemoLoop();
-          }
+          if (!cancelled) setStreamMode(m => m === "live" ? "live" : "error");
         };
       } catch (_) {
-        startDemoLoop();
+        if (!cancelled) setStreamMode("error");
       }
     }
 
@@ -146,7 +179,7 @@ function AgentControlsTab() {
       if (evtSourceRef.current) evtSourceRef.current.close();
       if (demoTimer) clearInterval(demoTimer);
     };
-  }, []);
+  }, [demoModeEnabled]);
 
   useEffect(() => {
     if (streamRef.current) {
@@ -483,11 +516,31 @@ function AgentControlsTab() {
         </table>
       </Panel>
 
-      {/* Live Interview Listen-In */}
+      {/* Live Interview Listen-In — Phase 15.5 (real SSE) + Phase 15.x (status badge) */}
       <Panel
         id="06"
         title={<span><span className="dot live" style={{marginRight: 8, verticalAlign:1}} />LIVE INTERVIEW LISTEN-IN · CAM ⇄ ATLAS</span>}
-        right={<span><span className="hint">SSE</span> · <span style={{color:"var(--accent)"}}>STREAMING</span> · TURN {stream.length}</span>}
+        right={
+          <span style={{display:"flex", gap:8, alignItems:"center"}}>
+            <span className="hint">SSE</span>
+            {streamMode === "live" && (
+              <span style={{color:"var(--ok)"}}>● LIVE · {streamMeta.liveTurns} new turn{streamMeta.liveTurns===1?"":"s"}</span>
+            )}
+            {streamMode === "backfill" && (
+              <span style={{color:"var(--accent)"}}>● BACKFILL · {streamMeta.backfilled} turn{streamMeta.backfilled===1?"":"s"} loaded</span>
+            )}
+            {streamMode === "empty" && streamMeta.activeSessions > 0 && (
+              <span style={{color:"var(--warn)"}}>● WAITING · {streamMeta.activeSessions} CAM{streamMeta.activeSessions===1?"":"s"} interviewing</span>
+            )}
+            {streamMode === "empty" && streamMeta.activeSessions === 0 && (
+              <span className="muted">○ IDLE · no active interviews</span>
+            )}
+            {streamMode === "connecting" && <span className="muted">○ CONNECTING…</span>}
+            {streamMode === "error" && <span style={{color:"var(--bad)"}}>✗ STREAM ERROR</span>}
+            {streamMode === "demo" && <span style={{color:"var(--warn)"}}>⚠ DEMO MODE · scripted dialogue</span>}
+            <span className="muted">· TOTAL {stream.length}</span>
+          </span>
+        }
         flush
       >
         <div className="stream" ref={streamRef}>
@@ -505,10 +558,30 @@ function AgentControlsTab() {
               <span className="body typing">▌ typing<TypingDots /></span>
             </div>
           )}
-          {stream.length === 0 && !typing && <div className="muted" style={{padding:"24px 0"}}>Waiting for stream…</div>}
+          {stream.length === 0 && !typing && (
+            <div className="muted" style={{padding:"32px 12px", textAlign:"center", lineHeight:1.7}}>
+              {streamMode === "connecting" && "▸ Connecting to interview stream…"}
+              {streamMode === "empty" && streamMeta.activeSessions > 0 && (
+                <>
+                  <div>▸ {streamMeta.activeSessions} CAM interview{streamMeta.activeSessions===1?"":"s"} in flight.</div>
+                  <div style={{marginTop:6, fontSize:11}}>Live turns will appear here as ATLAS and CAMs exchange messages in Teams chat.</div>
+                </>
+              )}
+              {streamMode === "empty" && streamMeta.activeSessions === 0 && (
+                <>
+                  <div>▸ No interview cycle currently active.</div>
+                  <div style={{marginTop:6, fontSize:11}}>Trigger a new cycle from the FORCE CYCLE button above to start interviews.</div>
+                </>
+              )}
+              {streamMode === "error" && "✗ Stream error — backend unreachable. Check /api/interview-stream."}
+            </div>
+          )}
         </div>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderTop:"1px solid var(--line)", background:"var(--panel-2)"}}>
-          <span className="hint">CHANNEL · cam-interview/c-2026-19 · 2 listeners</span>
+          <span className="hint">
+            CHANNEL · cam-interview/{window.__IMS_CYCLE_ID || (window.__IMS_LIVE?.state?.cycle_id) || "—"} ·
+            {streamMeta.activeSessions > 0 ? ` ${streamMeta.activeSessions} session${streamMeta.activeSessions===1?"":"s"}` : " no active sessions"}
+          </span>
           <div style={{display:"flex", gap: 8}}>
             <button className="btn">PAUSE STREAM</button>
             <button className="btn">EXPORT TRANSCRIPT</button>

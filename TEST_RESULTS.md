@@ -9,6 +9,52 @@
 
 ---
 
+> **2026-05-08 (Phase 15 fix — Live Interview Listen-In demo-fallback bug)**
+>
+> **§1 — Defect**
+> User reported the Listen-In panel was showing CAMs and tasks they didn't
+> recognize — specifically `CAM-102 / S. Patel / turbopump bearings /
+> TVAC analysts`.  Those are mock entries from `INTERVIEW_SCRIPT` in
+> `data.js`, not the real production CAMs (Alice / Bob / Carol / David /
+> Eva) running against the real IMS.
+>
+> **§2 — Root cause**
+> Phase 15.5 wired the SSE stream with an 8-second watchdog: if no new
+> live turns arrived (because real CAMs hadn't responded in Teams chat
+> yet), `startDemoLoop()` would kick in and PREPEND the fake scripted
+> dialogue on top of the real backfill turns.  Users saw the fake content
+> at the bottom of the transcript (most recent additions) and reasonably
+> concluded the system wasn't using the real IMS.
+>
+> Meanwhile `/api/interview-recent?n=30` was returning 5 REAL bot
+> greetings from tonight's cycle (`20260517T015651Z`) — they were being
+> rendered, just buried under the demo content.
+>
+> **§3 — Fix (commit `<this commit>`)**
+> - `AgentControls.jsx` — removed demo-loop fallback from production
+>   render path.  Now gated behind `?demo=1` query param only.
+> - Added a real-time status badge with five states: `LIVE` (green) /
+>   `BACKFILL` (accent) / `WAITING N CAMs interviewing` (yellow) /
+>   `IDLE no active interviews` (muted) / `STREAM ERROR` (red).
+> - Replaced the generic "Waiting for stream…" placeholder with a
+>   context-aware empty state that names the active session count and
+>   tells the user what to do next.
+> - Channel footer now shows the real `cycle_id` and active-session
+>   count instead of the hardcoded `c-2026-19 · 2 listeners`.
+>
+> **§4 — Verification (Chrome MCP against live server)**
+> - Status badge: `SSE ● BACKFILL · 5 TURNS LOADED · TOTAL 5` (was previously
+>   misleadingly `STREAMING · TURN N` regardless of actual state).
+> - All 5 visible turns are real production CAM greetings:
+>   `ATLAS → Alice Nguyen: Hey Alice! ATLAS here — doing a quick status
+>   check. 6 things on my list. Good time?` (and 4 more for Bob / Carol /
+>   David / Eva with their real task counts 17 / 7 / 7 / 15).
+> - Channel footer: `CAM-INTERVIEW/20260507T222726Z · 5 SESSIONS`.
+> - Zero `CAM-102 / S. Patel / turbopump / TVAC` content visible.
+> - Phase 15 test suite: 63/63 passing in 14 s.
+>
+> ---
+
 > **2026-05-08 (Phase 15 fix — PM Portal enum-list pill alignment)**
 >
 > **§1 — Defect**
