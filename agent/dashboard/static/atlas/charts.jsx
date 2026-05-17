@@ -305,16 +305,22 @@ function SRAProbChart({ data }) {
   );
 }
 
-// generic line chart for "Schedule Health History — last 24 cycles"
-function LineChart({ values, w = 800, h = 200, label, yMin = 0, yMax = 100, tone = "accent" }) {
+// generic line chart for "Schedule Health History — last N cycles"
+// Phase 15.x — added optional `zones` prop for R/Y/G health-band backgrounds.
+// Each zone: { from, to, color }.  Rendered as semi-transparent rectangles
+// behind the line so the user can see at a glance whether values are RED /
+// YELLOW / GREEN territory.
+function LineChart({ values, w = 800, h = 200, label, yMin = 0, yMax = 100, tone = "accent", zones }) {
   const pad = { l: 40, r: 16, t: 16, b: 24 };
   const innerW = w - pad.l - pad.r;
   const innerH = h - pad.t - pad.b;
-  const stepX = innerW / (values.length - 1);
+  const stepX = values.length > 1 ? innerW / (values.length - 1) : innerW;
   const yOf = v => pad.t + (1 - (v - yMin)/(yMax - yMin)) * innerH;
   const xOf = i => pad.l + i * stepX;
   const pts = values.map((v, i) => [xOf(i), yOf(v)]);
-  const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+  const path = pts.length > 1
+    ? pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")
+    : "";
   const color =
     tone === "ok" ? "var(--ok)" : tone === "bad" ? "var(--bad)" :
     tone === "warn" ? "var(--warn)" : "var(--accent)";
@@ -323,17 +329,35 @@ function LineChart({ values, w = 800, h = 200, label, yMin = 0, yMax = 100, tone
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%", height:"auto", display:"block"}}>
+      {/* Health-band backgrounds (rendered first so the grid lines / data overlay them). */}
+      {zones && zones.map((z, i) => {
+        const yTop = yOf(z.to);
+        const yBot = yOf(z.from);
+        return (
+          <g key={i}>
+            <rect x={pad.l} y={Math.min(yTop, yBot)} width={innerW}
+                  height={Math.abs(yBot - yTop)} fill={z.color} opacity="0.12" />
+            {z.label && (
+              <text x={w - pad.r - 6} y={(yTop + yBot) / 2 + 3}
+                    fontSize="9" fill={z.color} opacity="0.7" textAnchor="end"
+                    fontFamily="var(--mono)" letterSpacing="0.08em">
+                {z.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
       {ticks.map((t, i) => (
         <g key={i}>
           <line x1={pad.l} x2={w-pad.r} y1={yOf(t)} y2={yOf(t)} stroke="var(--line)" />
           <text x={pad.l - 6} y={yOf(t)+3} fontSize="10" fill="var(--fg-3)" textAnchor="end">{t}</text>
         </g>
       ))}
-      <path d={path} stroke={color} strokeWidth="1.6" fill="none" />
+      {path && <path d={path} stroke={color} strokeWidth="1.6" fill="none" />}
       {pts.map((p, i) => (
-        <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={color} />
+        <circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill={color} />
       ))}
-      <text x={pad.l} y={h-6} fontSize="10" fill="var(--fg-3)">CYCLE −{values.length-1}</text>
+      <text x={pad.l} y={h-6} fontSize="10" fill="var(--fg-3)">CYCLE −{Math.max(0, values.length-1)}</text>
       <text x={w-pad.r} y={h-6} fontSize="10" fill="var(--fg-3)" textAnchor="end">CURRENT</text>
       {label && (
         <text x={w-pad.r} y={pad.t-4} fontSize="10" fill="var(--fg-3)" textAnchor="end" letterSpacing="0.06em">{label}</text>

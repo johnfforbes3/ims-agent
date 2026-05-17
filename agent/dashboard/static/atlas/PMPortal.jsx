@@ -109,33 +109,72 @@ function PMPortalTab() {
 
       <SectionHeader ix="03" label="HEALTH HISTORY · TREND" />
 
-      <Panel id="03·a" title="SCHEDULE HEALTH HISTORY · LAST 24 CYCLES" right={
-        <div style={{display:"flex", gap: 12, alignItems:"center"}}>
-          <span className="hint">CURRENT · {last}</span>
-          <span style={{color: last - start < 0 ? "var(--bad)" : "var(--ok)", fontFamily:"var(--mono)", fontSize:11}}>
-            {last - start >= 0 ? "▲" : "▼"} {Math.abs(last - start)} pts · 24-cycle
-          </span>
-        </div>
-      } flush>
-        <div style={{padding: 16}}>
-          <LineChart values={window.HEALTH_HISTORY} w={1300} h={220} yMin={50} yMax={90} label="HEALTH SCORE · 0-100" tone={last < 70 ? "bad" : last < 80 ? "warn" : "ok"} />
-        </div>
-        <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", borderTop:"1px solid var(--line)"}}>
-          {[
-            { k: "PEAK", v: Math.max(...window.HEALTH_HISTORY), c: "ok" },
-            { k: "TROUGH", v: Math.min(...window.HEALTH_HISTORY), c: "bad" },
-            { k: "MEAN", v: Math.round(window.HEALTH_HISTORY.reduce((a,b)=>a+b,0)/window.HEALTH_HISTORY.length), c: "warn" },
-            { k: "DELTA 4-CYC", v: window.HEALTH_HISTORY[23] - window.HEALTH_HISTORY[19], c: "bad", suffix: " pts" },
-          ].map((s, i) => (
-            <div key={s.k} style={{padding:"12px 14px", borderRight: i<3 ? "1px solid var(--line)" : "none", background:"var(--panel-2)"}}>
-              <div className="hint">{s.k}</div>
-              <div className="kpi-val" style={{fontSize: 22, marginTop:4, color: s.c === "ok" ? "var(--ok)" : s.c === "bad" ? "var(--bad)" : "var(--warn)"}}>
-                {s.v > 0 && s.suffix ? "+" : ""}{s.v}{s.suffix || ""}
-              </div>
+      {/* Phase 15.x fix — chart now uses full 0-100 range with R/Y/G zone
+          bands.  Previously yMin=50 was hiding RED values (score 35) below
+          the visible axis, which made the chart look broken when every
+          cycle in history was RED.  Stats are guarded against short
+          history and now show the dominant health label alongside the
+          numeric value. */}
+      {(() => {
+        const H = window.HEALTH_HISTORY || [];
+        const lbl = v => v >= 75 ? "GREEN" : v >= 40 ? "YELLOW" : "RED";
+        const tone = v => v >= 75 ? "ok"   : v >= 40 ? "warn"   : "bad";
+        const lastVal = H.length ? H[H.length - 1] : 50;
+        const firstVal = H.length ? H[0] : 50;
+        const delta4 = H.length >= 5 ? H[H.length-1] - H[H.length-5] : 0;
+        const peakVal = H.length ? Math.max(...H) : 50;
+        const troughVal = H.length ? Math.min(...H) : 50;
+        const meanVal = H.length ? Math.round(H.reduce((a,b)=>a+b,0)/H.length) : 50;
+        const flat = H.length > 1 && peakVal === troughVal;
+        const zones = [
+          { from: 0,  to: 40,  color: "var(--bad)",  label: "RED" },
+          { from: 40, to: 75,  color: "var(--warn)", label: "YELLOW" },
+          { from: 75, to: 100, color: "var(--ok)",   label: "GREEN" },
+        ];
+        return (
+          <Panel id="03·a" title={`SCHEDULE HEALTH HISTORY · LAST ${H.length} CYCLE${H.length===1?"":"S"}`} right={
+            <div style={{display:"flex", gap: 12, alignItems:"center"}}>
+              <span className="hint">CURRENT ·</span>
+              <span style={{color: `var(--${tone(lastVal)})`, fontFamily:"var(--mono)", fontSize:11, fontWeight:600}}>
+                {lbl(lastVal)} ({lastVal})
+              </span>
+              <span className="hint">·</span>
+              <span style={{color: lastVal - firstVal < 0 ? "var(--bad)" : lastVal - firstVal > 0 ? "var(--ok)" : "var(--fg-3)", fontFamily:"var(--mono)", fontSize:11}}>
+                {lastVal - firstVal > 0 ? "▲" : lastVal - firstVal < 0 ? "▼" : "■"} {Math.abs(lastVal - firstVal)} pts · {H.length}-cycle
+              </span>
             </div>
-          ))}
-        </div>
-      </Panel>
+          } flush>
+            <div style={{padding: 16}}>
+              <LineChart values={H} w={1300} h={220} yMin={0} yMax={100}
+                         label="HEALTH SCORE · 0-100 · ZONES: RED 0-40 / YELLOW 40-75 / GREEN 75-100"
+                         tone={tone(lastVal)} zones={zones} />
+              {flat && (
+                <div style={{textAlign:"center", marginTop:8, fontFamily:"var(--mono)", fontSize:11, color:"var(--fg-3)"}}>
+                  ▸ Health has been consistently <span style={{color:`var(--${tone(lastVal)})`}}>{lbl(lastVal)}</span> across all {H.length} cycles in history. No variation to chart.
+                </div>
+              )}
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", borderTop:"1px solid var(--line)"}}>
+              {[
+                { k: "PEAK",        v: peakVal,    label: lbl(peakVal),   c: tone(peakVal)   },
+                { k: "TROUGH",      v: troughVal,  label: lbl(troughVal), c: tone(troughVal) },
+                { k: "MEAN",        v: meanVal,    label: lbl(meanVal),   c: tone(meanVal)   },
+                { k: "DELTA 4-CYC", v: delta4,     label: delta4 === 0 ? "no change" : (delta4 > 0 ? "improving" : "declining"),
+                                                   c: delta4 > 0 ? "ok" : delta4 < 0 ? "bad" : "neutral", suffix: " pts", showSign: true },
+              ].map((s, i) => (
+                <div key={s.k} style={{padding:"12px 14px", borderRight: i<3 ? "1px solid var(--line)" : "none", background:"var(--panel-2)"}}>
+                  <div className="hint">{s.k}</div>
+                  <div className="kpi-val" style={{fontSize: 22, marginTop:4,
+                       color: s.c === "ok" ? "var(--ok)" : s.c === "bad" ? "var(--bad)" : s.c === "warn" ? "var(--warn)" : "var(--fg-2)"}}>
+                    {s.showSign && s.v > 0 ? "+" : ""}{s.v}{s.suffix || ""}
+                  </div>
+                  <div style={{fontSize:10, color:"var(--fg-3)", marginTop:2, letterSpacing:"0.05em"}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
 
       <SectionHeader ix="04" label="SCHEDULE VARIANCE NARRATIVE · CPR FORMAT 5" />
 
