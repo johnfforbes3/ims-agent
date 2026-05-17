@@ -479,6 +479,9 @@ ol.enum li {
   padding: 12px 0;
   border-bottom: 1px dashed var(--line);
   display: grid; grid-template-columns: 32px 1fr auto; gap: 12px;
+  align-items: start;   /* Phase 15.x — pills hang at the top of the row,
+                          aligned with the title, instead of vertically
+                          centered down the middle of long body text. */
   font-family: var(--sans); font-size: 13px; color: var(--fg-2); line-height: 1.5;
 }
 ol.enum li:last-child { border: none; }

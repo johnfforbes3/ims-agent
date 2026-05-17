@@ -64,10 +64,14 @@ function PMPortalTab() {
           <div className="prose">
             <p>The narrative below is generated from <strong>this cycle's IMS diff</strong>, CAM interview outcomes, and a 24-cycle horizon of EVM movements. Confidence and impact are stated; treat as decision support, not authority.</p>
           </div>
+          {/* Phase 15.x fix: the .enum grid is "32px 1fr auto" — the leading
+              ::before pseudo-element already fills col 1 with the counter,
+              so the title/body must be the FIRST child (col 2 = 1fr) and
+              the pill cluster the SECOND child (col 3 = auto right-aligned).
+              The earlier empty <span /> was pushing the pill onto a new row. */}
           <ol className="enum" style={{marginTop:12}}>
             {window.TOP_RISKS_PROSE.map(r => (
               <li key={r.id}>
-                <span></span>
                 <div>
                   <div style={{color:"var(--fg)", fontWeight:600, marginBottom:4}}>{r.title}</div>
                   <div>{r.body}</div>
@@ -92,7 +96,6 @@ function PMPortalTab() {
           <ol className="enum" style={{marginTop:12}}>
             {window.PM_ACTIONS_PROSE.map(a => (
               <li key={a.id}>
-                <span></span>
                 <div>
                   <div style={{color:"var(--fg)", fontWeight:600, marginBottom:4}}>{a.title}</div>
                   <div>{a.body}</div>
