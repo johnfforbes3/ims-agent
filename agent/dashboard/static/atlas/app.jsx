@@ -1,10 +1,13 @@
 // ATLAS IMS Agent Console — App shell with terminal-style tab navigation
 // and per-tab hero blocks. Original design (not a recreation of any specific product).
 
+// Tab metadata.  Phase 15.x — channel-number badges removed per user
+// request; F-key hints kept (they're keyboard-shortcut indicators, not
+// "channel" references).
 const TABS = [
-  { id: "stats",   num: "01", label: "IMS Stats & Info",         hint: "F1" },
-  { id: "portal",  num: "02", label: "Program Management Portal",hint: "F2" },
-  { id: "agent",   num: "03", label: "Agent Controls",           hint: "F3" },
+  { id: "stats",   label: "IMS Stats & Info",         hint: "F1" },
+  { id: "portal",  label: "Program Management Portal",hint: "F2" },
+  { id: "agent",   label: "Agent Controls",           hint: "F3" },
 ];
 
 function useTheme() {
@@ -113,7 +116,6 @@ function Hero({ tab }) {
     return (
       <header className="hero">
         <div className="hero-inner">
-          <span className="hero-eyebrow">▸ Channel · 01</span>
           <h1 className="hero-title">IMS STATS &amp; INFO</h1>
           <div className="hero-row">
             <div className="hero-actions">
@@ -136,7 +138,6 @@ function Hero({ tab }) {
     return (
       <header className="hero">
         <div className="hero-inner">
-          <span className="hero-eyebrow">▸ Channel · 02</span>
           <h1 className="hero-title">PROGRAM MANAGEMENT PORTAL</h1>
           <div className="hero-row">
             <div className="hero-actions">
@@ -184,7 +185,6 @@ function Hero({ tab }) {
   return (
     <header className="hero">
       <div className="hero-inner">
-        <span className="hero-eyebrow">▸ Channel · 03</span>
         <h1 className="hero-title">AGENT CONTROLS</h1>
         <div className="hero-row">
           <div className="hero-actions">
@@ -261,9 +261,8 @@ function App() {
                 key={t.id}
                 className={"tab" + (tab === t.id ? " is-active" : "")}
                 onClick={() => setTab(t.id)}
-                data-screen-label={`${t.num} ${t.label}`}
+                data-screen-label={t.label}
               >
-                <span className="tab-num">{t.num}</span>
                 <span>{t.label}</span>
                 <span style={{color:"var(--fg-4)", fontSize:9, marginLeft:6}}>{t.hint}</span>
               </button>
@@ -280,11 +279,11 @@ function App() {
         </div>
       </header>
 
-      <TickerBar />
+      {/* Phase 15.x — ticker bar removed per user request. */}
 
       <main>
         <Hero tab={tab} />
-        <div data-screen-label={tab === "stats" ? "01 IMS Stats & Info" : tab === "portal" ? "02 PM Portal" : "03 Agent Controls"}>
+        <div data-screen-label={tab === "stats" ? "IMS Stats & Info" : tab === "portal" ? "PM Portal" : "Agent Controls"}>
           {tab === "stats"  && <IMSStatsTab />}
           {tab === "portal" && <PMPortalTab />}
           {tab === "agent"  && <AgentControlsTab />}

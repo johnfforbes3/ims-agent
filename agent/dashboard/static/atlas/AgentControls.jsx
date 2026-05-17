@@ -53,6 +53,36 @@ function AgentControlsTab() {
   const [typing, setTyping] = useState(false);
   const [streamMode, setStreamMode] = useState("connecting"); // connecting | live | backfill | empty | error | demo
   const [streamMeta, setStreamMeta] = useState({ backfilled: 0, liveTurns: 0, activeSessions: 0 });
+
+  // Phase 15.x — per-CAM filter for the Listen-In transcript.
+  // selectedCams is a Set of CAM names; empty Set means "show all".
+  // The filter dropdown lets users watch one CAM, several, or all (default).
+  // System messages (sys speaker) always show regardless of filter.
+  const [selectedCams, setSelectedCams] = useState(() => new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Derived: unique CAM names that have appeared in the stream so far,
+  // sorted alphabetically.  Used to populate the dropdown checkboxes.
+  const knownCams = useMemo(() => {
+    const set = new Set();
+    stream.forEach(m => { if (m.camName) set.add(m.camName); });
+    return [...set].sort();
+  }, [stream]);
+  // Derived: the stream filtered by the active selection.  Empty selection
+  // = pass everything through unchanged.
+  const filteredStream = useMemo(() => {
+    if (selectedCams.size === 0) return stream;
+    return stream.filter(m => !m.camName || selectedCams.has(m.camName));
+  }, [stream, selectedCams]);
+
+  function toggleCamFilter(name) {
+    setSelectedCams(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }
+  function selectAllCams()   { setSelectedCams(new Set(knownCams)); }
+  function clearCamFilter()  { setSelectedCams(new Set()); }
   const streamRef = useRef(null);
   const evtSourceRef = useRef(null);
   const scriptIdxRef = useRef(0);
@@ -78,7 +108,11 @@ function AgentControlsTab() {
       : who === "cam"
         ? `${name}: ${ev.text}`
         : ev.text;
-    return { who, body, ts: fmtTs(ev.timestamp), event_id: ev.event_id };
+    // Phase 15.x — keep the CAM name on the message object so the per-CAM
+    // filter dropdown can include/exclude turns cleanly without re-parsing
+    // the body text.  "sys" messages keep camName=null and are always shown.
+    const camName = (who === "agent" || who === "cam") ? name : null;
+    return { who, body, ts: fmtTs(ev.timestamp), event_id: ev.event_id, camName };
   }
 
   useEffect(() => {
@@ -547,13 +581,26 @@ function AgentControlsTab() {
             {streamMode === "connecting" && <span className="muted">○ CONNECTING…</span>}
             {streamMode === "error" && <span style={{color:"var(--bad)"}}>✗ STREAM ERROR</span>}
             {streamMode === "demo" && <span style={{color:"var(--warn)"}}>⚠ DEMO MODE · scripted dialogue</span>}
-            <span className="muted">· TOTAL {stream.length}</span>
+            <span className="muted">·</span>
+            {/* Phase 15.x — per-CAM filter dropdown */}
+            <CamFilter
+              knownCams={knownCams}
+              selectedCams={selectedCams}
+              isOpen={filterOpen}
+              onToggleOpen={() => setFilterOpen(o => !o)}
+              onToggleCam={toggleCamFilter}
+              onSelectAll={selectAllCams}
+              onClear={clearCamFilter}
+            />
+            <span className="muted">
+              · {selectedCams.size === 0 ? `ALL ${stream.length}` : `${filteredStream.length} / ${stream.length}`}
+            </span>
           </span>
         }
         flush
       >
         <div className="stream" ref={streamRef}>
-          {stream.map((m, i) => (
+          {filteredStream.map((m, i) => (
             <div key={i} className="msg">
               <span className="ts">{m.ts}</span>
               <span className={"who " + m.who}>{m.who.toUpperCase()}</span>
@@ -565,6 +612,12 @@ function AgentControlsTab() {
               <span className="ts">{(() => { const ts = new Date(); return [ts.getHours(), ts.getMinutes(), ts.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"); })()}</span>
               <span className="who agent">ATLAS</span>
               <span className="body typing">▌ typing<TypingDots /></span>
+            </div>
+          )}
+          {filteredStream.length === 0 && stream.length > 0 && (
+            <div className="muted" style={{padding:"24px 12px", textAlign:"center"}}>
+              ▸ No turns match the active CAM filter.
+              <button className="btn" style={{marginLeft:10, padding:"2px 8px"}} onClick={clearCamFilter}>Clear filter</button>
             </div>
           )}
           {stream.length === 0 && !typing && (
@@ -588,7 +641,7 @@ function AgentControlsTab() {
         </div>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderTop:"1px solid var(--line)", background:"var(--panel-2)"}}>
           <span className="hint">
-            CHANNEL · cam-interview/{window.__IMS_CYCLE_ID || (window.__IMS_LIVE?.state?.cycle_id) || "—"} ·
+            CYCLE · {window.__IMS_CYCLE_ID || (window.__IMS_LIVE?.state?.cycle_id) || "—"} ·
             {streamMeta.activeSessions > 0 ? ` ${streamMeta.activeSessions} session${streamMeta.activeSessions===1?"":"s"}` : " no active sessions"}
           </span>
           <div style={{display:"flex", gap: 8}}>
@@ -613,6 +666,95 @@ function TypingDots() {
     return () => clearInterval(t);
   }, []);
   return <span>{".".repeat(n)}</span>;
+}
+
+/**
+ * Phase 15.x — CAM filter dropdown for the Listen-In transcript.
+ *
+ * Displays as a small button that, when clicked, opens a popup with one
+ * checkbox per CAM seen in the stream so far.  Empty selection = "ALL"
+ * (no filter applied — pass everything through).
+ *
+ * @param {object} props
+ * @param {string[]} props.knownCams    All CAM names that have appeared
+ * @param {Set<string>} props.selectedCams  Currently-checked CAMs
+ * @param {boolean} props.isOpen        Dropdown popup visibility
+ * @param {function} props.onToggleOpen Toggle the popup
+ * @param {function} props.onToggleCam  Toggle a single CAM (name => void)
+ * @param {function} props.onSelectAll  Check every CAM
+ * @param {function} props.onClear      Uncheck everything (= show all)
+ */
+function CamFilter({ knownCams, selectedCams, isOpen, onToggleOpen, onToggleCam, onSelectAll, onClear }) {
+  const count = selectedCams.size;
+  const total = knownCams.length;
+  // Button label depends on how many are selected
+  let label;
+  if (count === 0)              label = `ALL CAMs (${total})`;
+  else if (count === 1)         label = [...selectedCams][0];
+  else if (count === total)     label = `ALL CAMs (${total})`;
+  else                          label = `${count} of ${total} CAMs`;
+
+  const popupStyle = {
+    position: "absolute", top: "100%", right: 0, marginTop: 6,
+    background: "var(--panel)", border: "1px solid var(--line-2)", borderRadius: 4,
+    padding: "8px 0", minWidth: 200, zIndex: 50,
+    boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
+    fontFamily: "var(--sans)", fontSize: 12, color: "var(--fg)",
+  };
+  const rowStyle = { display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", cursor: "pointer", userSelect: "none" };
+
+  return (
+    <span style={{position:"relative", display:"inline-block"}}>
+      <button
+        onClick={onToggleOpen}
+        title="Filter Listen-In by CAM"
+        style={{
+          background: count > 0 && count < total ? "var(--accent-soft)" : "var(--panel-2)",
+          border: "1px solid var(--line-2)", borderRadius: 3,
+          padding: "3px 10px", color: count > 0 && count < total ? "var(--accent)" : "var(--fg-2)",
+          fontFamily: "var(--mono)", fontSize: 10, letterSpacing: "0.06em",
+          cursor: "pointer", textTransform: "uppercase",
+        }}
+        disabled={total === 0}
+      >
+        🔎 {label}
+      </button>
+      {isOpen && (
+        <>
+          {/* Backdrop to dismiss on outside click */}
+          <span style={{position:"fixed", inset:0, zIndex:40}} onClick={onToggleOpen} />
+          <div style={popupStyle}>
+            <div style={{display:"flex", justifyContent:"space-between", padding:"4px 12px 8px", borderBottom:"1px solid var(--line)"}}>
+              <button onClick={onSelectAll}
+                      style={{background:"none", border:"none", color:"var(--accent)", fontSize:10, cursor:"pointer", padding:0, textTransform:"uppercase", letterSpacing:"0.06em"}}>
+                Select all
+              </button>
+              <button onClick={onClear}
+                      style={{background:"none", border:"none", color:"var(--fg-3)", fontSize:10, cursor:"pointer", padding:0, textTransform:"uppercase", letterSpacing:"0.06em"}}>
+                Show all (clear)
+              </button>
+            </div>
+            {total === 0 && (
+              <div style={{padding:"8px 12px", color:"var(--fg-3)", fontStyle:"italic"}}>
+                No CAMs in stream yet
+              </div>
+            )}
+            {knownCams.map(name => (
+              <label key={name} style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selectedCams.has(name)}
+                  onChange={() => onToggleCam(name)}
+                  style={{margin:0, cursor:"pointer"}}
+                />
+                <span>{name}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  );
 }
 
 function ConfirmModal({ kind, onClose }) {
