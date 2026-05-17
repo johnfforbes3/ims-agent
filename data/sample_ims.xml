@@ -573,7 +573,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Waiting on procurement final sign-off for cost allocation; vendor confirmation still pending.</Notes></Task>
+        <Notes>BLOCKER: Legal is still reviewing contract terms; no movement yet, but expected redline by Thursday. | RISK: Same thing I said before — legal needs to sign off on those contract terms by Thursday. That's it. I've already escalated it on my end and made it clear this is critical path. At this point the best move is if you can flag it up the chain with whoever manages legal so they know this is a top priority. Sometimes that outside push helps more than me asking again. Otherwise it's just on them to finish their review and sign the redline.</Notes></Task>
         <Task>
             <UID>10</UID>
             <ID>10</ID>
@@ -617,7 +617,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Procurement sign-off on cost allocation is holding up the PO; should be resolved by end of day tomorrow.</Notes></Task>
+        <Notes>BLOCKER: Legal review of contract terms for PO is blocking issuance; legal sign-off expected Thursday, submission forecast Friday 1/24.</Notes></Task>
         <Task>
             <UID>11</UID>
             <ID>11</ID>
@@ -661,7 +661,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Procurement cost allocation sign-off is holding up PO submission; expected resolution by end of day tomorrow, with order going out Wednesday.</Notes></Task>
+        <Notes>BLOCKER: Legal contract terms approval is blocking submission; CAM expects legal sign-off by Thursday to submit Friday the 24th.</Notes></Task>
         <Task>
             <UID>12</UID>
             <ID>12</ID>
@@ -794,7 +794,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Waiting on procurement cost allocation sign-off; expected resolution by end of day tomorrow, with PO issuance on Wednesday.</Notes></Task>
+        <Notes>BLOCKER: Legal review and sign-off on contract terms is blocking submission; expected Thursday with Friday 24th submission.</Notes></Task>
         <Task>
             <UID>15</UID>
             <ID>15</ID>
@@ -859,7 +859,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Formal order confirmations not yet received; POs have not been issued, and vendor availability (especially CPUs and GPUs) remains uncertain until written confirmations are in hand.</Notes></Task>
+        <Notes>BLOCKER: Task cannot proceed formally until the four POs are submitted on 1/24; legal contract clearance is the blocking constraint on the upstream POs.</Notes></Task>
         <Task>
             <UID>16</UID>
             <ID>16</ID>
@@ -954,7 +954,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task cannot start until PO is issued (end of day tomorrow), vendor ships, and hardware arrives (estimated mid-February).</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on chassis PO issuance on 1/24, which depends on legal contract clearance.</Notes></Task>
         <Task>
             <UID>18</UID>
             <ID>18</ID>
@@ -998,7 +998,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task cannot start until POs are issued (dependent on procurement sign-off expected end of day tomorrow, with orders going out Wednesday); hardware lead times are 3-4 weeks, with arrival expected mid-February.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on CPU and cooling PO going out on 24th; cannot start until legal clears contract terms and order is submitted.</Notes></Task>
         <Task>
             <UID>19</UID>
             <ID>19</ID>
@@ -1531,7 +1531,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked waiting on chassis hardware delivery from vendor, expected mid-February.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on receiving chassis from vendor, which is not expected until mid-February due to upstream legal sign-off delay on PO issuance (planned for 1/24).</Notes></Task>
         <Task>
             <UID>30</UID>
             <ID>30</ID>
@@ -1575,7 +1575,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked waiting for compute components (PROC-10) to arrive in mid-February, which depends on POs going out Wednesday.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on receiving CPU and cooling components, which cannot begin until the PO goes out on the 24th and parts arrive mid-February.</Notes></Task>
         <Task>
             <UID>31</UID>
             <ID>31</ID>
@@ -1619,7 +1619,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: RAM modules must arrive first via PROC-10 order (mid-February); no work can begin until parts clear inspection.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on receiving RAM modules, which depends on the RAM and NVMe PO going out on 24th—delayed by legal bottleneck.</Notes></Task>
         <Task>
             <UID>32</UID>
             <ID>32</ID>
@@ -1663,7 +1663,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked waiting for NVMe modules to arrive with other compute components in mid-February, dependent on PROC-10.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on receiving NVMe storage, which awaits legal sign-off on the RAM and storage PO due to go out on the 24th.</Notes></Task>
         <Task>
             <UID>33</UID>
             <ID>33</ID>
@@ -1861,7 +1861,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: UPS hardware has not yet arrived; task is blocked waiting on PROC-06 order to be placed Wednesday and lead time of early to mid-February.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked waiting on UPS and PDU equipment arrival, which depends on PO going out on the 24th and legal sign-off, with mid-February expected arrival.</Notes></Task>
         <Task>
             <UID>37</UID>
             <ID>37</ID>
@@ -1905,7 +1905,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked on HW-08 completion (UPS mounted and PDU connected); chassis and UPS hardware must arrive first.</Notes></Task>
+        <Notes>BLOCKER: Waiting on UPS and PDU equipment arrival mid-February due to legal review bottleneck on the procurement PO.</Notes></Task>
         <Task>
             <UID>38</UID>
             <ID>38</ID>
@@ -1939,7 +1939,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: POST cannot start until all hardware (HW-02 through HW-09) is installed and power infrastructure is connected, which depends on component deliveries in mid-February and UPS work completion.</Notes>
+            <Notes>BLOCKER: Task is blocked on completion of all upstream hardware installation work (chassis mounting, CPU/cooling, RAM, NVMe, GPUs, and power infrastructure validation), with parts arrival expected mid-February and legal PO sign-off required by Thursday.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3022,7 +3022,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: AI-06 cannot fully close until Carol's certificate infrastructure work (mutual TLS authentication) is complete, as it is required for the integration testing with the inference pipeline.</Notes>
+            <Notes>BLOCKER: Like I said last time, nothing's holding it up. We're past the blockers on this one. It's just the load testing validation work — that's not a blocker, that's the final phase. We need to run the sustained traffic scenarios and make sure the routing efficiency holds up, and that's in progress. Once those tests look good, we're done. So it's really just execution on our end, not waiting on anything external.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3074,7 +3074,9 @@ I've already given him the finalized requirements, so it's not like we're waitin
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Authentication layer is blocked by Carol's certificate infrastructure; cannot finalize TLS mutual authentication until that work is ready. | RISK: </Notes>
+            <Notes>BLOCKER: Blocked on auth layer waiting for Carol's cert infrastructure work. | RISK: Same thing as before — we need Carol to finish the cert infrastructure work. I don't have new visibility into her timeline since we last talked, so I'm still in the same position of flagging it upward and trying to coordinate.
+
+Like I mentioned, one thing we could do on our end is start scaffolding the auth layer code now — the structural stuff for where mutual TLS plugs in — so we're not starting from scratch once the certs are available. But fundamentally, it's Carol's deliverable that we're waiting on. If her timeline is slipping, that needs to get escalated because it directly impacts the acceptance critical path.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3129,7 +3131,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Container integration and security scanning sign-off (AI-12) must be completed before full pipeline validation can accelerate.</Notes></Task>
+        <Notes>BLOCKER: ML team quantization specs are the gating item; test harness is scaffolded but end-to-end scenarios are blocked pending spec delivery.</Notes></Task>
         <Task>
             <UID>64</UID>
             <ID>64</ID>
@@ -3173,7 +3175,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Waiting on AI-10 (model versioning tooling decision: MLflow vs. custom S3) to be locked down before parameter sweep work can begin.</Notes></Task>
+        <Notes>BLOCKER: Task is not being ramped up yet because critical path items (cert infrastructure and gateway auth) are taking priority.</Notes></Task>
         <Task>
             <UID>65</UID>
             <ID>65</ID>
@@ -3251,7 +3253,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Orchestration layer API contracts from Alice are still in flux and must be finalized before the architecture document can be completed.</Notes>
+            <Notes>BLOCKER: Task is blocked waiting for Alice to deliver API contracts for the orchestration layer.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -3306,7 +3308,7 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: AI-12 (container security sign-off) must complete before full pipeline validation can proceed; if AI-12 slips beyond early April, it will compress the timeline significantly.</Notes></Task>
+        <Notes>BLOCKER: Dev team turnaround on image patching is the main variable delaying handoff and verification.</Notes></Task>
         <Task>
             <UID>68</UID>
             <ID>68</ID>
@@ -3415,9 +3417,9 @@ I've already given him the finalized requirements, so it's not like we're waitin
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Blocked waiting on David to complete network topology documentation needed for VLAN assignments before switch configuration can proceed. | RISK: Yeah, so really just one thing — I need David to get me that network topology documentation. That's the gating item. Once I have those VLAN assignments locked in from him, I can push the config to the switch and knock this out pretty quickly. I'm probably looking at two, three days of work on my end once I have the topology in hand.
+        <Notes>BLOCKER: Waiting on David's network topology document (NET-01) to be delivered before VLAN configuration can proceed. | RISK: Same thing as last time — I need David to deliver that topology doc. I've already reached out to him once, but I'm going to follow up again today and really pin him down on a delivery date. 
 
-So the ask is just — I need to escalate getting David's attention on that doc. I can hound him directly, but if the scheduler can surface this as a blocker to whoever's managing his workload, that would help move it up his queue. The sooner that topology doc lands, the sooner I can get back to the original timeline and take the pressure off everything downstream.</Notes></Task>
+If he can get it to me by end of this week, we're still okay. If it stretches into next week, that's when we start feeling the real pain. So I'm going to make this a priority conversation with him today — get a firm commitment on when he can hand it off to me.</Notes></Task>
         <Task>
             <UID>70</UID>
             <ID>70</ID>
@@ -3461,7 +3463,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-02 is blocked waiting on NET-01 (Configure VLANs) to clear; cannot start firewall config until VLAN assignments are finalized.</Notes></Task>
+        <Notes>BLOCKER: NET-02 is blocked waiting for David's network topology document; VLANs must be configured live before firewall rules can be pushed to the Cisco box.</Notes></Task>
         <Task>
             <UID>71</UID>
             <ID>71</ID>
@@ -3505,7 +3507,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-05 is at zero percent and must be further along before Suricata IDS rules can be fully validated against hardened network policies.</Notes></Task>
+        <Notes>BLOCKER: Honestly, nothing really. It's just the nature of the work — we can't call NET-03 done until we've tuned the rules and validated them in the environment without generating alert fatigue. That takes time, but it's not a bottleneck. The network team is responsive, the infrastructure is in place, we're just methodically working through the tuning phase. It's progress, not a blocker.</Notes></Task>
         <Task>
             <UID>72</UID>
             <ID>72</ID>
@@ -3549,7 +3551,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-04 is blocked on NET-07 (TLS certificate infrastructure), which is also at 20% and must be completed before VPN gateway setup can finish.</Notes></Task>
+        <Notes>BLOCKER: NET-04 is blocked behind NET-07 (TLS cert infrastructure), which must be completed before the VPN gateway can be stood up with proper security posture.</Notes></Task>
         <Task>
             <UID>73</UID>
             <ID>73</ID>
@@ -3593,7 +3595,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Waiting on finalized requirements from the architecture team on data flows between AI cluster and backend services; requirements expected early next week.</Notes></Task>
+        <Notes>BLOCKER: NET-05 is being held pending completion of NET-03 (Suricata deployment) to avoid parallel major infrastructure changes that could complicate troubleshooting.</Notes></Task>
         <Task>
             <UID>74</UID>
             <ID>74</ID>
@@ -3637,7 +3639,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Waiting on final secrets inventory from the application team to lock in final policies and access controls.</Notes></Task>
+        <Notes>BLOCKER: Pen test vendor availability is constrained; neither firm has confirmed dates yet, creating schedule risk if not locked in by end of week.</Notes></Task>
         <Task>
             <UID>75</UID>
             <ID>75</ID>
@@ -3688,7 +3690,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: CAM is the bottleneck—slow execution on CA setup, cert generation, trust chain validation, and end-to-end testing; no upstream blocker but coordination complexity is slowing progress.</Notes></Task>
+        <Notes>BLOCKER: Waiting on PKI infrastructure to be stood up on the backend by another team before cert generation and deployment can proceed.</Notes></Task>
         <Task>
             <UID>76</UID>
             <ID>76</ID>
@@ -3732,7 +3734,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-08 cannot start until AI-12 (container image scanning) is complete.</Notes></Task>
+        <Notes>BLOCKER: NET-08 is blocked waiting on AI-12 (Trivy container image scanning) to complete before the full enterprise vulnerability scan can run.</Notes></Task>
         <Task>
             <UID>77</UID>
             <ID>77</ID>
@@ -3776,7 +3778,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-09 is blocked on NET-08 (Run full vulnerability scan) completing; cannot start remediation until Nessus scan report is available.</Notes></Task>
+        <Notes>BLOCKER: Waiting on NET-08 (Nessus scan report) to complete before remediation work can begin.</Notes></Task>
         <Task>
             <UID>78</UID>
             <ID>78</ID>
@@ -3820,7 +3822,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-10 is blocked on NET-05 (hardened network policies) — integration work cannot proceed without finalized network segmentation.</Notes></Task>
+        <Notes>BLOCKER: Task is sequentially dependent on NET-06 (Vault deployment) and NET-03 (Suricata IDS) reaching maturity before work can begin.</Notes></Task>
         <Task>
             <UID>79</UID>
             <ID>79</ID>
@@ -3871,7 +3873,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Vendor coordination with two firms is taking longer than expected; neither has confirmed engagement dates. | RISK: </Notes></Task>
+        <Notes>BLOCKER: Both external pen test vendors have not confirmed availability; vendor capacity constraints and scheduling conflicts are preventing task start.</Notes></Task>
         <Task>
             <UID>80</UID>
             <ID>80</ID>
@@ -3915,7 +3917,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-12 is lower priority and sequentially dependent on completion of upstream tasks (VLANs, firewall rules, TLS infrastructure); CAM is not starting serious work until late May.</Notes></Task>
+        <Notes>BLOCKER: Task is sequenced after NET-01 and NET-02 (VLAN and firewall rules) are complete; waiting for foundational network infrastructure to be stable before deploying monitoring.</Notes></Task>
         <Task>
             <UID>81</UID>
             <ID>81</ID>
@@ -3959,7 +3961,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-13 is indirectly blocked on NET-01 (VLANs and firewall rules) clearing; load balancing cannot be architected until core network hardening is complete.</Notes></Task>
+        <Notes>BLOCKER: NET-01 (VLAN configuration) must be complete before NET-13 can proceed; also waiting on David's topology document.</Notes></Task>
         <Task>
             <UID>82</UID>
             <ID>82</ID>
@@ -4003,7 +4005,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task sequenced behind AI-11 work; CAM deprioritized NET-14 to focus on dependency-driven AI architecture first.</Notes></Task>
+        <Notes>BLOCKER: NET-14 is queued but not prioritized; capacity constrained until AI-11 completes, and NET-14 is a dependency for DOC-01 and DOC-05.</Notes></Task>
         <Task>
             <UID>83</UID>
             <ID>83</ID>
@@ -4054,7 +4056,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-11 (external penetration test) vendor coordination is unconfirmed and must complete by end of May; if it slips, NET-15 sign-off is delayed and blocks program acceptance. | RISK: </Notes></Task>
+        <Notes>BLOCKER: NET-15 cannot start until upstream security work matures: NET-08 (Nessus scan), NET-09 (remediation), foundational controls validation, and most critically NET-11 (red team pen test) completion and findings triage.</Notes></Task>
         <Task>
             <UID>84</UID>
             <ID>84</ID>
@@ -4156,7 +4158,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Internal sequencing dependency: DOC-01 is deprioritized pending completion of AI-11 and NET-14, and requires alignment with disaster recovery plan and monitoring dashboards runbook.</Notes></Task>
+        <Notes>BLOCKER: DOC-01 is blocked on NET-14 (network topology) and DOC-06 (alert response/troubleshooting sections) before detailed operational procedures can be completed.</Notes></Task>
         <Task>
             <UID>86</UID>
             <ID>86</ID>
@@ -4234,7 +4236,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
             <LevelingCanSplit>0</LevelingCanSplit>
             <LevelingDelayFormat>5</LevelingDelayFormat>
             <IgnoreResourceCalendar>0</IgnoreResourceCalendar>
-            <Notes>BLOCKER: Resource allocation constraint — task deprioritized while team focuses on purchase orders and vendor coordination.</Notes>
+            <Notes>BLOCKER: Bandwidth constraint — CAM is focused on pushing four POs through legal review; will carve out time in early February once legal bottleneck clears.</Notes>
             <HideBar>0</HideBar>
             <Rollup>0</Rollup>
             <EarnedValueMethod>0</EarnedValueMethod>
@@ -4289,7 +4291,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task has not started due to competing priorities and the need to coordinate with stakeholders to validate recovery procedures and failback sequences.</Notes></Task>
+        <Notes>BLOCKER: Capacity constraints and prioritization of higher-priority items; also depends on NET-14 and DOC-01 being stable before meaningful failback procedures can be written.</Notes></Task>
         <Task>
             <UID>89</UID>
             <ID>89</ID>
@@ -4333,7 +4335,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Architecture finalization (AI-11) and API contracts must be received before capacity projections can be validated and refined.</Notes></Task>
+        <Notes>BLOCKER: Waiting on NET-14 to validate capacity assumptions before finalizing the document with credible infrastructure-tied projections.</Notes></Task>
         <Task>
             <UID>90</UID>
             <ID>90</ID>
@@ -4377,7 +4379,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task cannot start until foundational work on AI-11, NET-14, and DOC-01 is further along to provide full system architecture and operational procedures context.</Notes></Task>
+        <Notes>BLOCKER: Capacity constraints and prioritization of higher-priority items are preventing DOC-06 from being started; also requires upstream ops input on monitoring infrastructure setup.</Notes></Task>
         <Task>
             <UID>91</UID>
             <ID>91</ID>
@@ -4421,7 +4423,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Gateway authentication behavior (AI-07) is not finalized; documentation must be updated once that settles, and user feedback incorporation adds 1–2 weeks of refinement work.</Notes></Task>
+        <Notes>BLOCKER: Waiting for AI services behavior to stabilize and AI-07 to clear before finalizing onboarding material; rate limits and request routing guidance may shift during implementation.</Notes></Task>
         <Task>
             <UID>92</UID>
             <ID>92</ID>
@@ -4544,7 +4546,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: TEST-01 cannot progress fully until AI-08 inference pipeline integration test advances further; detailed test cases and test data requirements are blocked on pipeline visibility.</Notes></Task>
+        <Notes>BLOCKER: Waiting on AI-08 (inference pipeline/quantization specs) and TEST-03 (load testing results) to provide performance data needed to define realistic acceptance criteria.</Notes></Task>
         <Task>
             <UID>94</UID>
             <ID>94</ID>
@@ -4588,7 +4590,9 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: Task is blocked on HW-10 (POST) completion; hardware will not arrive until mid-February, delaying start until late February or early March.</Notes></Task>
+        <Notes>BLOCKER: Task is blocked on completion of POST (Power-On Self-Test), which cannot begin until mid-February hardware arrival and assembly work is complete, itself dependent on legal clearance of four POs by Thursday. | RISK: Same thing I've been saying — those four POs need to clear legal by Thursday so we can submit Friday the 24th. That's the linchpin for everything downstream. Once those orders go out and vendors confirm shipment, the timeline flows from there.
+
+I've already escalated it on my end and made it clear this is on the critical path. At this point, the best thing you can do is flag it up the chain with whoever manages legal. Sometimes when it comes from the scheduling level rather than just me asking again, it gets bumped up in their queue. Otherwise it's just on them to finish the review and sign off on the contract language.</Notes></Task>
         <Task>
             <UID>95</UID>
             <ID>95</ID>
@@ -4632,7 +4636,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: TEST-03 progress is dependent on AI-08 stabilizing its end-to-end pipeline and container implementation before realistic load scenarios can be executed.</Notes></Task>
+        <Notes>BLOCKER: Waiting on ML team to deliver quantization specs; scheduled ML sync was postponed.</Notes></Task>
         <Task>
             <UID>96</UID>
             <ID>96</ID>
@@ -4676,7 +4680,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: TEST-04 is blocked indirectly on upstream dependencies NET-01, NET-02, and NET-07 (VLANs, firewall rules, and TLS infrastructure) which must be in place and stable before meaningful throughput and latency tests can be executed.</Notes></Task>
+        <Notes>BLOCKER: NET-01 (core network infrastructure) must be complete and stable before meaningful testing can begin; David's topology document is needed to enable NET-01.</Notes></Task>
         <Task>
             <UID>97</UID>
             <ID>97</ID>
@@ -4734,7 +4738,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: TEST-05 execution is blocked waiting on NET-06 (HashiCorp Vault deployment) to reach stability and integration by ~4/25.</Notes></Task>
+        <Notes>BLOCKER: TEST-05 is held until NET-06 (Vault deployment) and NET-10 (Wazuh SIEM configuration) are operational and validated.</Notes></Task>
         <Task>
             <UID>98</UID>
             <ID>98</ID>
@@ -4778,7 +4782,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: NET-11 (external pen test) must complete before TEST-06 detailed test cases can be written; parallel design work is possible but execution is blocked.</Notes></Task>
+        <Notes>BLOCKER: NET-11 (red team pen test) must be completed and findings triaged before TEST-06 can start; vendor availability for pen test scheduling is the constraint.</Notes></Task>
         <Task>
             <UID>99</UID>
             <ID>99</ID>
@@ -4829,7 +4833,7 @@ So the ask is just — I need to escalate getting David's attention on that doc.
                 <LinkLag>0</LinkLag>
                 <LagFormat>5</LagFormat>
             </PredecessorLink>
-        <Notes>BLOCKER: TEST-07 cannot start in earnest until TEST-01, TEST-03, TEST-05, and TEST-06 are substantially complete with meaningful results.</Notes></Task>
+        <Notes>BLOCKER: TEST-07 cannot start until upstream tests (TEST-01, TEST-03, TEST-05, TEST-06) are executed and results are available.</Notes></Task>
         <Task>
             <UID>100</UID>
             <ID>100</ID>
