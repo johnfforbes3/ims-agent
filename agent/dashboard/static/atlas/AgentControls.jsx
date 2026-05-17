@@ -1,0 +1,610 @@
+// Tab 3: IMS Agent Controls
+// Top: KPIs (CAMs Responded, Last Cycle, Schedule Health)
+// Cycle In Progress (live), CAM Response Status,
+// What Changed (IMS diff viewer), Change History (cumulative diff),
+// Baseline Drift Report, Live Interview Listen-In (SSE stream)
+
+function AgentControlsTab() {
+  // ---- Cycle in progress (live simulation) ----
+  const [cycleRunning, setCycleRunning] = useState(true);
+  const [phaseIdx, setPhaseIdx] = useState(2); // INTERVIEW
+
+  // CAM live progress (interview percent done)
+  const [camProgress, setCamProgress] = useState(() => {
+    const init = {};
+    window.CAMS.forEach((c, i) => {
+      init[c.cam] =
+        c.responded ? (i < 5 ? 100 : 80 + i*2)
+                    : 35 + i*3;
+    });
+    return init;
+  });
+
+  useEffect(() => {
+    if (!cycleRunning) return;
+    const t = setInterval(() => {
+      setCamProgress(prev => {
+        const next = { ...prev };
+        let stillRunning = false;
+        Object.keys(next).forEach(k => {
+          if (next[k] < 100) {
+            next[k] = Math.min(100, next[k] + Math.random() * 2.2);
+            if (next[k] < 100) stillRunning = true;
+          }
+        });
+        if (!stillRunning) setCycleRunning(false);
+        return next;
+      });
+    }, 600);
+    return () => clearInterval(t);
+  }, [cycleRunning]);
+
+  const respondedCount = window.CAMS.filter(c => c.responded).length;
+  const totalCams = window.CAMS.length;
+
+  // ---- Interview stream (Phase 15.5 — real SSE from /api/interview-stream) ----
+  // Backfills last 20 turns via /api/interview-recent, then opens an SSE
+  // EventSource for live turns.  Falls back to the scripted demo loop
+  // (INTERVIEW_SCRIPT) when no live turns arrive within 8s so the panel
+  // still has motion during a stand-down.
+  const [stream, setStream] = useState([]);
+  const [typing, setTyping] = useState(false);
+  const [streamMode, setStreamMode] = useState("connecting"); // connecting | live | demo
+  const streamRef = useRef(null);
+  const evtSourceRef = useRef(null);
+  const scriptIdxRef = useRef(0);
+  const lastLiveSeqRef = useRef(0);
+
+  function fmtTs(t) {
+    const d = typeof t === "number" ? new Date(t * 1000) : new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  function evtToMsg(ev) {
+    const who = ev.speaker === "bot" ? "agent" : ev.speaker === "cam" ? "cam" : "sys";
+    const name = ev.cam_name || ev.cam_email || "ATLAS";
+    const body = who === "agent"
+      ? `ATLAS → ${name}: ${ev.text}`
+      : who === "cam"
+        ? `${name}: ${ev.text}`
+        : ev.text;
+    return { who, body, ts: fmtTs(ev.timestamp), event_id: ev.event_id };
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    let demoTimer = null;
+
+    function startDemoLoop() {
+      if (cancelled) return;
+      setStreamMode("demo");
+      demoTimer = setInterval(() => {
+        const script = window.INTERVIEW_SCRIPT || [];
+        if (scriptIdxRef.current >= script.length) {
+          setTimeout(() => { scriptIdxRef.current = 0; if (!cancelled) setStream([]); }, 5000);
+          return;
+        }
+        setTyping(true);
+        setTimeout(() => {
+          if (cancelled) return;
+          const next = script[scriptIdxRef.current];
+          scriptIdxRef.current += 1;
+          setStream(prev => [...prev, { ...next, ts: fmtTs() }]);
+          setTyping(false);
+        }, 700 + Math.random() * 500);
+      }, 2200);
+    }
+
+    async function init() {
+      try {
+        const r = await fetch("/api/interview-recent?n=20");
+        if (r.ok) {
+          const data = await r.json();
+          const events = data.events || [];
+          if (!cancelled && events.length > 0) {
+            setStream(events.map(evtToMsg));
+            lastLiveSeqRef.current = data.seq || 0;
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const url = `/api/interview-stream?since=${lastLiveSeqRef.current}`;
+        const es = new EventSource(url);
+        evtSourceRef.current = es;
+        let gotAny = false;
+        const watchdog = setTimeout(() => {
+          if (!gotAny && !cancelled) {
+            es.close();
+            startDemoLoop();
+          }
+        }, 8000);
+        es.onopen = () => { if (!cancelled) setStreamMode("live"); };
+        es.onmessage = (e) => {
+          gotAny = true;
+          clearTimeout(watchdog);
+          try {
+            const ev = JSON.parse(e.data);
+            lastLiveSeqRef.current = Math.max(lastLiveSeqRef.current, (ev.seq || 0) + 1);
+            setStream(prev => [...prev, evtToMsg(ev)]);
+          } catch (_) {}
+        };
+        es.onerror = () => {
+          if (!gotAny && !cancelled) {
+            clearTimeout(watchdog);
+            startDemoLoop();
+          }
+        };
+      } catch (_) {
+        startDemoLoop();
+      }
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+      if (evtSourceRef.current) evtSourceRef.current.close();
+      if (demoTimer) clearInterval(demoTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [stream, typing]);
+
+  // ---- Diff viewer cycle selector ----
+  const [diffCycle, setDiffCycle] = useState("C-2026-19 vs C-2026-18");
+  const [cumRange, setCumRange] = useState("C-2026-15 → C-2026-19");
+
+  // ---- Agent control actions ----
+  const [agentMode, setAgentMode] = useState("auto"); // auto | manual | paused
+  const [confirmOpen, setConfirmOpen] = useState(null);
+
+  return (
+    <div className="page stack" style={{gap: 24}}>
+
+      {/* Agent control bar */}
+      <Panel
+        id="00"
+        title="ATLAS AGENT · CONTROL"
+        right={
+          <span style={{display:"flex", alignItems:"center", gap: 8}}>
+            <span className="dot live" /> CONNECTED · ATLAS-IMS v4.6.2
+          </span>
+        }
+      >
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap: 24}}>
+          <div style={{display:"flex", gap:24, alignItems:"center"}}>
+            <div>
+              <div className="hint">MODE</div>
+              <div style={{marginTop: 6}}>
+                <Seg
+                  value={agentMode}
+                  onChange={setAgentMode}
+                  options={[
+                    { value: "auto",   label: "▶ Autonomous" },
+                    { value: "manual", label: "◐ Supervised" },
+                    { value: "paused", label: "■ Paused"     },
+                  ]}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="hint">NEXT SCHEDULED CYCLE</div>
+              <div style={{fontFamily:"var(--mono)", fontSize:14, marginTop:8}}>2026-05-23 06:00Z · in 7d 0h</div>
+            </div>
+            <div>
+              <div className="hint">SAFE-MODE</div>
+              <div style={{marginTop:8}}><Pill tone="ok">ARMED · BASELINE LOCK</Pill></div>
+            </div>
+          </div>
+          <div style={{display:"flex", gap: 8}}>
+            <button className="btn" onClick={() => setConfirmOpen("dry")}>⏵ DRY-RUN</button>
+            <button className="btn" onClick={() => setConfirmOpen("force")}>⟳ FORCE CYCLE</button>
+            <button className="btn danger" onClick={() => setConfirmOpen("kill")}>■ KILL SWITCH</button>
+          </div>
+        </div>
+      </Panel>
+
+      {/* Three top KPIs */}
+      <div className="row cols-3">
+        <Panel id="01·a" title="CAMs RESPONDED · CURRENT CYCLE">
+          <div className="kpi">
+            <div className="kpi-label">RESPONDED / TOTAL</div>
+            <div className="kpi-val">{respondedCount}<span className="unit">/ {totalCams}</span></div>
+            <div className="bar ok" style={{marginTop:10}}><i style={{width: (respondedCount/totalCams*100)+"%"}}></i></div>
+            <div className="kpi-sub" style={{marginTop:8}}>
+              {totalCams - respondedCount} pending · {window.CAMS.filter(c => c.outcome === "ESCALATE").length} escalation{window.CAMS.filter(c => c.outcome === "ESCALATE").length === 1 ? "" : "s"}
+            </div>
+          </div>
+        </Panel>
+        <Panel id="01·b" title="LAST CYCLE">
+          <div className="kpi">
+            <div className="kpi-label">CYCLE ID · TIMESTAMP</div>
+            <div className="kpi-val" style={{fontSize: 22, lineHeight: 1.3, fontFamily:"var(--mono)"}}>
+              C-2026-18
+            </div>
+            <div style={{fontFamily:"var(--mono)", fontSize: 12, color:"var(--fg-3)", marginTop: 6}}>
+              2026-05-09 06:00Z
+            </div>
+            <div className="kpi-sub" style={{marginTop: 12}}>10/10 CAMs · 2 escalations · 4 baseline updates</div>
+          </div>
+        </Panel>
+        <Panel id="01·c" title="SCHEDULE HEALTH">
+          <div style={{display:"flex", flexDirection:"column", gap:14}}>
+            <div className="kpi-label">RYG · CURRENT CYCLE</div>
+            <RYG status="warn" size="big" />
+            <div className="kpi-sub">Worst-of-three: BEI <span style={{color:"var(--bad)"}}>RED</span> · SFA <span style={{color:"var(--ok)"}}>GREEN</span> · HRM <span style={{color:"var(--bad)"}}>RED</span></div>
+          </div>
+        </Panel>
+      </div>
+
+      {/* CYCLE IN PROGRESS (conditional, but always shown given live state) */}
+      <Panel
+        id="02"
+        title={<span><span className="dot live" style={{marginRight:8, verticalAlign:1}} />CYCLE IN PROGRESS · C-2026-19</span>}
+        right={
+          <>
+            <span>PHASE · <strong style={{color:"var(--accent)"}}>{window.CYCLE_PHASES[phaseIdx]}</strong></span>
+            <span style={{color:"var(--fg-4)"}}>|</span>
+            <span>{respondedCount}/{totalCams} CAMs</span>
+            <span style={{color:"var(--fg-4)"}}>|</span>
+            <span style={{color:"var(--accent)"}}>ELAPSED · 00:12:48</span>
+          </>
+        }
+      >
+        <div style={{display:"grid", gridTemplateColumns: "1fr 1fr", gap: 32}}>
+          {/* Phase stepper */}
+          <div>
+            <div className="hint" style={{marginBottom:8}}>PIPELINE</div>
+            <div style={{display:"flex", gap:0, marginBottom: 20}}>
+              {window.CYCLE_PHASES.map((p, i) => (
+                <div key={p} style={{
+                  flex: 1, padding: "8px 10px",
+                  borderTop: "2px solid " + (i < phaseIdx ? "var(--ok)" : i === phaseIdx ? "var(--accent)" : "var(--line-2)"),
+                  borderRight: i < window.CYCLE_PHASES.length - 1 ? "1px solid var(--line)" : "none",
+                  background: i === phaseIdx ? "var(--accent-soft)" : "transparent",
+                  fontFamily:"var(--mono)", fontSize: 10, letterSpacing:"0.08em",
+                  color: i < phaseIdx ? "var(--ok)" : i === phaseIdx ? "var(--accent)" : "var(--fg-4)",
+                  display:"flex", alignItems:"center", gap: 6,
+                }}>
+                  <span>{i < phaseIdx ? "✓" : i === phaseIdx ? "●" : "○"}</span>
+                  <span>{p}</span>
+                </div>
+              ))}
+            </div>
+            <div className="hint" style={{marginBottom:8}}>CONTROLS</div>
+            <div style={{display:"flex", gap: 8}}>
+              <button className="btn" onClick={() => setPhaseIdx(i => Math.max(0, i-1))}>◀ STEP</button>
+              <button className="btn" onClick={() => setPhaseIdx(i => Math.min(window.CYCLE_PHASES.length-1, i+1))}>STEP ▶</button>
+              <button className="btn">⏸ HOLD</button>
+              <button className="btn primary" onClick={() => setCycleRunning(true)}>RESUME</button>
+            </div>
+          </div>
+
+          <div>
+            <div className="hint" style={{marginBottom: 8}}>PER-CAM LIVE PROGRESS</div>
+            <div className="chipgrid">
+              {window.CAMS.map(c => {
+                const pct = Math.round(camProgress[c.cam] || 0);
+                return (
+                  <div key={c.cam} className="chip">
+                    <span className="nm" style={{color: pct === 100 ? "var(--ok)" : pct >= 80 ? "var(--accent)" : "var(--fg-2)"}}>{c.cam}</span>
+                    <span className="bar" style={{background: "var(--line)"}}>
+                      <i style={{width: pct + "%", background: pct === 100 ? "var(--ok)" : "var(--accent)"}} />
+                    </span>
+                    <span className="pct">{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      {/* CAM Response Status */}
+      <Panel id="03" title="CAM RESPONSE STATUS · CURRENT CYCLE" flush>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th style={{width:60}}>Status</th>
+              <th>CAM</th>
+              <th>Lead</th>
+              <th>WBS</th>
+              <th className="num">Attempts</th>
+              <th>Outcome</th>
+              <th style={{width: 220}}>Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {window.CAMS.map(c => {
+              const pct = Math.round(camProgress[c.cam] || 0);
+              const dotClass = c.outcome === "ESCALATE" ? "bad" : c.outcome === "PENDING" ? "warn" : "ok";
+              return (
+                <tr key={c.cam}>
+                  <td><span className={"statusdot " + dotClass} /></td>
+                  <td style={{color:"var(--accent)"}}>{c.cam}</td>
+                  <td>{c.lead}</td>
+                  <td className="muted">{c.wbs}</td>
+                  <td className="num">{c.attempts}</td>
+                  <td>
+                    <Pill tone={c.outcome === "ESCALATE" ? "bad" : c.outcome === "PENDING" ? "warn" : "ok"}>
+                      {c.outcome}
+                    </Pill>
+                  </td>
+                  <td>
+                    <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                      <span className="bar" style={{flex:1}}><i style={{width: pct+"%", background: pct === 100 ? "var(--ok)" : "var(--accent)"}} /></span>
+                      <span style={{fontVariantNumeric:"tabular-nums", width:36, textAlign:"right"}}>{pct}%</span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Panel>
+
+      {/* IMS Diff Viewer */}
+      <SectionHeader ix="04" label="DIFF & DRIFT" />
+      <div className="row cols-2">
+        <Panel
+          id="04·a"
+          title="WHAT CHANGED · IMS DIFF VIEWER"
+          right={
+            <select className="inp" value={diffCycle} onChange={e => setDiffCycle(e.target.value)}>
+              <option>C-2026-19 vs C-2026-18</option>
+              <option>C-2026-18 vs C-2026-17</option>
+              <option>C-2026-17 vs C-2026-16</option>
+            </select>
+          }
+          flush
+        >
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>CAM</th>
+                <th>Field</th>
+                <th>Old</th>
+                <th>New</th>
+                <th className="num">Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {window.DIFF_ROWS.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.task}</td>
+                  <td style={{color:"var(--info)"}}>{r.cam}</td>
+                  <td className="muted">{r.field}</td>
+                  <td className="muted">{r.oldv}</td>
+                  <td>{r.newv}</td>
+                  <td className="num" style={{color: /[+]\d+d/.test(r.delta) ? "var(--bad)" : /-\d+d/.test(r.delta) ? "var(--ok)" : "var(--fg-2)"}}>{r.delta}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+
+        <Panel
+          id="04·b"
+          title="CHANGE HISTORY · CUMULATIVE DIFF"
+          right={
+            <select className="inp" value={cumRange} onChange={e => setCumRange(e.target.value)}>
+              <option>C-2026-15 → C-2026-19</option>
+              <option>C-2026-10 → C-2026-19</option>
+              <option>C-2026-01 → C-2026-19</option>
+            </select>
+          }
+          flush
+        >
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>CAM</th>
+                <th className="num">Finish Drift</th>
+                <th className="num">Hops</th>
+                <th>Contributing Cycles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {window.CUM_DIFF.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.task}</td>
+                  <td style={{color:"var(--info)"}}>{r.cam}</td>
+                  <td className="num" style={{color: r.finishDrift > 5 ? "var(--bad)" : r.finishDrift > 0 ? "var(--warn)" : "var(--ok)"}}>
+                    {r.finishDrift > 0 ? "+" : ""}{r.finishDrift}d
+                  </td>
+                  <td className="num">{r.hops}</td>
+                  <td className="muted">{r.cycles}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      </div>
+
+      {/* Baseline Drift */}
+      <Panel
+        id="05"
+        title="BASELINE DRIFT REPORT"
+        right={<span className="hint">vs. PMB · LOCKED 2026-01-05</span>}
+        flush
+      >
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>CAM</th>
+              <th>Baseline Finish</th>
+              <th>Current Finish</th>
+              <th className="num">Slip (d)</th>
+              <th className="num">Δ % Complete</th>
+              <th style={{width: 220}}>Visual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {window.DRIFT_ROWS.map((r, i) => {
+              const maxSlip = 14;
+              const widthPct = Math.min(100, Math.abs(r.slip)/maxSlip*100);
+              return (
+                <tr key={i}>
+                  <td>{r.task}</td>
+                  <td style={{color:"var(--info)"}}>{r.cam}</td>
+                  <td className="muted">{r.baseFin}</td>
+                  <td>{r.curFin}</td>
+                  <td className="num" style={{color: r.slip > 5 ? "var(--bad)" : r.slip > 0 ? "var(--warn)" : "var(--ok)"}}>
+                    {r.slip > 0 ? "+" : ""}{r.slip}
+                  </td>
+                  <td className="num" style={{color: r.pctDelta < 0 ? "var(--bad)" : r.pctDelta > 0 ? "var(--ok)" : "var(--fg-3)"}}>
+                    {r.pctDelta > 0 ? "+" : ""}{r.pctDelta} pp
+                  </td>
+                  <td>
+                    <div style={{position:"relative", height:8, background:"var(--line)", width:"100%"}}>
+                      <span style={{position:"absolute", left:"50%", top:-2, bottom:-2, width:1, background:"var(--fg-3)"}}></span>
+                      {r.slip !== 0 && (
+                        <span style={{
+                          position:"absolute", top:0, bottom:0,
+                          left: r.slip > 0 ? "50%" : (50 - widthPct/2) + "%",
+                          width: (widthPct/2) + "%",
+                          background: r.slip > 0 ? "var(--bad)" : "var(--ok)",
+                          opacity: 0.85,
+                        }} />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Panel>
+
+      {/* Live Interview Listen-In */}
+      <Panel
+        id="06"
+        title={<span><span className="dot live" style={{marginRight: 8, verticalAlign:1}} />LIVE INTERVIEW LISTEN-IN · CAM ⇄ ATLAS</span>}
+        right={<span><span className="hint">SSE</span> · <span style={{color:"var(--accent)"}}>STREAMING</span> · TURN {stream.length}</span>}
+        flush
+      >
+        <div className="stream" ref={streamRef}>
+          {stream.map((m, i) => (
+            <div key={i} className="msg">
+              <span className="ts">{m.ts}</span>
+              <span className={"who " + m.who}>{m.who.toUpperCase()}</span>
+              <span className="body">{m.body}</span>
+            </div>
+          ))}
+          {typing && (
+            <div className="msg">
+              <span className="ts">{(() => { const ts = new Date(); return [ts.getHours(), ts.getMinutes(), ts.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"); })()}</span>
+              <span className="who agent">ATLAS</span>
+              <span className="body typing">▌ typing<TypingDots /></span>
+            </div>
+          )}
+          {stream.length === 0 && !typing && <div className="muted" style={{padding:"24px 0"}}>Waiting for stream…</div>}
+        </div>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderTop:"1px solid var(--line)", background:"var(--panel-2)"}}>
+          <span className="hint">CHANNEL · cam-interview/c-2026-19 · 2 listeners</span>
+          <div style={{display:"flex", gap: 8}}>
+            <button className="btn">PAUSE STREAM</button>
+            <button className="btn">EXPORT TRANSCRIPT</button>
+            <button className="btn danger">END SESSION</button>
+          </div>
+        </div>
+      </Panel>
+
+      {confirmOpen && (
+        <ConfirmModal kind={confirmOpen} onClose={() => setConfirmOpen(null)} />
+      )}
+    </div>
+  );
+}
+
+function TypingDots() {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setN(v => (v+1) % 4), 250);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{".".repeat(n)}</span>;
+}
+
+function ConfirmModal({ kind, onClose }) {
+  // Phase 15.6 — wire CTAs to real /api/* endpoints when available.
+  // DRY-RUN and KILL SWITCH are display-only stubs (no backend endpoint
+  // exists yet — would land in a future phase if/when the agent core
+  // exposes those operations).  FORCE CYCLE calls /api/trigger?force=true.
+  const [status, setStatus] = useState(null); // null | "pending" | "done" | "error"
+  const [error, setError]   = useState(null);
+
+  const copy = {
+    dry:   { title: "DRY-RUN NEXT CYCLE", body: "Execute a full cycle in shadow mode. No CAMs will be contacted; no baselines will be touched. Output diff and proposed changes for inspection. (Stub — endpoint not implemented yet.)", cta: "Begin dry-run", danger: false, wired: false },
+    force: { title: "FORCE CYCLE NOW",    body: "Begin a new cycle immediately, ahead of the next scheduled run. CAMs will receive interview prompts within 60 seconds. This calls the real /api/trigger endpoint.", cta: "Start cycle now", danger: false, wired: true },
+    kill:  { title: "ENGAGE KILL SWITCH", body: "Immediately halt all agent activity. In-flight interviews will be closed with state preserved; no writes to baseline will occur until ATLAS is manually re-armed. (Stub — endpoint not implemented yet.)", cta: "Engage kill switch", danger: true, wired: false },
+  }[kind];
+
+  async function confirm() {
+    if (!copy.wired) { onClose(); return; }
+    setStatus("pending");
+    setError(null);
+    try {
+      const r = await fetch("/api/trigger?force=true", { method: "POST" });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && (data.status === "triggered" || data.status === "queued")) {
+        setStatus("done");
+        setTimeout(() => onClose(), 1400);
+      } else {
+        setStatus("error");
+        setError(data.detail || data.error || `HTTP ${r.status}`);
+      }
+    } catch (e) {
+      setStatus("error");
+      setError(String(e));
+    }
+  }
+
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: 540}}>
+        <div className="modal-h">
+          <span>{copy.title}</span>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-b">
+          <div className="prose"><p>{copy.body}</p></div>
+          {status === "pending" && (
+            <div style={{marginTop:12, color:"var(--accent)", fontFamily:"var(--mono)", fontSize:12}}>
+              ▸ Calling /api/trigger?force=true …
+            </div>
+          )}
+          {status === "done" && (
+            <div style={{marginTop:12, color:"var(--ok)", fontFamily:"var(--mono)", fontSize:12}}>
+              ✓ Cycle triggered. Closing…
+            </div>
+          )}
+          {status === "error" && (
+            <div style={{marginTop:12, color:"var(--bad)", fontFamily:"var(--mono)", fontSize:12}}>
+              ✗ Trigger failed: {error}
+            </div>
+          )}
+          <div style={{display:"flex", gap:10, justifyContent:"flex-end", marginTop: 20}}>
+            <button className="btn" onClick={onClose} disabled={status === "pending"}>CANCEL</button>
+            <button
+              className={"btn " + (copy.danger ? "danger" : "primary")}
+              onClick={confirm}
+              disabled={status === "pending" || status === "done"}
+            >
+              {(copy.cta + (copy.wired ? "" : " (stub)")).toUpperCase()}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { AgentControlsTab });

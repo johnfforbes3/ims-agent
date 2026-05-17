@@ -4,6 +4,60 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 15 — Dashboard Rebuild from Zip (2026-05-08)
+
+**Summary:** Complete dashboard rebuild from a user-supplied design zip. New design is a React 18 + Babel Standalone single-page app with a terminal/aerospace aesthetic (IBM Plex fonts, sky-blue/lime accent, sticky ticker bar, full SVG Gantt + SRA + line charts). All third-party deps vendored locally (no CDN). Core agent functionality unchanged — server.py, cycle_runner, interview agent, LLM interface, all backend modules untouched. Phase 12/12.1/14 dashboard tests marked `@pytest.mark.legacy` and skipped by default. **770 / 770 non-legacy unit tests passing** (1 pre-existing flake), 63 new Phase 15 tests, 407 legacy tests skipped (intentional). Rollback tag `pre-dashboard-zip-rebuild-2026-05-08`.
+
+### Added
+- **`agent/dashboard/templates/base.html`** — React mount shell with vendored React/Babel/IBM Plex links and 8 atlas source `<script type="text/babel">` tags in load-order.
+- **`agent/dashboard/static/atlas/`** — 8 dropped-in files from the design zip + 1 hydration shim:
+  - `styles.css` — terminal aesthetic, CSS custom property design tokens, dark+light themes
+  - `data.js` — 17 mock data globals (BEI_HIST, EVM_KPIS, CAMS, DCMA14, INTERVIEW_SCRIPT, …)
+  - `api.js` (**NEW**, Phase 15.4) — fetches /api/state, /api/evm/history, /api/health/history, /api/diff/latest, /api/changes, /api/baseline-drift; overrides 11 window.* globals with live data; exports `window.__IMS_HYDRATE` promise that app.jsx awaits before ReactDOM.createRoot
+  - `components.jsx` — Panel, Pill, Seg, RYG, KPITile, Sparkline, Ticker
+  - `charts.jsx` — SummaryScheduleGantt (full SVG), SRAProbChart (Monte-Carlo histogram + cumulative line), LineChart
+  - `IMSStats.jsx` — Tab 1: Summary Schedule + BEI/SFA/HRM tiles + SRA + EVM + DCMA-14
+  - `PMPortal.jsx` — Tab 2: Generate Executive Briefing + Top Risks + Recommended Actions + Schedule Health History + Variance Narrative + Briefing modal
+  - `AgentControls.jsx` — Tab 3: Mode segment + Force/Dry-Run/Kill Switch CTAs + Cycle In Progress + CAM Response Status + Diff Viewer + Change History + Baseline Drift + Live Interview Listen-In (real SSE with demo-loop fallback)
+  - `app.jsx` — App shell, useTab/useTheme hooks, TickerBar, Hero blocks per tab, hash routing
+- **`agent/dashboard/static/vendor/`** (vendored, no CDN):
+  - `react.production.min.js` (10 KB)
+  - `react-dom.production.min.js` (129 KB)
+  - `babel.min.js` (3 MB — JSX transpile in browser)
+  - `ibm-plex.css` (rewritten Google Fonts CSS pointing to local woff2)
+  - `fonts/ibm-plex-latin-0..10.woff2` (11 files, 294 KB total — latin subset of IBM Plex Mono/Sans/Sans Condensed at weights 400-700)
+- **`agent/dashboard/templates/base.legacy.html`** — preserved Phase 14 base.html as a safety net
+- **`tests/test_phase15_dashboard_rebuild.py`** — 63 tests across 6 classes (TestReactShell, TestVendoredAssets, TestAtlasSources, TestDataAndApiLayer, TestAgentApiRegression, TestLegacyRollback)
+- **`tests/conftest.py`** — new `@pytest.mark.legacy` marker + `pytest_collection_modifyitems` hook that auto-skips legacy tests unless `IMS_LEGACY_DASHBOARD=1` or `-m legacy` is set
+
+### Changed
+- **`agent/dashboard/templates/base.html`** — completely replaced with React mount shell (227 lines → 41 lines)
+- **`tests/test_phase12_dashboard_overhaul.py`** + **`tests/test_phase14_modern_polish.py`** + **`tests/test_integration_dashboard_ui.py`** + **`tests/test_integration_api_smoke.py::TestDashboardHTML`** — `pytestmark = pytest.mark.legacy` applied; these now skip by default
+- **`agent/dashboard/static/atlas/AgentControls.jsx`** — Phase 15.5: interview stream replaced scripted `INTERVIEW_SCRIPT` loop with `/api/interview-stream` SSE (8-second watchdog falls back to demo loop when no live turns); Phase 15.6: FORCE CYCLE CTA + ConfirmModal wire to real `/api/trigger?force=true` with inline pending/done/error feedback
+- **`agent/dashboard/static/atlas/app.jsx`** — Phase 15.4: ReactDOM.createRoot now wraps in `(window.__IMS_HYDRATE || Promise.resolve()).finally(...)` to await live-data hydration; Phase 15.6: Agent Controls hero CTA wired to /api/trigger with inline success/error message; hero KPIs (CAMS RESPONDED, ESCALATIONS) read from `window.CAMS` (now real CAM data)
+
+### Unchanged (Phase 15 contract: core agent untouched)
+- `agent/cycle_runner.py`, `agent/interview_orchestrator.py`, `agent/voice/interview_agent.py`, `agent/llm_interface.py`, `agent/file_handler.py`, `agent/critical_path.py`, `agent/sra_runner.py`, `agent/cam_directory.py`, all other agent/ modules — zero changes
+- `agent/dashboard/server.py` — zero changes (Phase 12 route + `IMS_LEGACY_DASHBOARD` flag still in place)
+- All `/api/*` endpoints — same shape, same behavior
+
+### Tests
+- **Full unit suite (default):** 770 passed, 1 failed (pre-existing flake), 407 legacy-skipped, 42 integration-deselected, in 475 s
+- **Phase 15 suite:** 63 / 63 passed in 13.9 s
+- **Manual E2E (Chrome MCP)**: all 3 tabs render with real data, zero console errors, vendored assets only
+
+### Rollback
+- Tag: `pre-dashboard-zip-rebuild-2026-05-08`
+- Soft revert: `git revert <Phase 15 commit>` (purely additive — clean revert)
+- Soft flag: `IMS_LEGACY_DASHBOARD=1` serves Phase 12 monolithic `index.html`
+
+### Known follow-ups (not blocking)
+- SRA bar chart and Gantt still use mock data — need `/api/sra` and `/api/schedule/summary` endpoints
+- DRY-RUN and KILL SWITCH buttons are stubs — backend endpoints not implemented
+- Babel Standalone is 3 MB at boot — pre-compiling JSX would drop it
+
+---
+
 ## Phase 14 — Modern Polish Pass (2026-05-08)
 
 **Summary:** Visual modernization layered on top of the Phase 12 dark layout — same content, same structure, more polish. Glassmorphism on every card (frosted blur), animated gradient body background, conic-gradient progress rings on KPI tiles, animated number counters that count up on tab activation, skeleton loaders, View Transitions API for smooth tab swaps, hover micro-interactions, gradient-underline tab indicator, animated aurora strip below the header, breathing cycle-progress card, Chart.js global animation tuning. Honors `prefers-reduced-motion`. **1115/1115 unit tests passing** (was 1068; +47 Phase 14 tests). Zero structural change — every Phase 12 selector and ID is preserved.

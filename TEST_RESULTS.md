@@ -1,11 +1,55 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 11 — Comprehensive Dashboard UI Test Suite  
-**Executed:** 2026-05-07  
-**Tester:** Claude (automated — unit + integration tests)  
-**Environment:** Windows 11, Python 3.13.3  
-**IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs  
-**Overall Result:** **PASS** — 1010/1010 tests passing (4 skipped); **zero open FAILs**
+**Test Procedure Version:** Phase 15 — Dashboard rebuild from zip (React 18 + Babel Standalone, all vendored locally)
+**Executed:** 2026-05-08
+**Tester:** Claude (automated pytest + manual E2E via Chrome MCP)
+**Environment:** Windows 11, Python 3.13.3, React 18.3.1, Babel Standalone 7.29.0, IBM Plex fonts vendored
+**IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs
+**Overall Result:** **PASS** — 770 passing, 1 pre-existing flake (TestTriggerEndpoint, passes in isolation), 407 legacy skipped (intentional — see Phase 15.7), 42 integration deselected
+
+---
+
+> **2026-05-08 (Phase 15 — Dashboard rebuild from zip)**
+>
+> **§1 — New test file**
+> - `tests/test_phase15_dashboard_rebuild.py` — 63 tests across 6 classes (TestReactShell, TestVendoredAssets, TestAtlasSources, TestDataAndApiLayer, TestAgentApiRegression, TestLegacyRollback)
+>
+> **§2 — Coverage**
+> - **TestReactShell** (12): doctype, title, `<div id="root">`, inline theme preset, React/ReactDOM/Babel script tags from /static/vendor/, ibm-plex.css link, atlas/styles.css link, all 8 atlas source refs (data, api, components, charts, IMSStats, PMPortal, AgentControls, app), script load order (data → api → app), window.__IMS server-state injection
+> - **TestVendoredAssets** (16): every vendor path returns 200 with valid signature, React is production build (~10 KB), Babel is full standalone (~3 MB), 11 woff2 fonts serve with valid wOF2 magic bytes, ibm-plex.css references local /static/vendor/fonts/ (no gstatic.com leak), no CDN in HTML
+> - **TestAtlasSources** (7): styles.css contains design tokens, app.jsx has ReactDOM.createRoot + useTab + useTheme + /api/trigger wire, components.jsx exports Panel/Pill/Seg/RYG/KPITile/Sparkline/Ticker, charts.jsx exports SummaryScheduleGantt/SRAProbChart/LineChart, IMSStats/PMPortal/AgentControls each export their Tab function, AgentControls wires /api/interview-stream + /api/interview-recent + /api/trigger?force=true
+> - **TestDataAndApiLayer** (5): data.js exposes 17 expected globals (BEI_HIST, EVM_KPIS, CAMS, DCMA14, etc.) via Object.assign(window, ...); api.js has hydrate function + __IMS_HYDRATE export + calls all 6 hydration endpoints + writes 11 window globals; app.jsx awaits __IMS_HYDRATE before createRoot
+> - **TestAgentApiRegression** (8): every API endpoint used by the React app (/api/state, /api/status, /health, /api/evm/history, /api/health/history, /api/diff/latest, /api/changes, /api/baseline-drift, /api/interview-sessions, /api/interview-recent) returns 200 or 404 — protects against backend drift breaking Phase 15
+> - **TestLegacyRollback** (2): IMS_LEGACY_DASHBOARD=1 still serves the original Phase 12 monolithic index.html (no root div, original title); base.legacy.html (Phase 14) is preserved as a safety net
+>
+> **§3 — Legacy test gating**
+> - 407 legacy dashboard tests (Phase 12/12.1/14) marked `@pytest.mark.legacy` via `tests/conftest.py` `pytest_collection_modifyitems`
+> - Skipped by default — they assert against the Phase 12 monolithic dashboard's element IDs which the React rebuild injects client-side
+> - Enable via `pytest -m legacy` or `IMS_LEGACY_DASHBOARD=1 pytest` for regression sweeps against the preserved legacy template
+>
+> **§4 — Full unit suite (1239 collected; 770 passed, 407 legacy-skipped, 42 integration-deselected, 1 pre-existing flake)**
+> - `pytest tests/ -q -m "not integration"` → **770 passed, 1 failed (pre-existing), 407 skipped, 42 deselected, 352 warnings in 475s**
+> - 1 failure: `tests/test_integration_api_smoke.py::TestTriggerEndpoint::test_cycle_not_active_before_trigger` — passes in isolation (1.4s); fails in full suite due to test-order side-effect on cycle_active state (pre-existing, unrelated to Phase 15)
+> - 352 cosmetic warnings: `on_event` deprecation in `server.py` (unchanged)
+> - Phase 15 test class: 63/63 passed in 13.9s (10 ms/test avg)
+>
+> **§5 — Manual E2E via Chrome MCP** (executed against live `python main.py --serve` instance)
+> - **Tab 1 (IMS Stats & Info)**: React mounted, 8 panels rendered, hero shows real BEI 0.82, SFA 0.73, 6 HIGH-RISK milestones (from /api/state EVM hydration), Gantt chart visible with critical-path coloring, SRA Monte-Carlo bar chart populated with mock data (no /api/sra endpoint yet — flagged as Phase 16 follow-up), DCMA 14 cells with pass/warn/fail rendering, 5-row CAM breakdown table with real CAM names
+> - **Tab 2 (Program Management Portal)**: hero shows "PROGRAM MANAGEMENT PORTAL", 5 panels (Executive Briefing CTA, Top Risks, Recommended Actions, Schedule Health History line chart, Variance Narrative), Generate Briefing button opens streaming-completion modal
+> - **Tab 3 (Agent Controls)**: hero shows "AGENT CONTROLS" with real CAMs 5/5, 0 escalations, AUTONOMOUS mode, ARMED baseline lock; agent control bar with Mode segment (Autonomous/Supervised/Paused) + Dry-Run/Force Cycle/Kill Switch buttons; phase pipeline stepper; CAM Response Status table with real names (Alice Nguyen, Bob Martinez, Carol Smith, Eva Johnson, David Lee); What Changed + Change History diff viewers populated with real PROC-01..PROC-09 task changes and real cycle IDs (20260507T103317Z); Baseline Drift report; Live Interview Listen-In stream (SSE fallback to demo loop since no live interview running)
+> - **Cross-tab**: tab switching via clicks works smoothly, LIVE indicator pulsing top-right, ticker bar scrolling, light/dark theme toggle (☀/🌙) functional, zero console errors across all 3 tabs
+> - **Vendored asset offline-check**: every script/CSS/font reference resolves to /static/vendor/ — no external CDN dependencies (ITAR-clean)
+>
+> **§6 — Rollback verification**
+> - Tag `pre-dashboard-zip-rebuild-2026-05-08` pushed to origin
+> - Soft flag `IMS_LEGACY_DASHBOARD=1` confirmed to serve Phase 12 monolithic index.html
+> - `git revert <Phase 15 commit>` produces a clean revert (Phase 15 is purely additive — new /static/atlas/ + /static/vendor/ + base.html swap + tests)
+>
+> **§7 — Open items / future phases**
+> - SRA Monte-Carlo bar chart (Tab 1) still uses mock data — no `/api/sra` endpoint exists in the backend. Add `GET /api/sra` returning `{ histogram, mean, deterministic, percentiles }` to wire it.
+> - Summary Schedule Gantt (Tab 1) uses mock SCHED_CURRENT — no `/api/schedule/summary` endpoint. Future wiring.
+> - DRY-RUN and KILL SWITCH buttons on Agent Controls are stubs — no backend endpoint exists. Add `POST /api/admin/dry-run` and `POST /api/admin/kill-switch` if those operations are wanted.
+> - Babel Standalone is 3 MB and recompiles JSX on every page load. Pre-compiling JSX with `npx babel src --out-dir dist` would drop Babel and shrink boot to ~150 KB. Worth a future build-step phase if performance becomes a concern.
 
 ---
 

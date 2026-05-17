@@ -19,6 +19,8 @@ Tests that need the real MPP workflow should opt out with:
 or by passing autouse=False and requesting the fixture explicitly.
 """
 
+import os
+
 import pytest
 from unittest.mock import patch
 
@@ -30,6 +32,45 @@ def pytest_configure(config):
         "integration: marks tests that require external services or optional "
         "packages (e.g. openai-whisper, Azure credentials). Skipped in CI.",
     )
+    config.addinivalue_line(
+        "markers",
+        "legacy: marks dashboard tests that target the Phase 12/12.1/14 "
+        "monolithic dashboard layout (index.html with server-rendered IDs). "
+        "Phase 15 replaced the dashboard with a React app where IDs are "
+        "injected client-side, so these element-by-element string assertions "
+        "no longer apply to the live `/` route.  They REMAIN valid when the "
+        "soft-rollback flag IMS_LEGACY_DASHBOARD=1 is set, and run as a "
+        "regression suite against the preserved legacy template.  Skipped "
+        "by default; enable with `pytest -m legacy` or by exporting "
+        "IMS_LEGACY_DASHBOARD=1 before the test run.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip @pytest.mark.legacy tests unless explicitly enabled.
+
+    Phase 15 added this so the Phase 12/12.1/14 dashboard tests don't fail
+    against the new React-based dashboard.  Two ways to run the legacy tests:
+
+      1. Selector:  pytest -m legacy
+      2. Env var:   IMS_LEGACY_DASHBOARD=1 pytest
+                    (also flips the server route to render the old template)
+    """
+    legacy_enabled = (
+        os.getenv("IMS_LEGACY_DASHBOARD") == "1"
+        or "legacy" in (config.getoption("-m") or "")
+    )
+    if legacy_enabled:
+        return
+    skip_legacy = pytest.mark.skip(
+        reason="Phase 12/12.1/14 dashboard tests — the Phase 15 React shell does "
+               "not server-render these element IDs.  Set IMS_LEGACY_DASHBOARD=1 "
+               "or run `pytest -m legacy` to execute them against the preserved "
+               "legacy template."
+    )
+    for item in items:
+        if "legacy" in item.keywords:
+            item.add_marker(skip_legacy)
 
 
 @pytest.fixture(autouse=True)

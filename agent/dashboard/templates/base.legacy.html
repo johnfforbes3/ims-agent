@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMS Command Center</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <script src="/static/vendor/chart.umd.min.js"></script>
+  <script>
+    // Inject server-side state for client JS (charts read milestones, history, etc.)
+    window.__IMS = {
+      api_key:    "{{ api_key | default('') }}",
+      cycle_id:   "{{ state.get('cycle_id', '') }}",
+      health:     "{{ state.get('schedule_health', 'UNKNOWN') }}",
+      milestones: {{ state.get('milestones', []) | tojson }},
+      history:    {{ history | tojson }},
+    };
+  </script>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-brand">
+    <div class="header-logo">IMS</div>
+    <div>
+      <div class="header-title">IMS Command Center</div>
+      <div class="header-sub">ATLAS Program · AI Agent Server Rack</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-meta">
+      <div class="refresh-badge">Refresh in <span id="countdown">60</span>s</div>
+      <div class="last-updated">{{ state.get('last_updated', 'No data yet') }}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle" onclick="toggleTheme()"
+            title="Toggle light/dark theme (Ctrl+L)">☀</button>
+    <button class="btn btn-primary" id="trigger-btn" onclick="triggerCycle()">
+      ▶ Trigger Cycle
+    </button>
+  </div>
+</header>
+
+<!-- ── Tab Navigation ────────────────────────────────────────────────────── -->
+<nav class="tab-nav" role="tablist">
+  <button class="tab-btn active" data-tab="metrics" onclick="switchTab('metrics')" role="tab">
+    <span class="tab-icon">📊</span>IMS Metrics &amp; Indicators
+  </button>
+  <button class="tab-btn" data-tab="pm" onclick="switchTab('pm')" role="tab">
+    <span class="tab-icon">📋</span>PM Dashboard
+  </button>
+  <button class="tab-btn" data-tab="atlas" onclick="switchTab('atlas')" role="tab">
+    <span class="tab-icon">🤖</span>ATLAS Agent Control
+  </button>
+</nav>
+
+<!-- ── Tab Panels ────────────────────────────────────────────────────────── -->
+
+<section class="tab-panel active" data-tab="metrics" role="tabpanel">
+  {% include 'tabs/metrics.html' %}
+</section>
+
+<section class="tab-panel" data-tab="pm" role="tabpanel">
+  {% include 'tabs/pm.html' %}
+</section>
+
+<section class="tab-panel" data-tab="atlas" role="tabpanel">
+  {% include 'tabs/atlas.html' %}
+</section>
+
+<!-- ── Scripts (load order: vendor → core → tabs) ────────────────────────── -->
+<script src="/static/js/dashboard-core.js"></script>
+<script src="/static/js/metrics-tab.js"></script>
+<script src="/static/js/pm-tab.js"></script>
+<script src="/static/js/atlas-tab.js"></script>
+
+</body>
+</html>

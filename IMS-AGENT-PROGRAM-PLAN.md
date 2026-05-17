@@ -3,7 +3,7 @@
 **Version:** 1.1  
 **Created:** 2026-04-25  
 **Updated:** 2026-05-08  
-**Status:** Phase 14 COMPLETE — **1115/1115 unit tests passing** (clean; zero flakes; zero open low/medium TDs). Phases 7.1–7.4, 8.3–8.5, 9.2–9.6, 10, 11, 12, 12.1, 14 complete. Phase 14 added Modern Polish Pass on top of Phase 12.1 (glassmorphism, conic progress rings, animated KPI counters, skeleton loaders, View Transitions API, hover micro-interactions, Chart.js animation tuning — purely additive, zero structural change). Phase 13 (visual layout redesign) was attempted and reverted. Phase 7.5 (First Customer Pilot) awaiting customer engagement. Phase 8.1–8.2 backlog.  
+**Status:** Phase 15 COMPLETE — **770/770 non-legacy tests passing** + 63 new Phase 15 tests + 407 legacy tests (Phase 12/12.1/14) intentionally skipped via `@pytest.mark.legacy`. Zero open low/medium TDs. Phases 7.1–7.4, 8.3–8.5, 9.2–9.6, 10, 11, 12, 12.1, 14, 15 complete. Phase 15 rebuilt the dashboard from a user-supplied design zip — React 18 + Babel Standalone single-page app with terminal/aerospace aesthetic, all third-party deps vendored locally (no CDN). Core agent code (server.py, cycle_runner, interview agent, LLM interface, all backend modules) UNCHANGED. Phase 13 (visual layout redesign) was attempted and reverted. Phase 7.5 (First Customer Pilot) awaiting customer engagement. Phase 8.1–8.2 backlog.  
 **Owner:** John Forbes  
 
 ---

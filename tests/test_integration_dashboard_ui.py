@@ -41,6 +41,14 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+# Phase 15 — these tests target the Phase 12/12.1/14 monolithic dashboard
+# layout (index.html with server-rendered element IDs).  The Phase 15
+# React rebuild injects IDs client-side, so these element-by-element
+# assertions don't apply to the live `/` route.  They remain valid as a
+# regression suite for the preserved legacy template — enable with
+# `pytest -m legacy` or `IMS_LEGACY_DASHBOARD=1`.
+pytestmark = pytest.mark.legacy
+
 
 # ---------------------------------------------------------------------------
 # Shared state fixture (identical to test_integration_api_smoke._STATE)

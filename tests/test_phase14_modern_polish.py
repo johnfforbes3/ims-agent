@@ -24,6 +24,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+# Phase 15 — see conftest.py. Phase 14 tests assert against the Phase 12
+# dashboard CSS (now the legacy template). Skipped by default; enable
+# with `pytest -m legacy` or `IMS_LEGACY_DASHBOARD=1`.
+pytestmark = pytest.mark.legacy
+
 
 _MIN_STATE = {
     "cycle_id": "20260508T120000Z",

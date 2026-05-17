@@ -492,7 +492,16 @@ class TestTriggerEndpoint:
 # GET / — Dashboard HTML
 # ===========================================================================
 
+@pytest.mark.legacy
 class TestDashboardHTML:
+    """LEGACY (Phase 15) — these assertions target the Phase 12 monolithic
+    dashboard HTML and JS files which the React rebuild replaced.  The Phase 15
+    React shell at `/` no longer contains the inline element IDs or fetch
+    URLs these tests look for.  Enable via `pytest -m legacy` or
+    `IMS_LEGACY_DASHBOARD=1`.  The other classes in this file (TestEVMEndpoint,
+    TestDCMAEndpoint, TestTriggerEndpoint, etc.) target the agent API surface
+    that Phase 15 explicitly preserved — those keep running by default."""
+
     @staticmethod
     def _html_plus_js(client) -> str:
         """Phase 12 — JS moved to /static/js/*.js; tests need both for path checks."""

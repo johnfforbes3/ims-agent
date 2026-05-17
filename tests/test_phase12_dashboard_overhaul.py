@@ -24,6 +24,13 @@ import json
 import re
 from pathlib import Path
 
+# Phase 15 — see conftest.py for full explanation. These Phase 12 tests
+# assert against the monolithic dashboard HTML that the Phase 15 React
+# rebuild replaced. They remain valid for the preserved legacy template;
+# enable with `pytest -m legacy` or `IMS_LEGACY_DASHBOARD=1`.
+import pytest as _pt
+pytestmark = _pt.mark.legacy
+
 import pytest
 from fastapi.testclient import TestClient
 
