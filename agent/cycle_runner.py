@@ -108,6 +108,14 @@ class CycleRunner:
             "approval_required": False,
         }
 
+        # Phase 16 — persistent heartbeat for stalled-cycle detection by /health
+        try:
+            from agent.cycle_heartbeat import start as _hb_start, clear as _hb_clear, beat as _hb_beat
+            _hb_start(cycle_id, phase="initiated")
+        except Exception as _hb_exc:
+            logger.warning("action=heartbeat_start_failed error=%s", _hb_exc)
+            _hb_start = _hb_clear = _hb_beat = lambda *a, **kw: None
+
         start_time = datetime.now(timezone.utc)
         try:
             status = self._run_inner(cycle_id, status)
@@ -135,6 +143,11 @@ class CycleRunner:
             status["completed_at"] = datetime.now(timezone.utc).isoformat()
             self._persist_status(status)
             self._purge_old_data(_RETENTION_DAYS)
+            # Phase 16 — clear heartbeat on graceful exit (success or failure).
+            try:
+                _hb_clear()
+            except Exception as _hb_exc:
+                logger.debug("action=heartbeat_clear_failed error=%s", _hb_exc)
             with CycleRunner._lock:
                 CycleRunner._active = False
 
@@ -983,6 +996,13 @@ class CycleRunner:
                 history = json.loads(history_path.read_text(encoding="utf-8"))
             except Exception:
                 history = []
+        # Phase 16 — persist EVM program-level snapshot + HRM count into history
+        # so /api/evm/history and the dashboard sparklines render real trends.
+        evm_program = (evm_summary.get("program") or {}) if isinstance(evm_summary, dict) else {}
+        hrm_count = sum(
+            1 for m in (sra_results or [])
+            if str(m.get("risk_level", "")).upper() == "HIGH"
+        )
         history.append({
             "cycle_id": cycle_id,
             "timestamp": state["last_updated"],
@@ -990,6 +1010,18 @@ class CycleRunner:
             "cams_responded": completion_report["responded"],
             "cams_total": completion_report["total"],
             "approval_required": status.get("approval_required", False),
+            # Phase 16 — embedded EVM snapshot for sparkline history
+            "evm": {
+                "program": {
+                    "spi": evm_program.get("spi"),
+                    "cpi": evm_program.get("cpi"),
+                    "bei": evm_program.get("bei"),
+                    "sv":  evm_program.get("sv"),
+                    "cv":  evm_program.get("cv"),
+                    "completion_pct": evm_program.get("completion_pct"),
+                },
+            } if evm_program else {},
+            "high_risk_milestones": hrm_count,
         })
         tmp_h = history_path.with_suffix(".tmp")
         tmp_h.write_text(json.dumps(history[-52:], indent=2), encoding="utf-8")

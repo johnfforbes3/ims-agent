@@ -355,10 +355,36 @@ async def health():
         except (ValueError, TypeError):
             pass
 
+    # Phase 16 — stalled cycle detection via persistent heartbeat
+    cycle_stalled = False
+    cycle_heartbeat: dict | None = None
+    try:
+        from agent.cycle_heartbeat import is_stalled as _hb_stalled
+        cycle_stalled, cycle_heartbeat = _hb_stalled()
+    except Exception:
+        pass
+
+    # Phase 16 — LLM circuit breaker state
+    llm_circuit: dict | None = None
+    llm_circuit_open = False
+    try:
+        from agent.circuit_breaker import state as _cb_state
+        llm_circuit = _cb_state()
+        llm_circuit_open = llm_circuit.get("status") == "open"
+    except Exception:
+        pass
+
+    # Phase 16 — overall status reflects whether anything is degraded
+    overall = "healthy"
+    if deadman_alert or cycle_stalled or llm_circuit_open:
+        overall = "degraded"
+
     return JSONResponse({
-        "status": "healthy",
+        "status": overall,
         "uptime_seconds": round(time.monotonic() - _START_TIME),
         "cycle_active": CycleRunner.is_active(),
+        "cycle_stalled": cycle_stalled,
+        "cycle_heartbeat": cycle_heartbeat,
         "state_file_present": state_exists,
         "auth_enabled": bool(_API_KEY),
         "last_cycle_age_seconds": last_cycle_age_seconds,
@@ -366,6 +392,8 @@ async def health():
         "ims_last_write_at": ims_last_write_at,
         "key_age_days": key_age_days,
         "key_age_warning": key_age_warning,
+        "llm_circuit": llm_circuit,
+        "llm_circuit_open": llm_circuit_open,
     })
 
 
@@ -777,6 +805,14 @@ async def api_trigger(request: Request, force: bool = False):
         os.getenv("CALL_TRANSPORT", "simulated"),
         force,
     )
+    # Phase 16 — append to immutable audit_log table for CPR-5 traceability
+    try:
+        from agent.audit_log import log as _audit, actor_from_request
+        actor = actor_from_request(request)
+        _audit("cycle.trigger", **actor, target="manual",
+               detail={"force": force, "transport": os.getenv("CALL_TRANSPORT", "simulated")})
+    except Exception as _exc:
+        logger.warning("action=audit_log_failed action_name=cycle.trigger error=%s", _exc)
     return JSONResponse({"status": "triggered", "message": "Cycle started in background", "force": force})
 
 
@@ -790,7 +826,47 @@ async def api_admin_purge(request: Request):
         request.client.host if request.client else "unknown",
         deleted,
     )
+    try:
+        from agent.audit_log import log as _audit, actor_from_request
+        actor = actor_from_request(request)
+        _audit("admin.purge", **actor, detail={"deleted": deleted})
+    except Exception as _exc:
+        logger.warning("action=audit_log_failed action_name=admin.purge error=%s", _exc)
     return JSONResponse({"status": "ok", "deleted": deleted})
+
+
+# ---------------------------------------------------------------------------
+# Phase 16 — Immutable audit log viewer endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/audit", dependencies=[Depends(_require_api_key)])
+async def api_audit_log(
+    limit: int = 200,
+    action: str | None = None,
+    actor_user: str | None = None,
+    target: str | None = None,
+    since: str | None = None,
+):
+    """Return recent audit rows.
+
+    Query params:
+        limit       — max rows (default 200, capped at 1000)
+        action      — filter by action name (e.g. "cycle.trigger")
+        actor_user  — filter by X-User-Email
+        target      — filter by target (e.g. cycle_id)
+        since       — ISO timestamp; rows newer than this only
+    """
+    try:
+        from agent.audit_log import query as _query
+        rows = _query(
+            limit=limit, action=action, actor_user=actor_user,
+            target=target, since=since,
+        )
+        return JSONResponse({"rows": rows, "count": len(rows)})
+    except Exception as exc:
+        logger.error("action=audit_query_error error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"audit query failed: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -834,6 +910,15 @@ async def api_approve(
         cycle_id, approver,
         request.client.host if request.client else "unknown",
     )
+    # Phase 16 — immutable audit row
+    try:
+        from agent.audit_log import log as _audit, actor_from_request
+        actor = actor_from_request(request)
+        # The X-User-Email header trumps the body.approver field for attribution
+        _audit("approval.approve", **actor, target=cycle_id,
+               detail={"approver": approver, "reason": body.reason})
+    except Exception as _exc:
+        logger.warning("action=audit_log_failed action_name=approval.approve error=%s", _exc)
 
     # Apply in a background thread so the HTTP response returns immediately.
     # apply_approved() owns the mark_approved() call — don't call it here.
@@ -852,7 +937,11 @@ async def api_approve(
 
 
 @app.post("/api/approvals/{cycle_id}/reject", dependencies=[Depends(_require_admin_key)])
-async def api_reject(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision()):
+async def api_reject(
+    cycle_id: str,
+    request: Request,
+    body: _ApprovalDecision = _ApprovalDecision(),
+):
     """Reject a held IMS write — discards the pending cam_inputs."""
     from agent.approval_store import mark_rejected, load_pending
     record = load_pending(cycle_id)
@@ -863,6 +952,14 @@ async def api_reject(cycle_id: str, body: _ApprovalDecision = _ApprovalDecision(
 
     mark_rejected(cycle_id, reason=body.reason, approver=body.approver or "dashboard")
     logger.info("action=rejection_api cycle=%s reason=%s", cycle_id, body.reason)
+    # Phase 16 — immutable audit row
+    try:
+        from agent.audit_log import log as _audit, actor_from_request
+        actor = actor_from_request(request)
+        _audit("approval.reject", **actor, target=cycle_id,
+               detail={"approver": body.approver or "dashboard", "reason": body.reason})
+    except Exception as _exc:
+        logger.warning("action=audit_log_failed action_name=approval.reject error=%s", _exc)
     return JSONResponse({"status": "rejected", "cycle_id": cycle_id})
 
 
@@ -1574,6 +1671,145 @@ async def api_health_history(
         for entry in history[-n:]
     ]
     return JSONResponse({"history": out, "n": len(out)})
+
+
+# ---------------------------------------------------------------------------
+# Phase 16 — HRM rolling history endpoint (companion to /api/evm/history)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/hrm/history")
+async def api_hrm_history(
+    n: int = 24,
+    _auth: None = Depends(_require_api_key),
+):
+    """Return last N cycles' high-risk-milestone counts for sparkline rendering."""
+    n = max(1, min(int(n or 24), 100))
+    history = _load_json(_HISTORY_FILE) or []
+    out = [
+        {
+            "timestamp":            entry.get("timestamp", ""),
+            "cycle_id":             entry.get("cycle_id", ""),
+            "high_risk_milestones": entry.get("high_risk_milestones"),
+        }
+        for entry in history[-n:]
+        if entry.get("high_risk_milestones") is not None
+    ]
+    return JSONResponse({"history": out, "n": len(out)})
+
+
+# ---------------------------------------------------------------------------
+# Phase 16 — SRA endpoint
+#
+# Returns the milestone-level SRA results for the latest cycle: each
+# milestone has baseline / P50 / P80 / P95 / prob_on_baseline / risk_level.
+# Returns 404 when no cycle has produced SRA output yet.  No mocks.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/sra")
+async def api_sra(
+    _auth: None = Depends(_require_api_key),
+):
+    state = _load_json(_STATE_FILE) or {}
+    milestones = state.get("milestones") or []
+    if not milestones:
+        return JSONResponse(
+            {"error": "No SRA results yet. Run a cycle first."},
+            status_code=404,
+        )
+    return JSONResponse({
+        "cycle_id": state.get("cycle_id", ""),
+        "generated_at": state.get("last_updated", ""),
+        "milestones": milestones,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 16 — Schedule summary endpoint
+#
+# Parses the latest IMS export and surfaces a compact summary the Gantt
+# chart can render: program window, top-level tasks, milestones, critical
+# path, completion %.  Real data — replaces the SCHED_CURRENT mock.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/schedule/summary")
+async def api_schedule_summary(
+    _auth: None = Depends(_require_api_key),
+):
+    state = _load_json(_STATE_FILE) or {}
+    ims_path = state.get("latest_ims_path") or _IMS_PATH
+    p = Path(ims_path)
+    if not p.exists():
+        return JSONResponse(
+            {"error": f"IMS export not found at {ims_path}. Run a cycle first."},
+            status_code=404,
+        )
+    try:
+        from agent.file_handler import IMSFileHandler
+        tasks = IMSFileHandler(str(p)).parse()
+    except Exception as exc:
+        logger.error("action=schedule_summary_parse_error error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"IMS parse failed: {exc}")
+
+    if not tasks:
+        return JSONResponse(
+            {"error": "IMS parsed but contains no tasks."},
+            status_code=404,
+        )
+
+    critical_set = set(state.get("critical_path_task_ids") or [])
+    milestones_meta = {str(m.get("task_id", "")): m for m in (state.get("milestones") or [])}
+
+    # Compute program window from min/max of task dates
+    def _to_iso(v):
+        s = str(v) if v else ""
+        return s[:10] if s else ""
+
+    starts = [_to_iso(t.get("start"))  for t in tasks if t.get("start")]
+    finishes = [_to_iso(t.get("finish")) for t in tasks if t.get("finish")]
+    program_start = min(starts) if starts else ""
+    program_end   = max(finishes) if finishes else ""
+
+    rows = []
+    out_milestones = []
+    for t in tasks:
+        tid = str(t.get("task_id", ""))
+        duration = t.get("duration_days") or 0
+        is_milestone = duration == 0
+        row = {
+            "id":        tid,
+            "name":      t.get("name", ""),
+            "start":     _to_iso(t.get("start")),
+            "end":       _to_iso(t.get("finish")),
+            "complete":  (t.get("percent_complete") or 0) / 100.0,
+            "critical":  tid in critical_set,
+            "cam":       t.get("cam", ""),
+        }
+        if is_milestone:
+            ms_meta = milestones_meta.get(tid, {})
+            out_milestones.append({
+                "id":       tid,
+                "name":     t.get("name", ""),
+                "date":     _to_iso(t.get("finish")),
+                "met":      (t.get("percent_complete") or 0) >= 100,
+                "critical": tid in critical_set,
+                "risk_level": ms_meta.get("risk_level", ""),
+                "p80_date": _to_iso(ms_meta.get("p80_date")) if ms_meta else "",
+            })
+        else:
+            rows.append(row)
+
+    return JSONResponse({
+        "cycle_id":      state.get("cycle_id", ""),
+        "generated":     state.get("last_updated", ""),
+        "program_start": program_start,
+        "program_end":   program_end,
+        "rows":          rows[:30],          # cap to keep payload bounded
+        "milestones":    out_milestones[:20],
+        "label":         f"v{(state.get('cycle_id') or '')[:10]}",
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -9,34 +9,92 @@ function AgentControlsTab() {
   const [cycleRunning, setCycleRunning] = useState(true);
   const [phaseIdx, setPhaseIdx] = useState(2); // INTERVIEW
 
-  // CAM live progress (interview percent done)
+  // CAM live progress (interview percent done).
+  // Phase 16 — initial value pulled from /api/interview-sessions (hydrated into
+  // window.__IMS_CAM_PROGRESS by api.js).  Falls back to the responded/pending
+  // estimate when no real sessions are available (demo / dev mode).
   const [camProgress, setCamProgress] = useState(() => {
     const init = {};
+    const realProgress = window.__IMS_CAM_PROGRESS || {};
     window.CAMS.forEach((c, i) => {
-      init[c.cam] =
-        c.responded ? (i < 5 ? 100 : 80 + i*2)
-                    : 35 + i*3;
+      if (realProgress[c.cam] != null) {
+        init[c.cam] = realProgress[c.cam];
+      } else {
+        init[c.cam] =
+          c.responded ? (i < 5 ? 100 : 80 + i*2)
+                      : 35 + i*3;
+      }
     });
     return init;
   });
 
+  // Phase 16 — poll /api/interview-sessions every 5 s for real progress.
+  // The simulated jitter loop only runs when no real sessions are available
+  // (clear demo-mode signal).
   useEffect(() => {
-    if (!cycleRunning) return;
-    const t = setInterval(() => {
-      setCamProgress(prev => {
-        const next = { ...prev };
-        let stillRunning = false;
-        Object.keys(next).forEach(k => {
-          if (next[k] < 100) {
-            next[k] = Math.min(100, next[k] + Math.random() * 2.2);
-            if (next[k] < 100) stillRunning = true;
-          }
+    let cancelled = false;
+    let pollTimer = null;
+    let jitterTimer = null;
+
+    async function pollSessions() {
+      try {
+        const r = await fetch("/api/interview-sessions");
+        if (!r.ok) return false;
+        const sessions = await r.json();
+        if (!Array.isArray(sessions) || sessions.length === 0) return false;
+        if (cancelled) return true;
+        setCamProgress(prev => {
+          const next = { ...prev };
+          sessions.forEach(s => {
+            const turns = s.turns_completed || 0;
+            const expected = s.turns_expected || s.turns_target || 8;
+            const pct = s.status === "completed" ? 100
+                      : s.status === "escalated" ? 100
+                      : Math.min(95, Math.round((turns / Math.max(1, expected)) * 100));
+            if (s.cam_name) next[s.cam_name] = pct;
+          });
+          return next;
         });
-        if (!stillRunning) setCycleRunning(false);
-        return next;
-      });
-    }, 600);
-    return () => clearInterval(t);
+        return true;
+      } catch (_) { return false; }
+    }
+
+    function startJitter() {
+      // Demo-only: bounce values toward 100% so the UI animates when no real
+      // cycle is running.  Stops at 100%.
+      if (jitterTimer || !cycleRunning) return;
+      jitterTimer = setInterval(() => {
+        setCamProgress(prev => {
+          const next = { ...prev };
+          let stillRunning = false;
+          Object.keys(next).forEach(k => {
+            if (next[k] < 100) {
+              next[k] = Math.min(100, next[k] + Math.random() * 2.2);
+              if (next[k] < 100) stillRunning = true;
+            }
+          });
+          if (!stillRunning) setCycleRunning(false);
+          return next;
+        });
+      }, 600);
+    }
+
+    async function init() {
+      const haveReal = await pollSessions();
+      if (cancelled) return;
+      if (haveReal) {
+        pollTimer = setInterval(pollSessions, 5000);
+      } else {
+        startJitter();
+      }
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+      if (pollTimer)   clearInterval(pollTimer);
+      if (jitterTimer) clearInterval(jitterTimer);
+    };
   }, [cycleRunning]);
 
   const respondedCount = window.CAMS.filter(c => c.responded).length;

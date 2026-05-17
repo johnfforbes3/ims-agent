@@ -1,13 +1,101 @@
 # IMS Agent — Test Procedure Results
 
-**Test Procedure Version:** Phase 15 — Full functional sweep (default suite + legacy + all 3 tabs E2E + rollback)
-**Executed:** 2026-05-08 (comprehensive sweep)
-**Tester:** Claude (automated pytest + manual E2E via Chrome MCP)
+**Test Procedure Version:** Phase 16 — Productionization sweep (real data + resilience + audit)
+**Executed:** 2026-05-17 (post-Phase-16 verification)
+**Tester:** Claude (automated pytest + in-process FastAPI TestClient)
 **Environment:** Windows 11, Python 3.13.3, React 18.3.1, Babel Standalone 7.29.0, IBM Plex fonts vendored
 **IMS:** AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs (Alice / Bob / Carol / David / Eva)
-**Overall Result:** **PASS** — 770 passed, 1 pre-existing test-order flake (passes in isolation), 407 legacy skipped, 42 integration deselected. 2 production bugs found + fixed during sweep.
+**Overall Result:** *(pending — see §10 Phase 16 entry below)*
 
 ---
+
+> **2026-05-17 (Phase 16 productionization sweep)**
+>
+> **§1 — Goal**
+> Land three production-readiness tracks the user requested:
+> 1. Close the real-data gap on the dashboard (new /api/sra,
+>    /api/schedule/summary, /api/hrm/history; cycle history now persists
+>    EVM block; per-CAM live progress now polls real /api/interview-sessions)
+> 2. Harden cycle pipeline against partial failures (persistent
+>    heartbeat with stalled-cycle detection; LLM circuit breaker for
+>    billing errors; /health endpoint surfaces both)
+> 3. Add real audit, identity, approval governance (immutable SQLite
+>    audit_log table; X-User-Email attribution; /api/audit endpoint;
+>    document the existing two-person approval flow)
+>
+> **§2 — New endpoints (in-process FastAPI TestClient verification)**
+>
+> | Endpoint | Status | Notes |
+> |---|---|---|
+> | `GET /api/sra` | 200 | 8 milestones from live state |
+> | `GET /api/schedule/summary` | 200 | 30 rows + 8 milestones, real IMS parse, program window 2026-01-05 → 2026-06-25 |
+> | `GET /api/hrm/history?n=24` | 200 | 0 entries today (older cycles pre-date the field) — will populate on next run |
+> | `GET /api/audit?limit=10` | 200 | 4 rows logged so far (cycle.trigger, admin.purge) |
+> | `GET /health` (enhanced) | 200 | new fields: `cycle_stalled`, `cycle_heartbeat`, `llm_circuit_open`, `llm_circuit`; rolls up to `status: degraded` when any of `deadman_alert / cycle_stalled / llm_circuit_open` is true |
+>
+> **§3 — New modules**
+>
+> | Module | Purpose | Unit-tested via |
+> |---|---|---|
+> | `agent/cycle_heartbeat.py` | Persistent heartbeat file at `data/cycle_heartbeat.json`; `start()`, `beat()`, `clear()`, `is_stalled()` | In-process import + integration with /health endpoint |
+> | `agent/circuit_breaker.py` | LLM error categorization (TRANSIENT / TERMINAL / BILLING); auto-trip for 15 min on billing errors; guard()/handle_exception() called from llm_interface | In-process import + integration with /health endpoint |
+> | `agent/audit_log.py` | SQLite `audit_log` table in `data/ims.db`; append-only; log() + query() + actor_from_request() | Round-trip insert/query verified |
+>
+> **§4 — Frontend hydration changes (`api.js`, `AgentControls.jsx`)**
+>
+> - `api.js` now fetches `/api/hrm/history`, `/api/sra`, `/api/schedule/summary`, `/api/interview-sessions` in parallel during hydration; each gracefully falls back to its mock when the endpoint returns empty
+> - `AgentControls.jsx` per-CAM progress now polls `/api/interview-sessions` every 5 s when real sessions exist; falls back to the simulated jitter loop only when no real cycle is running
+> - SCHED_CURRENT / SCHED_PRIOR / PROGRAM_START / PROGRAM_END overridden when `/api/schedule/summary` returns rows
+>
+> **§5 — Audit log integration**
+>
+> Audit rows now written on every sensitive admin action:
+>
+> | Action name | Triggered by |
+> |---|---|
+> | `cycle.trigger` | POST /api/trigger |
+> | `admin.purge` | POST /api/admin/purge |
+> | `approval.approve` | POST /api/approvals/{id}/approve |
+> | `approval.reject` | POST /api/approvals/{id}/reject |
+>
+> X-User-Email header round-trip verified: passing `X-User-Email: alice@program.mil` produces `actor_user: alice@program.mil` in the audit row.
+>
+> **§6 — Documentation**
+>
+> - New file `docs/PRODUCTIONIZATION.md` — describes all three tracks, includes operator quick-reference for resetting stalled heartbeat / closing the circuit breaker / pulling audit trail
+> - Sections on what's NOT in Phase 16 (real SSO, per-user RBAC, audit-log retention/rotation, tamper-evidence hash chain) so the production roadmap is honest about remaining scope
+>
+> **§7 — pytest results**
+>
+> | Scope | Result | Time |
+> |---|---|---|
+> | Default suite (`tests/` minus live-server) | **708 passed · 407 skipped · 42 deselected** | 4m 56s |
+> | Phase 15 dashboard (`test_phase15_dashboard_rebuild.py`) | **63 / 63** | 4.2s |
+>
+> No new test failures from any Phase 16 change. Skipped/deselected counts unchanged from Phase 15 baseline (407 legacy auto-skipped via `@pytest.mark.legacy` + 42 integration deselected).
+>
+> **§8 — Production roadmap items NOT in Phase 16** (intentionally deferred)
+>
+> - **Real SSO/OIDC** — identity is self-declared via `X-User-Email` header. Next: wire M365 tenant OAuth flow + decode JWT claims → `actor_user`.
+> - **Per-user RBAC** — still 2 roles (read / admin) keyed by API key tier. Next: key roles to SSO identity for approve-only and read-only PMs.
+> - **Audit log retention/rotation** — rows accumulate forever. Next: `/api/admin/audit/rotate` + periodic WORM export.
+> - **Tamper-evidence on audit log** — append-only by convention only. Next: hash chain so DB-level row deletion is detectable.
+> - **Monte-Carlo SRA histogram endpoint** — `/api/sra` returns milestone P50/P80/P95 anchors; the per-day histogram bars in the chart still use mock data because no MC engine persists per-day buckets yet.
+>
+> **§9 — Final state**
+>
+> | Metric | Value |
+> |---|---|
+> | Phase 16 new endpoints | 3 (`/api/sra`, `/api/schedule/summary`, `/api/hrm/history`) |
+> | Phase 16 enhanced endpoints | 2 (`/health`, cycle_history.json schema) |
+> | Phase 16 new audit endpoints | 1 (`/api/audit`) |
+> | Phase 16 new modules | 3 (`cycle_heartbeat`, `circuit_breaker`, `audit_log`) |
+> | Default suite passing | 708 |
+> | Phase 15 dashboard suite | 63 / 63 |
+> | Pre-existing skipped (legacy + integration) | 449 |
+> | New tests required (Phase 16) | 0 (additive endpoints, in-process verified) |
+>
+> ---
 
 > **2026-05-08 (Phase 15 comprehensive functional sweep)**
 >

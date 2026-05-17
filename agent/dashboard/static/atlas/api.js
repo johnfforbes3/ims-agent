@@ -39,10 +39,17 @@
   // ────────────────────────────────────────────────────────────────────────
 
   async function hydrate() {
-    const [state, evmHist, healthHist] = await Promise.all([
+    // Phase 16 — additional real-data endpoints: HRM history, SRA milestones,
+    // and parsed IMS schedule summary.  Each is independently fetched and
+    // overrides the corresponding mock global only when it returns data.
+    const [state, evmHist, healthHist, hrmHist, sra, schedSummary, sessions] = await Promise.all([
       safeJson("/api/state"),
       safeJson("/api/evm/history?n=24"),
       safeJson("/api/health/history?n=24"),
+      safeJson("/api/hrm/history?n=24"),
+      safeJson("/api/sra"),
+      safeJson("/api/schedule/summary"),
+      safeJson("/api/interview-sessions"),
     ]);
 
     // Stash raw payloads for any debug/inspection later
@@ -71,12 +78,66 @@
     }
 
     // -- 6-month BEI/SPI/HRM histories from /api/evm/history ----------------
+    // Phase 16 — extracts the program-level snapshot now persisted per cycle.
     if (evmHist && Array.isArray(evmHist.history) && evmHist.history.length >= 2) {
       const series = evmHist.history;
       const bei = series.map(h => h.bei).filter(v => typeof v === "number");
       const spi = series.map(h => h.spi).filter(v => typeof v === "number");
       if (bei.length >= 2) window.BEI_HIST = bei;
       if (spi.length >= 2) window.SFA_HIST = spi;
+    }
+    // Phase 16 — HRM history from dedicated endpoint
+    if (hrmHist && Array.isArray(hrmHist.history) && hrmHist.history.length >= 2) {
+      const hrm = hrmHist.history
+        .map(h => h.high_risk_milestones)
+        .filter(v => typeof v === "number");
+      if (hrm.length >= 2) window.HRM_HIST = hrm;
+    }
+
+    // Phase 16 — SRA endpoint: real Monte-Carlo milestone outputs
+    if (sra && Array.isArray(sra.milestones) && sra.milestones.length > 0) {
+      window.__IMS_SRA_REAL = sra;
+      // We don't have a full date-by-date histogram from the cycle yet, but
+      // we can synthesise the bar chart from milestone P50/P80/P95 anchors
+      // when present so the chart shows real anchor points instead of mock.
+      // (Full histogram requires a Monte-Carlo run endpoint, future work.)
+    }
+
+    // Phase 16 — Schedule summary endpoint: real parsed IMS rows + milestones
+    if (schedSummary && Array.isArray(schedSummary.rows) && schedSummary.rows.length > 0) {
+      const programStart = schedSummary.program_start
+        ? new Date(schedSummary.program_start) : window.PROGRAM_START;
+      const programEnd   = schedSummary.program_end
+        ? new Date(schedSummary.program_end) : window.PROGRAM_END;
+      if (programStart) window.PROGRAM_START = programStart;
+      if (programEnd)   window.PROGRAM_END   = programEnd;
+      window.SCHED_CURRENT = {
+        label:      schedSummary.label || "current",
+        generated:  schedSummary.generated || "",
+        rows:       schedSummary.rows,
+        milestones: schedSummary.milestones || [],
+      };
+      // Prior version is unavailable from a single export — clone & mark stale
+      // so the ghost overlay degrades gracefully instead of showing mock data.
+      window.SCHED_PRIOR = {
+        ...window.SCHED_CURRENT,
+        label: "prior (unavailable)",
+      };
+    }
+
+    // Phase 16 — Active interview sessions → real per-CAM live progress
+    if (sessions && Array.isArray(sessions) && sessions.length > 0) {
+      const progressByCam = {};
+      sessions.forEach(s => {
+        // session shape: { cam_name, status, turns_completed, turns_expected, ... }
+        const turns = s.turns_completed || 0;
+        const expected = s.turns_expected || s.turns_target || 8;
+        const pct = s.status === "completed" ? 100
+                  : s.status === "escalated" ? 100
+                  : Math.min(95, Math.round((turns / Math.max(1, expected)) * 100));
+        if (s.cam_name) progressByCam[s.cam_name] = pct;
+      });
+      window.__IMS_CAM_PROGRESS = progressByCam;
     }
 
     // -- Schedule-health history (PM Portal line chart) --------------------

@@ -88,6 +88,19 @@ class LLMInterface:
         Raises:
             The original exception after ``_MAX_RETRIES`` exhausted attempts.
         """
+        # Phase 16 — guard against an open circuit breaker before issuing any
+        # call.  When the breaker is open (typically due to a billing error)
+        # we fail fast so we don't burn more failed requests.
+        from agent.circuit_breaker import guard, handle_exception, ErrorCategory, CircuitOpenError
+        try:
+            guard()
+        except CircuitOpenError as exc:
+            logger.error(
+                "action=llm_circuit_open reason=%s opens_until=%s",
+                exc.state.get("reason"), exc.state.get("opens_until"),
+            )
+            raise
+
         last_exc: Exception | None = None
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
@@ -101,6 +114,14 @@ class LLMInterface:
                 )
                 time.sleep(delay)
             except anthropic.APIStatusError as exc:
+                # Phase 16 — categorize first so billing errors trip the breaker
+                cat = handle_exception(exc)
+                if cat == ErrorCategory.BILLING:
+                    logger.error(
+                        "action=llm_billing_error status=%d msg=%s — circuit breaker OPENED",
+                        exc.status_code, str(exc)[:200],
+                    )
+                    raise  # fail fast, breaker is now open
                 if exc.status_code >= 500:
                     last_exc = exc
                     delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
@@ -110,7 +131,11 @@ class LLMInterface:
                     )
                     time.sleep(delay)
                 else:
-                    # 4xx (except 429 handled above) — do not retry
+                    # 4xx (except 429 handled above, billing handled above) — terminal
+                    logger.error(
+                        "action=llm_terminal_error status=%d msg=%s",
+                        exc.status_code, str(exc)[:200],
+                    )
                     raise
         logger.error(
             "action=llm_exhausted_retries attempts=%d error=%s",
