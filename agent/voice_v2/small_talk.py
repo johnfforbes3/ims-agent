@@ -1,4 +1,8 @@
 """
+[DEPRECATED in Phase 17.4 — see docs/PHASE-17-INTEGRATION-PLAN.md]
+InterviewAgent's GREETING state handles small-talk. This module is
+kept for reference / rollback only.
+
 Small-talk gate — Phase 17 iteration 2.
 
 Article §11 #6: "Build the small-talk gate before you build retrieval.

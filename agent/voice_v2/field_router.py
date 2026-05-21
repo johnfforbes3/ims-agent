@@ -1,4 +1,8 @@
 """
+[DEPRECATED in Phase 17.4 — see docs/PHASE-17-INTEGRATION-PLAN.md]
+Field extraction is now performed by `InterviewAgent` directly. This
+module is kept for reference / rollback only.
+
 Field router — Phase 17 iter 7.
 
 Deterministic Python classifier that runs BEFORE the LLM on every

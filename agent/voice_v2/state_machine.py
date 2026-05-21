@@ -1,4 +1,9 @@
 """
+[DEPRECATED in Phase 17.4 — see docs/PHASE-17-INTEGRATION-PLAN.md]
+The production interview state machine is `agent/voice/interview_agent.py`.
+This module is kept for reference / rollback only and is no longer
+imported by the tester or production.
+
 CAM interview state machine — Phase 17.
 
 Article §4 + §11 #3: "Move to a real state machine the day the system prompt

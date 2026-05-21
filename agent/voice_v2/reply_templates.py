@@ -1,4 +1,8 @@
 """
+[DEPRECATED in Phase 17.4 — see docs/PHASE-17-INTEGRATION-PLAN.md]
+Reply generation is now performed by `InterviewAgent` directly. This
+module is kept for reference / rollback only.
+
 Deterministic conversation drivers — Phase 17 iter 9.
 
 The single biggest source of "stuck" conversations was the LLM's reply text

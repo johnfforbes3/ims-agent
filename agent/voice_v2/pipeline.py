@@ -1,4 +1,26 @@
 """
+[DEPRECATED in Phase 17.4 — see docs/PHASE-17-INTEGRATION-PLAN.md]
+
+This module is no longer imported by anything that ships in production
+nor by the /voice/test tester. The tester now drives the same
+ChatInterviewSession + InterviewAgent that /bot/messages uses, per the
+"tester aligned with production" directive.
+
+Kept on disk because:
+  * The prompt-engineering history (state machine + per-state templates
+    + field router) informed several improvements that should be
+    backported to InterviewAgent later if needed.
+  * Rolling back to this implementation is the safety net if a serious
+    InterviewAgent regression is discovered.
+
+Do NOT import from this module in new code. If you need its
+functionality, port the pattern into agent/voice/interview_agent.py
+instead.
+
+────────────────────────────────────────────────────────────────────────
+ORIGINAL DOCSTRING BELOW
+────────────────────────────────────────────────────────────────────────
+
 Voice agent v2 pipeline orchestrator — Phase 17.
 
 Wires the 5 components in the article's chained pipeline:
