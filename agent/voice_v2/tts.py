@@ -185,6 +185,17 @@ def synthesize(text: str, voice_id: Optional[str] = None) -> TTSResult:
     return _synthesize_openai(speakable)
 
 
+def synthesize_fast(text: str, voice_id: Optional[str] = None) -> TTSResult:
+    """Latency-optimized variant — skips ElevenLabs (slow first-byte) and goes
+    straight to OpenAI TTS-1 (typically 60-150ms first-byte for short replies).
+
+    Use this when ElevenLabs is rate-limited / quota-exhausted, OR when the
+    pipeline knows it's serving a short response and per-CAM voice isn't
+    important (e.g. small-talk gate replies, confirmations, acknowledgments).
+    """
+    return _synthesize_openai(text)
+
+
 def _synthesize_openai(text: str, model: str = "tts-1", voice: str = "alloy") -> TTSResult:
     """OpenAI TTS-1 fallback. Pricing: $15/1M chars (~$0.015 per 1K chars).
 

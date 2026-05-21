@@ -418,6 +418,11 @@ _DONE_PHRASES = (
     "i am done", "go to confirmation", "ready to confirm",
     "let's wrap", "let us wrap", "wrap it up", "ready for confirmation",
 )
+# Standalone single-word "done" signals — checked separately so we don't
+# false-positive on "I'm done with task one" (which means "next task").
+_DONE_STANDALONE = (
+    "done", "finished", "complete", "stop", "next", "wrap",
+)
 _YES_PHRASES = (
     "yes", "yeah", "yep", "correct", "that's right", "that is right",
     "looks good", "looks right", "looks correct", "confirmed", "confirm",
@@ -444,6 +449,19 @@ def _transcript_matches(transcript: str, phrases: tuple[str, ...]) -> bool:
     # Strip leading/trailing punctuation that interferes with substring matching
     t = t.strip(".,!?;:'\"")
     return any(p in t for p in phrases)
+
+
+def _is_standalone_done(transcript: str) -> bool:
+    """True iff the transcript is a single 'done'/'finished'/'next' word.
+
+    Separate from _DONE_PHRASES because we don't want to treat 'done with task one'
+    as the full-conversation-done signal — that means 'next task'.
+    """
+    if not transcript:
+        return False
+    t = transcript.lower().strip().strip(".,!?;:'\"")
+    words = t.split()
+    return len(words) <= 2 and any(w in _DONE_STANDALONE for w in words)
 
 
 def _has_enough_data_to_confirm(ctx: Optional[StateContext]) -> bool:
@@ -483,8 +501,17 @@ def next_state(
             return State.TASK_BY_TASK_LOOP
         # SAFETY: user is giving status content directly, skip the "what would
         # you like to update?" loop and go to task processing.
-        if transcript and len(transcript.split()) > 5:
-            return State.TASK_BY_TASK_LOOP
+        # Two triggers — either:
+        #   (a) >= 4 words (richer than a simple greeting), OR
+        #   (b) contains a status keyword regardless of length
+        if transcript:
+            t_lower = transcript.lower()
+            status_keywords = (
+                "task", "percent", "blocker", "risk", "complete",
+                "behind", "ahead", "done", "finished", "stuck",
+            )
+            if len(transcript.split()) >= 4 or any(k in t_lower for k in status_keywords):
+                return State.TASK_BY_TASK_LOOP
         return State.OPEN_QUESTION
 
     if current == State.TASK_BY_TASK_LOOP:
@@ -496,6 +523,9 @@ def next_state(
                 return State.CONFIRM_BLOCK
         # SAFETY: user signaled "done" AND we have data — advance.
         if _transcript_matches(transcript, _DONE_PHRASES) and _has_enough_data_to_confirm(ctx):
+            return State.CONFIRM_BLOCK
+        # SAFETY: standalone done/finished/next as a whole utterance, with data
+        if _is_standalone_done(transcript) and _has_enough_data_to_confirm(ctx):
             return State.CONFIRM_BLOCK
         # SAFETY: every task has at least one captured update — advance.
         if ctx and len(ctx.proposed_updates) >= len(ctx.cam_tasks) and len(ctx.cam_tasks) > 0:

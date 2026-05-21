@@ -251,7 +251,10 @@ class Session:
                     cam_first_name=self.cam_name,
                     task_count=len(self.ctx.cam_tasks),
                 )
-                tts_result = self._safe_tts(reply_text)
+                # iter 5: use fast OpenAI TTS for the small-talk reply to drop
+                # time-to-first-audio (article §6 latency budget). ElevenLabs
+                # adds 100-300ms on first byte vs OpenAI's 60-150ms.
+                tts_result = self._safe_tts_fast(reply_text)
                 new_state = State.OPEN_QUESTION
                 self.ctx.state = new_state
                 entry.state_after = new_state.value
@@ -281,7 +284,7 @@ class Session:
                 first_task = self.ctx.cam_tasks[0] if self.ctx.cam_tasks else None
                 if first_task:
                     reply_text = small_talk.open_question_reply(first_task.get("name", "your first task"))
-                    tts_result = self._safe_tts(reply_text)
+                    tts_result = self._safe_tts_fast(reply_text)
                     new_state = State.TASK_BY_TASK_LOOP
                     self.ctx.state = new_state
                     entry.state_after = new_state.value
@@ -484,6 +487,14 @@ class Session:
             return tts.synthesize(text, voice_id=voice_id)
         except Exception as exc:
             logger.error("action=pipeline_tts_failed error=%s", exc)
+            return tts.TTSResult(audio_bytes=b"", voice_id="", char_count=0)
+
+    def _safe_tts_fast(self, text: str) -> tts.TTSResult:
+        """Latency-optimized TTS for short small-talk replies. Skips ElevenLabs."""
+        try:
+            return tts.synthesize_fast(text)
+        except Exception as exc:
+            logger.error("action=pipeline_tts_fast_failed error=%s", exc)
             return tts.TTSResult(audio_bytes=b"", voice_id="", char_count=0)
 
     def _dispatch_tool_calls(self, tool_calls: list[dict], state_before: State) -> None:
