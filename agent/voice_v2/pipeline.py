@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agent.voice_v2 import guards, llm_openai, small_talk, stt_openai, tts, turn_log
+from agent.voice_v2 import guards, judge, llm_openai, small_talk, stt_openai, tts, turn_log
 from agent.voice_v2.state_machine import (
     ESCALATION_PHRASE,
     State,
@@ -97,6 +97,58 @@ class Session:
         # Rolling chat history (article §11 #5: sliding window to prevent bloat)
         self._history: list[dict] = []
         self._max_history_turns = int(os.getenv("VOICE_AGENT_V2_HISTORY_TURNS", "10"))
+        # Per-session turn counter — used by the LLM-as-judge sampler.
+        self._turn_counter = 0
+        # Phase 17 iter 3 — session persistence so a CAM can resume across
+        # server restarts. Auto-loaded at start; persisted on every turn end.
+        self._maybe_resume_session()
+
+    # ---------- session persistence (Phase 17 iter 3) ----------
+
+    def _session_path(self) -> Path:
+        safe = (self.cam_email or self.cam_name or "unknown").replace("@", "_at_").replace(".", "_")
+        return Path(os.getenv("VOICE_SESSION_DIR", "data/voice_sessions")) / f"{self.cycle_id}_{safe}.json"
+
+    def _maybe_resume_session(self) -> None:
+        """Load saved StateContext + history from prior session if it exists."""
+        p = self._session_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            self.ctx.state = State(data["state"])
+            self.ctx.current_task_idx = int(data.get("current_task_idx", 0))
+            self.ctx.proposed_updates = dict(data.get("proposed_updates", {}))
+            self._history = list(data.get("history", []))
+            self._turn_counter = int(data.get("turn_counter", 0))
+            logger.info(
+                "action=voice_session_resumed cam=%s state=%s history_turns=%d",
+                self.cam_email, self.ctx.state.value, len(self._history),
+            )
+        except Exception as exc:
+            logger.warning("action=voice_session_resume_failed error=%s", exc)
+
+    def _persist_session(self) -> None:
+        """Atomically write current session state. Called at end of every turn."""
+        p = self._session_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "cycle_id": self.cycle_id,
+            "cam_email": self.cam_email,
+            "cam_name": self.cam_name,
+            "state": self.ctx.state.value,
+            "current_task_idx": self.ctx.current_task_idx,
+            "proposed_updates": self.ctx.proposed_updates,
+            "history": self._history,
+            "turn_counter": self._turn_counter,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        }
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        try:
+            os.replace(tmp, p)
+        except OSError as exc:
+            logger.debug("action=voice_session_persist_failed error=%s", exc)
 
     # ---------- transcript-in / audio-in entry points ----------
 
@@ -366,6 +418,24 @@ class Session:
                             entry.tts_first_audio_ms = tts_result.first_audio_ms
                             entry.tts_full_audio_ms = tts_result.total_ms
                             entry.tts_voice_id = tts_result.voice_id
+
+            # 9. JUDGE (async — Phase 17 iter 3). Article §11 #9: every Nth
+            # turn, fire a tiny LLM-as-judge call in the background to score
+            # groundedness / naturalness / brevity / answered-correctly.
+            # Cost: ~$0.0001 per judge. We don't block the pipeline on this.
+            self._turn_counter += 1
+            if judge.should_judge(self._turn_counter):
+                judge.judge_turn_async(
+                    cycle_id=self.cycle_id,
+                    turn_id=entry.turn_id,
+                    transcript=cleaned,
+                    reply_text=reply_text,
+                    tool_calls=result.tool_calls,
+                    cam_tasks=self.ctx.cam_tasks,
+                )
+
+            # 10. PERSIST SESSION — survives process restart so a CAM can resume.
+            self._persist_session()
 
             return OrchestratedTurn(
                 transcript=transcript,

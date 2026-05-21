@@ -298,6 +298,9 @@ class TestPipelineMocked:
         os.environ["PENDING_CAM_INPUTS_DIR"] = self.tmp + "/pending"
         os.environ["VOICE_AGENT_V2_SPEND_FILE"] = self.tmp + "/spend.json"
         os.environ["VOICE_AGENT_V2_MAX_SPEND_USD"] = "100"
+        # Phase 17 iter 3 — isolate session-persistence dir so tests don't
+        # accidentally resume from each other's saved state
+        os.environ["VOICE_SESSION_DIR"] = self.tmp + "/sessions"
         import importlib
         import agent.voice_v2.turn_log as TL
         import agent.voice_v2.llm_openai as L
@@ -461,6 +464,136 @@ class TestServerRoutesGated:
 # ──────────────────────────────────────────────────────────────────────────
 # TTS text preparation
 # ──────────────────────────────────────────────────────────────────────────
+
+
+class TestSmallTalkGate:
+    """Phase 17 iter 2 — bypass LLM for greetings + ready acknowledgments."""
+
+    def test_greeting_detection(self):
+        from agent.voice_v2.small_talk import is_small_talk_greeting
+        assert is_small_talk_greeting("Hi")
+        assert is_small_talk_greeting("Hi, this is Alice.")
+        assert is_small_talk_greeting("Good morning")
+        assert is_small_talk_greeting("Alice here.")
+        assert is_small_talk_greeting("This is Bob")
+        # Not greetings — these have content
+        assert not is_small_talk_greeting("Task one is at fifty percent.")
+        assert not is_small_talk_greeting("Hi, task one is at sixty.")  # has content after greeting
+
+    def test_ready_acknowledgment_detection(self):
+        from agent.voice_v2.small_talk import is_ready_acknowledgment
+        assert is_ready_acknowledgment("OK")
+        assert is_ready_acknowledgment("I'm ready")
+        assert is_ready_acknowledgment("Let's go")
+        assert is_ready_acknowledgment("Yes, ready")
+        # Not a ready ack — has content
+        assert not is_ready_acknowledgment("Yes, task one is at fifty")
+
+    def test_greeting_reply_uses_first_name_and_task_count(self):
+        from agent.voice_v2.small_talk import greeting_reply
+        r = greeting_reply("Alice Nguyen", 3)
+        assert "Alice" in r
+        assert "three" in r.lower()
+        # Singular form for 1
+        r1 = greeting_reply("Bob", 1)
+        assert "one task" in r1.lower()
+
+
+class TestJudge:
+    """Phase 17 iter 3 — LLM-as-judge groundedness sampling."""
+
+    def test_should_judge_samples_every_nth_turn(self):
+        import os
+        os.environ["VOICE_AGENT_V2_JUDGE_EVERY"] = "5"
+        import importlib, agent.voice_v2.judge as J
+        importlib.reload(J)
+        assert not J.should_judge(0)
+        assert not J.should_judge(1)
+        assert not J.should_judge(4)
+        assert J.should_judge(5)
+        assert not J.should_judge(6)
+        assert J.should_judge(10)
+
+    def test_should_judge_disabled_when_zero(self):
+        import os
+        os.environ["VOICE_AGENT_V2_JUDGE_EVERY"] = "0"
+        import importlib, agent.voice_v2.judge as J
+        importlib.reload(J)
+        assert not J.should_judge(5)
+        assert not J.should_judge(50)
+
+    def test_cycle_summary_returns_none_when_no_scores(self):
+        import os, tempfile
+        tmp = tempfile.mkdtemp()
+        os.environ["VOICE_JUDGE_DIR"] = tmp
+        import importlib, agent.voice_v2.judge as J
+        importlib.reload(J)
+        assert J.cycle_summary("NONE-CYC") is None
+
+
+class TestSessionPersistence:
+    """Phase 17 iter 3 — session survives server restart."""
+
+    def setup_method(self):
+        import tempfile, os
+        self.tmp = tempfile.mkdtemp(prefix="vt_sess_")
+        # Isolated session dir per test so resume doesn't grab stale state
+        os.environ["VOICE_SESSION_DIR"] = self.tmp + "/sessions"
+        os.environ["VOICE_TURN_LOG_DIR"] = self.tmp + "/turns"
+        os.environ["VOICE_AGENT_V2_SPEND_FILE"] = self.tmp + "/spend.json"
+        os.environ["PENDING_CAM_INPUTS_DIR"] = self.tmp + "/pending"
+        import importlib
+        import agent.voice_v2.turn_log as TL
+        import agent.voice_v2.llm_openai as L
+        import agent.voice_v2.pipeline as P
+        importlib.reload(TL); importlib.reload(L); importlib.reload(P)
+        from pathlib import Path
+        TL._TURN_DIR = Path(self.tmp + "/turns"); TL._seq_counters.clear()
+        L.reset_spend()
+        self.P = P
+
+    def test_session_persists_state_and_history(self):
+        from agent.voice_v2.state_machine import State
+        from unittest.mock import patch, MagicMock
+        from agent.voice_v2 import llm_openai as L
+        with patch.object(L, "chat") as mock_chat, \
+             patch("agent.voice_v2.tts.synthesize") as mock_tts:
+            mock_chat.return_value = L.ChatResult(
+                text="Got it.",
+                tool_calls=[{"name": "propose_percent_complete",
+                             "args": {"task_id": "1", "percent_complete": 70}}],
+                input_tokens=10, output_tokens=5, cost_usd=0.0001,
+                model="gpt-4o-mini", first_token_ms=100, total_ms=200,
+            )
+            mock_tts.return_value = MagicMock(audio_bytes=b"", voice_id="v1",
+                char_count=0, first_audio_ms=0, total_ms=0, cost_usd=0)
+
+            # First session — make some progress. Use TWO tasks so the safety
+            # auto-advance (>= len(cam_tasks) → CONFIRM_BLOCK) doesn't fire on
+            # the first update.
+            tasks_two = [
+                {"task_id": "1", "name": "Power",   "percent_complete": 50, "baseline_finish": "2026-06-01"},
+                {"task_id": "2", "name": "Thermal", "percent_complete": 30, "baseline_finish": "2026-07-01"},
+            ]
+            s1 = self.P.start_session(
+                cycle_id="PERSIST_CYC",
+                cam_email="alice@x", cam_name="Alice",
+                cam_tasks=tasks_two,
+                transport="test",
+            )
+            s1.ctx.state = State.TASK_BY_TASK_LOOP
+            s1.process_transcript("Task one is at seventy percent.")
+            assert "1" in s1.ctx.proposed_updates
+
+            # Brand new session with same identity — should resume
+            s2 = self.P.start_session(
+                cycle_id="PERSIST_CYC",
+                cam_email="alice@x", cam_name="Alice",
+                cam_tasks=tasks_two,
+                transport="test",
+            )
+            assert s2.ctx.proposed_updates.get("1", {}).get("percent_complete") == 70
+            assert s2.ctx.state == State.TASK_BY_TASK_LOOP
 
 
 class TestTTSPrep:

@@ -62,6 +62,8 @@ data/llm_circuit.json
 # Phase 17 runtime state files
 data/voice_turns/
 data/voice_v2_spend.json
+data/voice_judge/
+data/voice_sessions/
 data/pending_cam_inputs/EVAL-*
 docs/PHASE-17-EVAL-RESULTS-FULL.log
 docs/PHASE-17-EVAL-RESULTS.md
