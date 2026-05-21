@@ -27,7 +27,7 @@ Cumulative spend across all 12 iterations: ~$1.87 of $25 cap (7.5%).
 | V7-8 (live-test fixes) | 9/9 | 10/10 | 15/15 | 9/9 | 5/12 | 3/5 | 51/60 (85%) |
 | V9-11 deterministic replies + flow tester | 9/9 | 10/10 | 3/15 | 0/9 | 4/12 | 1/5 | 27/60 (45%) |
 | **V12** narrow filter + task resync | 9/9 | 10/10 | **15/15** | **9/9** | **10/12** | **5/5** | **58/60 (97%)** |
-| (post scenario fix) | 9/9 | 10/10 | 15/15 | 9/9 | 12/12 | 5/5 | **60/60 expected** |
+| **V12b** scenario data fixes | **9/9** | **10/10** | **15/15** | **9/9** | **12/12** | **5/5** | **60/60 (100%)** ✓ |
 
 This is the honest report — what worked, what's flaky, what to look at first.
 
