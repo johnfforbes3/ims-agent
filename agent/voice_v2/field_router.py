@@ -65,6 +65,40 @@ def _strip_task_reference(text: str) -> str:
     return t
 
 
+# Word → number map for "Task one", "task two", etc.
+_TASK_NAME_TO_ID = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+}
+
+
+def extract_referenced_task_id(transcript: str, valid_task_ids: list[str]) -> Optional[str]:
+    """If the CAM explicitly names a task ("Task two", "task #3"), return its
+    task_id when it matches one of the valid task IDs. Returns None when no
+    explicit task reference is present.
+
+    Phase 17 iter 12 — fixes data misrouting when CAM jumps to a different
+    task than the current one (e.g. "Task two at thirty" while we're still
+    on task 1's percent question).
+    """
+    if not transcript:
+        return None
+    valid_set = {str(v) for v in valid_task_ids}
+    # "Task 2" / "task #2" — direct digit
+    m = re.search(r"\btask\s+(?:id\s+)?#?(\d+)\b", transcript, re.I)
+    if m and m.group(1) in valid_set:
+        return m.group(1)
+    # "Task two" — word form
+    m = re.search(r"\btask\s+(?:id\s+)?(\w+)\b", transcript, re.I)
+    if m:
+        word = m.group(1).lower()
+        if word in _TASK_NAME_TO_ID:
+            tid = _TASK_NAME_TO_ID[word]
+            if tid in valid_set:
+                return tid
+    return None
+
+
 def _extract_percent(text: str) -> Optional[int]:
     """Try to pull a 0-100 integer percent from a spoken utterance.
 

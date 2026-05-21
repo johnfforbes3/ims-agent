@@ -379,6 +379,34 @@ class Session:
                                             self.ctx.current_task_idx,
                                             cur_tid_for_skip in self.ctx.skipped_task_ids)
 
+            # 1.65 TASK-REFERENCE RESYNC — Phase 17 iter 12.
+            # If the CAM names a specific task ("Task two at thirty"), align
+            # ctx.current_task_idx to that task BEFORE the router runs.
+            # Otherwise the router would attribute the data to the WRONG task
+            # (whatever current_task happened to be) — observed in edge
+            # scenarios where CAM jumps from giving task 1 partial info to
+            # naming task 2 directly.
+            if state_before in (State.TASK_BY_TASK_LOOP, State.OPEN_QUESTION) and cleaned:
+                valid_ids = [str(t["task_id"]) for t in self.ctx.cam_tasks]
+                referenced = field_router.extract_referenced_task_id(cleaned, valid_ids)
+                if referenced and self.ctx.current_task:
+                    cur_tid = str(self.ctx.current_task["task_id"])
+                    if referenced != cur_tid:
+                        # Find the index of the referenced task
+                        for i, t in enumerate(self.ctx.cam_tasks):
+                            if str(t["task_id"]) == referenced:
+                                # Mark the current task as skipped if it had any
+                                # data but isn't complete — preserves whatever
+                                # was captured for it.
+                                if (self.ctx.proposed_updates.get(cur_tid)
+                                        and not self.ctx.task_complete(cur_tid)
+                                        and i > self.ctx.current_task_idx):
+                                    self.ctx.skipped_task_ids.add(cur_tid)
+                                self.ctx.current_task_idx = i
+                                logger.info("action=voice_v2_task_resync new_idx=%d ref=%s",
+                                            i, referenced)
+                                break
+
             # 1.7 FIELD ROUTER — Phase 17 iter 7 (extended iter 11).
             # Runs when state is TASK_BY_TASK_LOOP OR when we're in
             # OPEN_QUESTION and the transcript has task-status content
@@ -476,25 +504,42 @@ class Session:
 
             # 3. TOOL CALL DISPATCH — update StateContext from tool calls.
             # Router calls already applied above; just apply the LLM's now.
-            # Phase 17 iter 11 — verify LLM-supplied capture_blocker/capture_risk
-            # against transcript evidence. The LLM occasionally hallucinates
-            # capture_blocker(blocker_text="") on turns where the CAM never
-            # mentioned a blocker (because the prompt shows "blocker MISSING"
-            # and the LLM "helpfully" fills it). Drop those hallucinated calls.
+            #
+            # Phase 17 iter 11b — narrowed hallucination filter:
+            # Only drop the LLM's call when ALL THREE of these are true:
+            #   (a) it's capture_blocker or capture_risk
+            #   (b) the value is the EMPTY/FALSE default (suggests filler)
+            #   (c) the transcript has no related keyword
+            # AND the router didn't already fire the same call this turn.
+            # This preserves the LLM's correct multi-field extractions while
+            # still blocking the "fill empty defaults to look complete"
+            # failure mode observed in iter 11 happy.field-per-turn testing.
+            router_fired_blocker = any(c.get("name") == "capture_blocker"
+                                       for c in pre_router_calls)
+            router_fired_risk = any(c.get("name") == "capture_risk"
+                                    for c in pre_router_calls)
             filtered_llm_calls = []
             for tc in (result.tool_calls or []):
                 name = tc.get("name")
-                if name == "capture_blocker" and not _transcript_mentions_blocker(cleaned):
-                    logger.info("action=voice_v2_dropped_hallucinated_call name=capture_blocker "
-                                "transcript=%r", cleaned[:80])
-                    continue
-                if name == "capture_risk" and not _transcript_mentions_risk(cleaned):
-                    logger.info("action=voice_v2_dropped_hallucinated_call name=capture_risk "
-                                "transcript=%r", cleaned[:80])
-                    continue
+                args = tc.get("args") or {}
+                if name == "capture_blocker":
+                    blocker_val = args.get("blocker_text", "")
+                    if (blocker_val == ""
+                            and not _transcript_mentions_blocker(cleaned)
+                            and not router_fired_blocker):
+                        logger.info("action=voice_v2_dropped_hallucinated_default "
+                                    "name=capture_blocker transcript=%r", cleaned[:80])
+                        continue
+                if name == "capture_risk":
+                    risk_flag = args.get("risk_flag", False)
+                    if (risk_flag is False
+                            and not _transcript_mentions_risk(cleaned)
+                            and not router_fired_risk):
+                        logger.info("action=voice_v2_dropped_hallucinated_default "
+                                    "name=capture_risk transcript=%r", cleaned[:80])
+                        continue
                 filtered_llm_calls.append(tc)
             self._dispatch_tool_calls(filtered_llm_calls, state_before)
-            # Update merged + entry to reflect what actually applied
             merged_tool_calls = list(pre_router_calls) + list(filtered_llm_calls)
             entry.llm_tool_calls = merged_tool_calls
 
