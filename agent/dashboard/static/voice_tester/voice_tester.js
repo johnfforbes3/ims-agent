@@ -3,6 +3,7 @@
 
 (function () {
   const $ = sel => document.querySelector(sel);
+  const $$ = sel => document.querySelectorAll(sel);
   const els = {
     wsStatus:   $("#ws-status"),
     statePill:  $("#state-pill"),
@@ -10,6 +11,8 @@
     camPicker:  $("#cam-picker"),
     startBtn:   $("#start-btn"),
     resetBtn:   $("#reset-btn"),
+    stopAudioBtn: $("#stop-audio-btn"),
+    resumeHint: $("#resume-hint"),
     taskTable:  $("#task-table tbody"),
     proposed:   $("#proposed-pre"),
     transcript: $("#transcript"),
@@ -22,15 +25,19 @@
     totalsCost:  $("#totals-cost"),
     totalsP50:   $("#totals-p50"),
     totalsP95:   $("#totals-p95"),
+    totalsST:   $("#totals-st"),
+    totalsSFT:  $("#totals-sft"),
+    totalsGB:   $("#totals-gb"),
     audio:       $("#reply-audio"),
   };
 
   // ─── State ───
   let ws = null;
   let cams = [];
-  let totals = { turns: 0, cost: 0, latencies: [] };
+  let totals = { turns: 0, cost: 0, latencies: [], smallTalk: 0, safety: 0, guardBlocks: 0 };
   let mediaRecorder = null;
   let audioChunks = [];
+  let lastState = "—";
 
   // ─── WS connection ───
   function connect() {
@@ -75,7 +82,15 @@
         renderTasks(m.tasks);
         setStatus("state-pill", "info", m.state);
         setControlsEnabled(true);
-        logSys(`▸ Session started as ${m.cam.name} (${m.cam.email}).`);
+        lastState = m.state || "—";
+        // Detect resume — state != GREETING means we picked up a prior session
+        if (m.state && m.state !== "GREETING") {
+          logSys(`▸ Resuming saved session as ${m.cam.name}. Current state: ${m.state}.`);
+          els.resumeHint.style.display = "block";
+        } else {
+          logSys(`▸ Session started as ${m.cam.name} (${m.cam.email}).`);
+          els.resumeHint.style.display = "none";
+        }
         break;
       case "reset_ack":
         totals = { turns: 0, cost: 0, latencies: [] };
@@ -90,6 +105,7 @@
         break;
       case "tool":
         logMsg("TOOL", `${m.name}(${JSON.stringify(m.args)})`, "vt-tool");
+        updateProposedFromTool(m.name, m.args);
         break;
       case "state":
         setStatus("state-pill", "info", m.state);
@@ -123,6 +139,34 @@
       o.textContent = `${c.name}  ·  ${c.email}`;
       els.camPicker.appendChild(o);
     });
+  }
+
+  // Track proposed updates client-side so the panel shows live progress
+  const proposed = {};
+  function updateProposedFromTool(name, args) {
+    if (!args) return;
+    const tid = String(args.task_id || "");
+    if (!tid) return;
+    if (!proposed[tid]) proposed[tid] = {};
+    if (name === "propose_percent_complete") proposed[tid].pct = args.percent_complete;
+    else if (name === "capture_blocker")     proposed[tid].blocker = args.blocker_text;
+    else if (name === "capture_risk") {
+      proposed[tid].risk = args.risk_flag;
+      proposed[tid].risk_desc = args.risk_description;
+    }
+    renderProposed();
+  }
+  function renderProposed() {
+    const keys = Object.keys(proposed);
+    if (!keys.length) { els.proposed.textContent = "none yet"; return; }
+    els.proposed.textContent = keys.map(tid => {
+      const u = proposed[tid];
+      const bits = [];
+      if (u.pct !== undefined) bits.push(`${u.pct}%`);
+      if (u.blocker !== undefined) bits.push(`blocker: ${u.blocker || "—"}`);
+      if (u.risk !== undefined) bits.push(`risk: ${u.risk ? "YES" : "no"}`);
+      return `task ${tid}\n  ${bits.join("\n  ")}`;
+    }).join("\n\n");
   }
 
   function renderTasks(tasks) {
@@ -161,10 +205,22 @@
     totals.turns += 1;
     totals.cost  += (m.llm_cost_usd || 0);
     if (m.llm_total_ms) totals.latencies.push(m.llm_total_ms + (m.tts_first_audio_ms || 0));
+    // Detect small-talk gate hits (LLM cost = 0 with no error)
+    if (!m.error && (m.llm_cost_usd === 0 || !m.llm_cost_usd) && (m.llm_total_ms || 0) === 0) {
+      totals.smallTalk += 1;
+    }
+    // Detect safety transition (state advanced but no LLM tool call)
+    if (m.state_after && lastState !== "—" && m.state_after !== lastState && !m.llm_total_ms) {
+      totals.safety += 1;
+    }
+    lastState = m.state_after || lastState;
+    const ig = m.input_guard  || {};
+    const og = m.output_guard || {};
+    if (ig.passed === false || og.passed === false) totals.guardBlocks += 1;
+
     renderTotals();
     setStatus("spend-pill", "ok", "$" + totals.cost.toFixed(4));
 
-    const toolsCell = (els.kvTbody.rows[1] || {}).cells?.[1];
     const rows = els.kvTbody.rows;
     const set = (i, v) => { if (rows[i]) rows[i].cells[1].innerHTML = v; };
     set(0, escapeHtml((m.state_after || "—")));
@@ -172,8 +228,6 @@
     set(3, (m.llm_first_token_ms || 0) + " ms");
     set(4, (m.llm_total_ms || 0) + " ms");
     set(5, (m.tts_first_audio_ms || 0) + " ms");
-    const ig = m.input_guard  || {};
-    const og = m.output_guard || {};
     set(6, ig.passed ? "✓" : `✗ ${escapeHtml((ig.categories || []).join(","))}`);
     set(7, og.passed ? "✓" : `✗ ${escapeHtml((og.categories || []).join(","))}`);
   }
@@ -181,6 +235,9 @@
   function renderTotals() {
     els.totalsTurns.textContent = totals.turns;
     els.totalsCost.textContent  = "$" + totals.cost.toFixed(4);
+    els.totalsST.textContent  = totals.smallTalk;
+    els.totalsSFT.textContent = totals.safety;
+    els.totalsGB.textContent  = totals.guardBlocks;
     if (totals.latencies.length) {
       const sorted = [...totals.latencies].sort((a, b) => a - b);
       const p = (q) => sorted[Math.floor(sorted.length * q)] || 0;
@@ -197,6 +254,17 @@
     const url = URL.createObjectURL(blob);
     els.audio.src = url;
     els.audio.play().catch(e => console.warn("audio play blocked", e));
+    // Enable barge-in button while audio plays
+    els.stopAudioBtn.disabled = false;
+    els.audio.onended = () => { els.stopAudioBtn.disabled = true; };
+  }
+
+  function stopAudio() {
+    try {
+      els.audio.pause();
+      els.audio.currentTime = 0;
+    } catch (e) { console.warn("audio stop failed", e); }
+    els.stopAudioBtn.disabled = true;
   }
 
   function escapeHtml(s) {
@@ -213,7 +281,20 @@
   });
 
   els.resetBtn.addEventListener("click", () => {
+    if (totals.turns > 0 && !confirm("Reset session and start fresh? Any unfinished conversation will be cleared.")) return;
     sendMsg({ type: "reset" });
+  });
+
+  els.stopAudioBtn.addEventListener("click", stopAudio);
+
+  // Quick-test phrases — fill the text input and send
+  $$(".vt-quick").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const text = btn.getAttribute("data-text");
+      if (!text || els.textInput.disabled) return;
+      stopAudio();
+      sendMsg({ type: "text", text });
+    });
   });
 
   els.sendBtn.addEventListener("click", () => {
