@@ -332,6 +332,80 @@ SCENARIOS: list[FlowScenario] = [
             "2": {"percent_complete": 30},
         },
     ),
+
+    # Long verbose interview — 3 tasks, lots of detail per field
+    FlowScenario(
+        name="verbose_3_task_interview",
+        cam_name="Carol Diaz",
+        cam_email="carol@program.mil",
+        cam_tasks=_alice_tasks(3),
+        transcripts=[
+            "Good morning, this is Carol.",
+            "Yes, I have time. Ready to go.",
+            "Task one is currently at about seventy-five percent complete.",
+            "The blocker on that one is we're still waiting on the design review feedback from systems engineering.",
+            "I am flagging a small risk that if the design review feedback doesn't come back by Friday we may slip into next week.",
+            "Task two is much further along, I'd say ninety percent.",
+            "No blocker on task two.",
+            "And no risk on task two either.",
+            "Task three is just starting, maybe ten percent.",
+            "No blocker right now.",
+            "No risk for task three.",
+            "Yes that's all correct.",
+        ],
+        expected_final_state="WRAPUP",
+        expected_updates={
+            "1": {"percent_complete": 75, "blocker_text_contains": "design review",
+                  "risk_flag": True},
+            "2": {"percent_complete": 90, "blocker_text": "", "risk_flag": False},
+            "3": {"percent_complete": 10, "blocker_text": "", "risk_flag": False},
+        },
+    ),
+
+    # CAM uses imprecise language ("about half", "mostly done", "just starting")
+    FlowScenario(
+        name="imprecise_percentages",
+        cam_name="David Patel",
+        cam_email="david@program.mil",
+        cam_tasks=_alice_tasks(2),
+        transcripts=[
+            "Hi David here.",
+            "OK ready.",
+            "Task one is about half done.",  # → 50
+            "No blocker.",
+            "No risk.",
+            "Task two is just started.",  # → 10
+            "No blocker, no risk.",
+            "Yes.",
+        ],
+        expected_final_state="WRAPUP",
+        expected_updates={
+            "1": {"percent_complete": 50},
+            "2": {"percent_complete": 10},
+        },
+    ),
+
+    # User reports two tasks worth of info in two consecutive multi-field utterances
+    # (no greeting/ready preamble — straight to data)
+    FlowScenario(
+        name="rapid_dump",
+        cam_name="Eva Martinez",
+        cam_email="eva@program.mil",
+        cam_tasks=_alice_tasks(2),
+        transcripts=[
+            "Hi.",
+            "Ready let's go.",
+            "Task one at sixty, no blocker, no risk.",
+            "Task two at thirty, blocker is parts shortage, no risk.",
+            "Yes correct.",
+        ],
+        expected_final_state="WRAPUP",
+        expected_updates={
+            "1": {"percent_complete": 60, "blocker_text": "", "risk_flag": False},
+            "2": {"percent_complete": 30, "blocker_text_contains": "parts",
+                  "risk_flag": False},
+        },
+    ),
 ]
 
 

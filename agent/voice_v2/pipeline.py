@@ -379,16 +379,25 @@ class Session:
                                             self.ctx.current_task_idx,
                                             cur_tid_for_skip in self.ctx.skipped_task_ids)
 
-            # 1.7 FIELD ROUTER — Phase 17 iter 7.
-            # When in TASK_BY_TASK_LOOP, run a deterministic Python classifier
-            # to extract obvious field answers (numbers, "no blocker", "no
-            # risk") BEFORE the LLM call. This way the LLM's prompt sees the
-            # updated field state and can't ask a question we already have an
-            # answer to. Live testing caught the LLM forgetting to fire
-            # capture_blocker on "No blocker" responses — this is the safety
-            # net.
+            # 1.7 FIELD ROUTER — Phase 17 iter 7 (extended iter 11).
+            # Runs when state is TASK_BY_TASK_LOOP OR when we're in
+            # OPEN_QUESTION and the transcript has task-status content
+            # (so we don't drop data the CAM gave on the "you lead" or
+            # "Task one at sixty" turn that triggers OPEN_QUESTION →
+            # TASK_BY_TASK_LOOP transition).
+            should_run_router = (
+                state_before == State.TASK_BY_TASK_LOOP
+                or (
+                    state_before == State.OPEN_QUESTION
+                    and cleaned
+                    and any(k in cleaned.lower() for k in (
+                        "task", "percent", "%", "blocker", "risk",
+                        "complete", "done", "stuck",
+                    ))
+                )
+            )
             pre_router_calls: list[dict] = []
-            if state_before == State.TASK_BY_TASK_LOOP and self.ctx.current_task:
+            if should_run_router and self.ctx.current_task:
                 tid = str(self.ctx.current_task["task_id"])
                 missing = self.ctx.next_missing_field(tid)
                 # Snapshot which fields are already captured for this task so
