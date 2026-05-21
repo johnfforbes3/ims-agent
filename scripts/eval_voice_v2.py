@@ -224,6 +224,87 @@ def build_scenarios() -> list[Scenario]:
                 expected_tool_calls=set(),
             ))
 
+    # ──── REAL-HUMAN MESSY (12 — added in iter 6) ────
+    # Patterns that real CAMs actually exhibit on phone calls — false starts,
+    # filler words, mid-sentence corrections, asking the agent to repeat.
+    human_scenarios = [
+        ("false_start", [
+            "Hi, this is Alice.",
+            "Yeah, let's start.",
+            "Task one is, uh, let me think. About sixty percent I think.",
+            "Blocker is — well, no blocker actually.",
+            "Task two is at, hmm, forty-something. Let's call it forty five.",
+            "No blocker no risk. That's it.",
+            "Yeah, correct.",
+        ]),
+        ("repeat_request", [
+            "Hi.", "Ready.",
+            "Task one at sixty percent.",
+            "Can you repeat that back?",
+            "Yes, vendor delay is the blocker.",
+            "No risk. Task two at thirty, no blocker. Done.",
+            "Yes that's right.",
+        ]),
+        ("phone_interruption", [
+            "Hi Bob here.",
+            "Sorry, hold on — yes I'm back. Ready.",
+            "Task one is at fifty percent.",
+            "Hold on someone is at the door.",
+            "OK back. Blocker is procurement.",
+            "Task two at twenty no blocker.",
+            "All done.",
+            "Yes."
+        ]),
+        ("verbose_blocker", [
+            "Hi Carol.",
+            "Yeah I'm ready.",
+            "Task one at sixty.",
+            "So the blocker is a little complex — basically we ordered the parts but the vendor said their warehouse is moving and they can't ship until the 22nd, and then there's a customs hold expected so we may not have parts in hand until early next week. I've escalated.",
+            "Risk is yes, if parts don't arrive by Thursday we miss CDR.",
+            "Task two at thirty, no blocker. Done.",
+            "Yes."
+        ]),
+        ("mumbled_percent", [
+            "Hi.", "OK.",
+            "Task one is at... probably sixty?",
+            "Blocker is the design review.",
+            "Task two — uh, twenty? Maybe twenty-five.",
+            "No blocker. That's it.",
+            "Sure."
+        ]),
+        ("agent_repeated_question", [
+            "Hi David.",
+            "Ready.",
+            "Task one is sixty.",
+            "Sixty percent, yes.",  # In case agent re-asks
+            "Vendor delay is the blocker.",
+            "Task two thirty no blocker. Done.",
+            "Yes."
+        ]),
+    ]
+    for ename, transcripts in human_scenarios:
+        out.append(Scenario(
+            name=f"human.{ename}",
+            tier="human",
+            cam_name="Alice Nguyen", cam_email="alice@program.mil",
+            cam_tasks=_tasks(2),
+            transcripts=transcripts,
+            expected_final_state="WRAPUP",
+            expected_tool_calls={"propose_percent_complete", "capture_blocker"},
+        ))
+    # Add 6 more by reusing 2 patterns across other CAMs for variance
+    for cam_name, cam_email in _CAMS[1:4]:  # Bob, Carol, David
+        for ename, transcripts in human_scenarios[:2]:
+            out.append(Scenario(
+                name=f"human.{cam_name.split()[0]}.{ename}",
+                tier="human",
+                cam_name=cam_name, cam_email=cam_email,
+                cam_tasks=_tasks(2),
+                transcripts=transcripts,
+                expected_final_state="WRAPUP",
+                expected_tool_calls={"propose_percent_complete", "capture_blocker"},
+            ))
+
     # ──── ADVERSARIAL (5 = 10%) ────
     adv_scenarios = [
         ("prompt_injection", [
