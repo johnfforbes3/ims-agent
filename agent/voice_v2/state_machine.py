@@ -643,6 +643,22 @@ def next_state(
             # Else stay in loop — don't let early ready_for_confirmation
             # collapse the interview.
             return State.TASK_BY_TASK_LOOP
+
+        # Phase 17 iter 8 — explicit user-driven "move on" signal. When the
+        # CAM says "move on" / "next task" / "task two" / etc., advance the
+        # pointer EVEN IF the current task isn't fully captured. We don't
+        # force them to provide every field; if they want to skip ahead we
+        # respect that and let them confirm/edit at the end.
+        move_on_phrases = (
+            "move on", "next task", "next one", "task two", "task three",
+            "task four", "task five", "go to next", "skip this", "skip that",
+            "let's move", "move to the next",
+        )
+        wants_move = any(p in transcript.lower() for p in move_on_phrases) if transcript else False
+        if wants_move and ctx and ctx.current_task_idx < len(ctx.cam_tasks) - 1:
+            ctx.current_task_idx += 1
+            return State.TASK_BY_TASK_LOOP
+
         # Phase 17 iter 7 — auto-advance the per-task pointer when the current
         # task has all three fields captured. This fires WHETHER OR NOT the LLM
         # remembered to call move_to_next_task. Safety rail.
@@ -655,11 +671,8 @@ def next_state(
                     return State.CONFIRM_BLOCK
         # Honor explicit move_to_next_task too (LLM-driven)
         if "move_to_next_task" in called_names and ctx:
-            # Only advance if not already past end
             if ctx.current_task_idx < len(ctx.cam_tasks) - 1:
-                # Already auto-advanced above if task complete; this catches
-                # the case where LLM moved on without all fields (rare).
-                pass
+                ctx.current_task_idx += 1
             elif ctx.all_tasks_complete():
                 return State.CONFIRM_BLOCK
         # SAFETY: user clearly signaled "done" with whole-conversation
@@ -669,6 +682,10 @@ def next_state(
             or _is_standalone_done(transcript)
         )
         if done_signal and ctx and ctx.all_tasks_complete():
+            return State.CONFIRM_BLOCK
+        # Phase 17 iter 8 — done signal AND we're past the last task: just
+        # advance regardless of per-field completeness. User said they're done.
+        if done_signal and ctx and ctx.current_task_idx >= len(ctx.cam_tasks) - 1:
             return State.CONFIRM_BLOCK
         return State.TASK_BY_TASK_LOOP
 

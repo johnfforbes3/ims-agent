@@ -159,10 +159,22 @@ _NO_RISK_PATTERNS = [
 ]
 
 
-def _looks_like_blocker_text(text: str) -> bool:
-    """True iff the text reads like a blocker description (not a simple denial)."""
-    if not text or len(text.split()) < 2:
-        return False
+def _has_percent_unit(text: str) -> bool:
+    """True iff the text explicitly mentions a percent unit (% / percent / pct)."""
+    return bool(re.search(r"\b(?:%|percent|pct)\b", text, re.I))
+
+
+def _has_risk_keyword(text: str) -> bool:
+    """True iff the text mentions a risk keyword."""
+    t = text.lower()
+    return any(k in t for k in (
+        "risk", "concern", "worried", "flagging", "flag a", "flag this",
+        "might slip", "could slip", "may slip", "if it slips", "if we slip",
+        "miss the milestone", "miss cdr", "miss pdr", "in jeopardy",
+    ))
+
+
+def _has_blocker_keyword(text: str) -> bool:
     t = text.lower()
     return any(k in t for k in (
         "blocker", "blocked", "waiting", "delay", "stuck", "vendor",
@@ -171,14 +183,122 @@ def _looks_like_blocker_text(text: str) -> bool:
     ))
 
 
+def _extract_blocker_phrase(text: str) -> Optional[str]:
+    """Pull just the blocker portion from a multi-field utterance.
+
+    Handles patterns like:
+      "Task one at sixty percent, blocker is vendor delay"
+        → "vendor delay"
+      "Task one at sixty, blocker is vendor delay, risk is slip"
+        → "vendor delay"
+      "Blocker is the vendor not shipping until Thursday."
+        → "the vendor not shipping until Thursday"
+      "Waiting on procurement sign-off"
+        → "Waiting on procurement sign-off"  (full text, no "blocker is" marker)
+    """
+    if not text:
+        return None
+    # Try to find an explicit "blocker is/are/was" marker first
+    m = re.search(
+        r"\b(?:blocker(?:s)?\s+(?:is|are|was|will be|right now is|here is)|"
+        r"blocked\s+(?:by|on)|waiting\s+on)\s+(.+?)(?:[,.;]\s+(?:risk|no\s+risk|task|that's\s+(?:all|everything))|$)",
+        text, re.I,
+    )
+    if m:
+        phrase = m.group(1).strip(" .,;:!?")
+        return phrase if phrase else None
+    # No marker — only return the whole text when it's short and doesn't have
+    # other field signals (so we don't capture "Task one at sixty percent" as
+    # a blocker). The caller already gated on _has_blocker_keyword.
+    if len(text.split()) <= 12 and not _has_percent_unit(text) and not _has_risk_keyword(text):
+        return text.strip()
+    return None
+
+
+def _looks_like_blocker_text(text: str) -> bool:
+    """True iff the text reads like a blocker description.
+
+    Phase 17 iter 8 — tightened to avoid false positives on multi-field
+    utterances. Returns False when the text also has percent + risk content
+    (those should be handled by the LLM, not by the router).
+    """
+    if not text or len(text.split()) < 2:
+        return False
+    if not _has_blocker_keyword(text):
+        return False
+    # If there's an explicit "blocker is X" marker, definitely yes (regardless
+    # of how long the utterance is — _extract_blocker_phrase will pull X out)
+    if re.search(r"\b(?:blocker(?:s)?\s+(?:is|are)|blocked\s+by|waiting\s+on)\b", text, re.I):
+        return True
+    # No marker — only treat as a clean blocker when it's short and lacks
+    # percent / risk signals
+    return (
+        len(text.split()) <= 12
+        and not _has_percent_unit(text)
+        and not _has_risk_keyword(text)
+    )
+
+
 def _looks_like_risk_text(text: str) -> bool:
+    """Same shape as blocker — require explicit risk marker for long text."""
     if not text or len(text.split()) < 3:
         return False
-    t = text.lower()
-    return any(k in t for k in (
-        "risk", "concern", "worried", "might slip", "could slip",
-        "may slip", "slip", "miss the milestone", "miss cdr", "miss pdr",
-    ))
+    if not _has_risk_keyword(text):
+        return False
+    # Explicit risk markers — these match real-world phrasings beyond the
+    # narrow "risk is X" pattern. Includes "flagging a risk", "if X slips",
+    # "might/could/may slip", "in jeopardy", "miss the milestone".
+    if re.search(
+        r"\b(?:"
+        r"risk\s+(?:is|are|here is)|"
+        r"flagging\s+(?:a\s+)?risk|"
+        r"flag\s+(?:a|this)\s+risk|"
+        r"concerned\s+about|"
+        r"worried\s+about|"
+        r"might\s+slip|could\s+slip|may\s+slip|"
+        r"if\s+\w+\s+slip(?:s|ped)?|"
+        r"in\s+jeopardy|"
+        r"miss\s+(?:the\s+)?(?:milestone|cdr|pdr|deadline)"
+        r")\b",
+        text, re.I,
+    ):
+        return True
+    # No marker — only short utterances
+    return (
+        len(text.split()) <= 12
+        and not _has_percent_unit(text)
+        and not _has_blocker_keyword(text)
+    )
+
+
+def _extract_risk_phrase(text: str) -> Optional[str]:
+    """Pull just the risk portion from a multi-field utterance."""
+    # First try: explicit "risk is X" / "flagging a risk X" / "concerned X" markers
+    m = re.search(
+        r"\b(?:"
+        r"risk(?:s)?\s+(?:is|are|was|will be|here is)|"
+        r"flagging\s+(?:a\s+)?risk\s+(?:that|because)?|"
+        r"flag\s+(?:a|this)\s+risk\s+(?:that|because)?|"
+        r"concerned\s+(?:about\s+)?|"
+        r"worried\s+(?:about\s+)?"
+        r")\s*(.+?)(?:[,.;]\s+(?:task|that's\s+(?:all|everything))|$)",
+        text, re.I,
+    )
+    if m and m.group(1):
+        return m.group(1).strip(" .,;:!?") or None
+    # Pattern: "if X slips ..." / "might slip ..." → take everything from "if/might/etc" onward
+    m2 = re.search(
+        r"\b((?:if\s+\w+\s+slip(?:s|ped)?|might\s+slip|could\s+slip|may\s+slip|in\s+jeopardy|miss\s+(?:the\s+)?(?:milestone|cdr|pdr|deadline))\b.+?)(?:[,.;]\s+(?:task|that's\s+(?:all|everything))|$)",
+        text, re.I,
+    )
+    if m2:
+        return m2.group(1).strip(" .,;:!?") or None
+    # No markers — take the whole thing if short
+    if len(text.split()) <= 12 and not _has_percent_unit(text) and not _has_blocker_keyword(text):
+        return text.strip()
+    # Multi-field utterance with risk keyword somewhere — return the
+    # verbatim text since we couldn't isolate; the LLM will refine later
+    return text.strip()
 
 
 def route_field_answer(transcript: str, next_missing_field: Optional[str],
@@ -204,41 +324,37 @@ def route_field_answer(transcript: str, next_missing_field: Optional[str],
     tid = str(current_task_id)
     already = already_captured or set()
 
-    # 1. RISK — most distinctive keywords, check first to avoid risk text
-    #    being misread as a blocker.
+    # 1. RISK
     if "risk_flag" not in already:
         if any(p.search(transcript) for p in _NO_RISK_PATTERNS):
             out.append(("capture_risk",
                         {"task_id": tid, "risk_flag": False, "risk_description": ""}))
         elif _looks_like_risk_text(transcript):
-            out.append(("capture_risk", {
-                "task_id": tid, "risk_flag": True,
-                "risk_description": transcript.strip(),
-            }))
+            phrase = _extract_risk_phrase(transcript)
+            if phrase:
+                out.append(("capture_risk", {
+                    "task_id": tid, "risk_flag": True,
+                    "risk_description": phrase,
+                }))
 
-    # 2. BLOCKER — check before percent since blocker text often contains
-    #    numbers (e.g. "waiting on PO #1234").
+    # 2. BLOCKER — extract just the blocker portion, not the whole utterance.
     if "blocker_text" not in already:
         if any(p.search(transcript) for p in _NO_BLOCKER_PATTERNS):
             out.append(("capture_blocker", {"task_id": tid, "blocker_text": ""}))
         elif _looks_like_blocker_text(transcript):
-            # Only fire if a risk hasn't already been routed for THIS message
-            # (avoid double-counting "blocker is X with risk Y" as both)
-            if not any(c[0] == "capture_risk" for c in out):
+            phrase = _extract_blocker_phrase(transcript)
+            if phrase:
                 out.append(("capture_blocker",
-                            {"task_id": tid, "blocker_text": transcript.strip()}))
+                            {"task_id": tid, "blocker_text": phrase}))
 
-    # 3. PERCENT — last, since percent extraction can pick up numbers from
-    #    blocker descriptions. Skip when blocker was just routed (to avoid
-    #    routing "30 day delay" in a blocker as a percent).
+    # 3. PERCENT — always extract when missing, even in multi-field utterances.
+    # The router's _extract_percent already strips task references and
+    # requires explicit unit markers for cleanly identifying the percent.
     if "percent_complete" not in already:
-        blocker_just_routed = any(c[0] == "capture_blocker" and c[1].get("blocker_text")
-                                  for c in out)
-        if not blocker_just_routed:
-            n = _extract_percent(transcript)
-            if n is not None:
-                out.append(("propose_percent_complete",
-                            {"task_id": tid, "percent_complete": n}))
+        n = _extract_percent(transcript)
+        if n is not None:
+            out.append(("propose_percent_complete",
+                        {"task_id": tid, "percent_complete": n}))
 
     if out:
         logger.info("action=voice_field_router_fired next_missing=%s tools=%s",

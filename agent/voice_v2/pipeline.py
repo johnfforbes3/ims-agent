@@ -550,13 +550,24 @@ class Session:
             return tts.TTSResult(audio_bytes=b"", voice_id="", char_count=0)
 
     def _dispatch_tool_calls(self, tool_calls: list[dict], state_before: State) -> None:
-        """Update StateContext from tool calls. PURE STATE MUTATION — no side effects."""
+        """Update StateContext from tool calls. PURE STATE MUTATION — no side effects.
+
+        Phase 17 iter 8 — defensive: tool calls returned by the LLM occasionally
+        have args=None (malformed JSON from the model). We coerce None → {} so
+        the dispatcher doesn't crash and the bad call is silently dropped.
+        """
         cur_task = self.ctx.current_task
         cur_tid = str(cur_task["task_id"]) if cur_task else None
 
         for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
             name = tc.get("name")
-            args = tc.get("args", {})
+            args = tc.get("args") or {}  # coerce None → {}
+            if not isinstance(args, dict):
+                logger.warning("action=voice_v2_bad_tool_args name=%s args=%r — skipping",
+                               name, args)
+                continue
 
             if name == "propose_percent_complete":
                 tid = str(args.get("task_id") or cur_tid or "")
