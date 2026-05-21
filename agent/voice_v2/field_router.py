@@ -148,7 +148,7 @@ _NO_BLOCKER_PATTERNS = [
     re.compile(r"\bnothing\s+(blocking|blocked)\b", re.I),
     re.compile(r"\ball\s+clear\b", re.I),
     re.compile(r"\bno\s+issues?\s+(here|right now)\b", re.I),
-    re.compile(r"\bnope\b", re.I),  # short answer to "any blockers?"
+    re.compile(r"\bnope\b", re.I),
 ]
 
 # "no risk" family
@@ -156,6 +156,15 @@ _NO_RISK_PATTERNS = [
     re.compile(r"\bno\s+(risk|risks|concerns?)\b", re.I),
     re.compile(r"\bnothing\s+(risky|concerning)\b", re.I),
     re.compile(r"\b(all|nothing|none)\s+(good|to flag|to worry)\b", re.I),
+]
+
+# Bare-negative utterances ("No.", "Nope.", "Nothing.", "Nada.") — must be
+# interpreted in CONTEXT of which field was just asked. Iter 11 fix —
+# without this, "No" responses to "Any blockers?" / "Any risks?" left the
+# field MISSING and the conversation got stuck re-asking.
+_BARE_NO_PATTERNS = [
+    re.compile(r"^\s*(no|nope|nah|nothing|none|negative)\s*[.!]?\s*$", re.I),
+    re.compile(r"^\s*not?\s+(really|right now)\s*[.!]?\s*$", re.I),
 ]
 
 
@@ -323,6 +332,23 @@ def route_field_answer(transcript: str, next_missing_field: Optional[str],
     out: list[tuple[str, dict]] = []
     tid = str(current_task_id)
     already = already_captured or set()
+
+    # 0. BARE NEGATIVE — context-aware "No" responses (iter 11 fix).
+    # When the CAM says just "No." in reply to "Any blockers?" / "Any risks?",
+    # treat it as a negative answer to whichever field is missing. This is
+    # the natural human conversational pattern.
+    bare_no = any(p.search(transcript) for p in _BARE_NO_PATTERNS)
+    if bare_no and next_missing_field == "blocker_text" and "blocker_text" not in already:
+        out.append(("capture_blocker", {"task_id": tid, "blocker_text": ""}))
+    elif bare_no and next_missing_field == "risk_flag" and "risk_flag" not in already:
+        out.append(("capture_risk",
+                    {"task_id": tid, "risk_flag": False, "risk_description": ""}))
+    if bare_no:
+        # Bare-no handled — don't fall through to other handlers
+        if out:
+            logger.info("action=voice_field_router_fired next_missing=%s tools=%s",
+                        next_missing_field, [t[0] for t in out])
+        return out
 
     # 1. RISK
     if "risk_flag" not in already:

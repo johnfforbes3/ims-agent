@@ -260,54 +260,39 @@ _PROMPT_BY_STATE: dict[State, str] = {
         "Then call start_task_loop. ONE QUESTION PER TURN. SHORT REPLIES."
     ),
     State.TASK_BY_TASK_LOOP: (
-        "Drive a structured task-by-task status interview. You ALWAYS end "
-        "EVERY reply with a question that drives to the next missing field. "
-        "NEVER end a turn with just 'Got it' — that's a dead end."
+        "Drive a structured task-by-task status interview. ONE question per "
+        "turn. NO markdown. NO bullets. Short sentences."
         "\n\n"
-        "PER-TASK STATE (see CURRENT TASK CONTEXT below): each task needs "
-        "exactly THREE pieces of info — percent_complete, blocker, risk. "
-        "When you have all three for the current task, you MUST acknowledge "
-        "and immediately ask the FIRST question about the NEXT task. The "
-        "system message tells you which fields are still missing — ask "
-        "about those, in order."
+        "TOOL CALLS — CRITICAL RULES:"
+        "\n  • Only call capture_blocker if THIS turn's user message actually "
+        "    mentions a blocker (or says 'no blocker' / similar). Do NOT call "
+        "    it just because the prompt shows blocker_text as MISSING."
+        "\n  • Only call capture_risk if THIS turn's user message actually "
+        "    mentions a risk (or says 'no risk' / similar). Do NOT call it "
+        "    speculatively."
+        "\n  • Only call propose_percent_complete if THIS turn's message "
+        "    contains a percent value (digit or word)."
+        "\n  • NEVER invent values for fields the CAM didn't talk about."
         "\n\n"
-        "TOOL CALLS (call all that apply in the same response):"
-        "\n  • CAM gives a percent (any form: '60', 'sixty', 'about half'→50, "
-        "    'mostly done'→80, 'just started'→10, 'not started'→0) → "
-        "    propose_percent_complete."
-        "\n  • CAM says 'I don't know' for percent → call "
-        "    propose_percent_complete with the current IMS value (no change). "
-        "    Move on, never re-ask."
-        "\n  • CAM mentions a blocker → capture_blocker with their verbatim "
-        "    text. If they say 'no blocker' / 'nothing blocking' / 'no "
-        "    issues' explicitly → capture_blocker with empty string \"\"."
-        "\n  • CAM mentions a risk OR says 'no risk' → capture_risk with "
-        "    risk_flag and risk_description set. Default empty description "
-        "    when no risk."
-        "\n  • All three fields captured for current task AND there are more "
-        "    tasks → call move_to_next_task and ask the percent question for "
-        "    the next task in the SAME reply."
+        "VALUE EXTRACTION RULES:"
+        "\n  • Percent: 'sixty' → 60, 'about half' → 50, 'mostly done' → 80, "
+        "    'just started' → 10, 'not started' → 0. Range 0-100."
+        "\n  • Blocker: verbatim text (no paraphrasing). 'No blocker' → \"\". "
+        "\n  • Risk: risk_flag=true with verbatim risk_description, OR "
+        "    risk_flag=false with description=\"\" for 'no risk'."
         "\n\n"
-        "REPLY FORMAT (every single turn must end with a question):"
-        "\n  After percent captured, blocker still missing →"
-        "\n    'Got it, [N] percent. Any blockers on this task?'"
-        "\n  After blocker captured, risk still missing →"
-        "\n    'OK. Any risks I should flag?'"
-        "\n  After risk captured AND there's a next task →"
-        "\n    'Got it. Moving to [next task name] — what's the percent "
-        "    complete on that one?'"
-        "\n  After all fields captured AND THIS IS THE LAST TASK →"
-        "\n    Do NOT call ready_for_confirmation yourself — the system will "
-        "    advance you automatically. Just acknowledge briefly."
+        "WHAT TO SAY (your reply text — but the system will OVERRIDE this "
+        "with a template-driven question when state changes or fields are "
+        "captured this turn, so don't overthink the text):"
+        "\n  • If the CAM gave a value, briefly acknowledge it and ask for "
+        "    the next missing field. Example: 'Got it, sixty percent. Any "
+        "    blockers on this task?'"
+        "\n  • If the CAM said something off-topic, briefly redirect: "
+        "    'Got it. What's your percent complete on [task]?'"
         "\n\n"
-        "DO NOT call ready_for_confirmation until the system tells you "
-        "IS_LAST_TASK is true AND that task has all three fields captured. "
-        "Calling it early loses information."
-        "\n\n"
-        "OFF-TOPIC: brief acknowledgment ('I hear you'), then redirect with "
-        "the next missing-field question. HOSTILE: stay calm, ask the next "
-        "missing-field question anyway. NEVER paraphrase blockers — verbatim "
-        "only. NO MARKDOWN. NO BULLETS. Short sentences. ONE QUESTION."
+        "DO NOT call ready_for_confirmation. The state machine advances "
+        "automatically when all three fields are captured for the LAST task. "
+        "If you accidentally do call it early, the system will ignore it.\n"
     ),
     State.CONFIRM_BLOCK: (
         "All updates are captured. The proposed updates are in the system "
@@ -353,6 +338,9 @@ class StateContext:
     cam_tasks: list[dict] = field(default_factory=list)
     current_task_idx: int = 0
     proposed_updates: dict[str, dict] = field(default_factory=dict)  # {task_id: {...}}
+    # Phase 17 iter 11 — tasks the user explicitly chose to skip without
+    # giving every field. These don't block all_tasks_complete().
+    skipped_task_ids: set = field(default_factory=set)
 
     @property
     def current_task(self) -> Optional[dict]:
@@ -397,10 +385,15 @@ class StateContext:
         return None
 
     def all_tasks_complete(self) -> bool:
-        """True iff every CAM task has all three fields captured."""
+        """True iff every CAM task has all three fields captured OR was
+        explicitly skipped by the user (iter 11)."""
         if not self.cam_tasks:
             return False
-        return all(self.task_complete(str(t["task_id"])) for t in self.cam_tasks)
+        return all(
+            self.task_complete(str(t["task_id"]))
+            or str(t["task_id"]) in self.skipped_task_ids
+            for t in self.cam_tasks
+        )
 
 
 def allowed_tools(state: State, ctx: Optional[StateContext] = None) -> list[dict]:
@@ -644,17 +637,30 @@ def next_state(
             # collapse the interview.
             return State.TASK_BY_TASK_LOOP
 
-        # Phase 17 iter 8 — explicit user-driven "move on" signal. When the
-        # CAM says "move on" / "next task" / "task two" / etc., advance the
-        # pointer EVEN IF the current task isn't fully captured. We don't
-        # force them to provide every field; if they want to skip ahead we
-        # respect that and let them confirm/edit at the end.
-        move_on_phrases = (
-            "move on", "next task", "next one", "task two", "task three",
-            "task four", "task five", "go to next", "skip this", "skip that",
-            "let's move", "move to the next",
-        )
-        wants_move = any(p in transcript.lower() for p in move_on_phrases) if transcript else False
+        # Phase 17 iter 11 — explicit user-driven "move on" signal. ONLY fires
+        # on SHORT standalone utterances that are clearly intent to advance,
+        # not when "next task" appears INSIDE a longer factual statement.
+        # Iter 8 had a critical bug: "Task two is at thirty percent" was
+        # parsed as "user wants to move to task two" because of substring
+        # match. The state machine then jumped an extra task ahead.
+        wants_move = False
+        if transcript:
+            t = transcript.lower().strip().strip(".,!?;:'\"")
+            word_count = len(t.split())
+            # ONLY trigger on short utterances (<=6 words) AND only on
+            # phrases that have no factual content (no percent, no "is at",
+            # no "blocker", no "risk")
+            has_factual_content = any(k in t for k in (
+                "percent", "%", "blocker", "risk", "is at", "is now",
+                "complete", "done", "started", "delay", "vendor",
+            ))
+            if word_count <= 6 and not has_factual_content:
+                move_on_phrases = (
+                    "move on", "next task", "next one", "go to next",
+                    "skip this", "skip that", "let's move", "move to the next",
+                    "move on please", "move to next", "skip ahead",
+                )
+                wants_move = any(p in t for p in move_on_phrases)
         if wants_move and ctx and ctx.current_task_idx < len(ctx.cam_tasks) - 1:
             ctx.current_task_idx += 1
             return State.TASK_BY_TASK_LOOP
@@ -669,11 +675,19 @@ def next_state(
                     ctx.current_task_idx += 1
                 elif ctx.all_tasks_complete():
                     return State.CONFIRM_BLOCK
-        # Honor explicit move_to_next_task too (LLM-driven)
-        if "move_to_next_task" in called_names and ctx:
-            if ctx.current_task_idx < len(ctx.cam_tasks) - 1:
+        # Honor explicit move_to_next_task too (LLM-driven), but ONLY when the
+        # current task actually has data. The LLM occasionally calls this
+        # tool by mistake on the first turn of a task (before any fields are
+        # captured) which would skip the task entirely. Defense-in-depth:
+        # the auto-advance above already fires when task_complete; this
+        # branch only catches the explicit LLM-driven case for partial-task
+        # advancement (>= percent_complete captured).
+        if "move_to_next_task" in called_names and ctx and ctx.current_task:
+            cur_tid = str(ctx.current_task["task_id"])
+            has_any_data = bool(ctx.proposed_updates.get(cur_tid, {}))
+            if has_any_data and ctx.current_task_idx < len(ctx.cam_tasks) - 1:
                 ctx.current_task_idx += 1
-            elif ctx.all_tasks_complete():
+            elif has_any_data and ctx.all_tasks_complete():
                 return State.CONFIRM_BLOCK
         # SAFETY: user clearly signaled "done" with whole-conversation
         # finality AND every task has all fields → advance.

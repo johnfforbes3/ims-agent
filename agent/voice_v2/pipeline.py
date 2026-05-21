@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agent.voice_v2 import field_router, guards, judge, llm_openai, small_talk, stt_openai, tts, turn_log
+from agent.voice_v2 import field_router, guards, judge, llm_openai, reply_templates, small_talk, stt_openai, tts, turn_log
 from agent.voice_v2.state_machine import (
     ESCALATION_PHRASE,
     State,
@@ -48,6 +48,41 @@ logger = logging.getLogger(__name__)
 
 _DRY_RUN = os.getenv("VOICE_AGENT_V2_DRY", "").lower() in ("1", "true", "yes")
 _PENDING_DIR = Path(os.getenv("PENDING_CAM_INPUTS_DIR", "data/pending_cam_inputs"))
+
+
+# Phase 17 iter 11 — defense against LLM hallucinated tool calls.
+# These keyword checks verify that the CAM's transcript actually contains
+# evidence for the field the LLM wants to capture. If not, drop the call.
+def _transcript_mentions_blocker(transcript: str) -> bool:
+    if not transcript:
+        return False
+    t = transcript.lower()
+    return any(k in t for k in (
+        "blocker", "blocked", "waiting", "delay", "stuck", "vendor",
+        "procurement", "approval", "sign-off", "sign off", "hold up",
+        "holding up", "pending", "still need",
+        # explicit negatives that should still be honored
+        "no blocker", "no issues", "all clear", "nope", "no problems",
+        "nothing blocking",
+        # bare-no responses ARE valid blocker evidence in context
+        " no.", " no ", "no,", "no, ", "no ", "no.", "nope.",
+    )) or transcript.strip().lower().rstrip(".,!?") in (
+        "no", "nope", "none", "nothing", "negative",
+    )
+
+
+def _transcript_mentions_risk(transcript: str) -> bool:
+    if not transcript:
+        return False
+    t = transcript.lower()
+    return any(k in t for k in (
+        "risk", "concern", "worried", "flagging", "flag a", "flag this",
+        "might slip", "could slip", "may slip", "if it slips", "if we slip",
+        "miss the milestone", "miss cdr", "miss pdr", "in jeopardy",
+        "no risk", "no concerns", "nothing risky",
+    )) or transcript.strip().lower().rstrip(".,!?") in (
+        "no", "nope", "none", "nothing", "negative",
+    )
 
 
 @dataclass
@@ -309,6 +344,41 @@ class Session:
                         turn_id=entry.turn_id,
                     )
 
+            # 1.6 PRE-LLM MOVE-ON DETECTION — Phase 17 iter 11.
+            # If the user clearly wants to move on to the next task ("Move to
+            # next task", "skip ahead", "next one"), we MUST advance the
+            # current_task_idx BEFORE the LLM call so the LLM's prompt
+            # reflects the new task. Otherwise the LLM ends up asking about
+            # the previous task even though we advanced state.
+            if state_before == State.TASK_BY_TASK_LOOP and cleaned:
+                t = cleaned.lower().strip().strip(".,!?;:'\"")
+                word_count = len(t.split())
+                has_factual_content = any(k in t for k in (
+                    "percent", "%", "blocker", "risk", "is at", "is now",
+                    "complete", "done", "started", "delay", "vendor",
+                ))
+                if word_count <= 6 and not has_factual_content:
+                    move_on_phrases = (
+                        "move on", "next task", "next one", "go to next",
+                        "skip this", "skip that", "let's move", "move to the next",
+                        "move on please", "move to next", "skip ahead",
+                    )
+                    if any(p in t for p in move_on_phrases):
+                        if (self.ctx.current_task_idx < len(self.ctx.cam_tasks) - 1
+                                and self.ctx.current_task):
+                            cur_tid_for_skip = str(self.ctx.current_task["task_id"])
+                            if self.ctx.proposed_updates.get(cur_tid_for_skip):
+                                # Only allow skip when CURRENT task has at
+                                # least one field (otherwise it's a no-op skip)
+                                # Mark task as skipped so all_tasks_complete()
+                                # treats it as done (iter 11).
+                                if not self.ctx.task_complete(cur_tid_for_skip):
+                                    self.ctx.skipped_task_ids.add(cur_tid_for_skip)
+                                self.ctx.current_task_idx += 1
+                                logger.info("action=voice_v2_pre_llm_skip new_idx=%d skipped=%s",
+                                            self.ctx.current_task_idx,
+                                            cur_tid_for_skip in self.ctx.skipped_task_ids)
+
             # 1.7 FIELD ROUTER — Phase 17 iter 7.
             # When in TASK_BY_TASK_LOOP, run a deterministic Python classifier
             # to extract obvious field answers (numbers, "no blocker", "no
@@ -397,7 +467,27 @@ class Session:
 
             # 3. TOOL CALL DISPATCH — update StateContext from tool calls.
             # Router calls already applied above; just apply the LLM's now.
-            self._dispatch_tool_calls(result.tool_calls, state_before)
+            # Phase 17 iter 11 — verify LLM-supplied capture_blocker/capture_risk
+            # against transcript evidence. The LLM occasionally hallucinates
+            # capture_blocker(blocker_text="") on turns where the CAM never
+            # mentioned a blocker (because the prompt shows "blocker MISSING"
+            # and the LLM "helpfully" fills it). Drop those hallucinated calls.
+            filtered_llm_calls = []
+            for tc in (result.tool_calls or []):
+                name = tc.get("name")
+                if name == "capture_blocker" and not _transcript_mentions_blocker(cleaned):
+                    logger.info("action=voice_v2_dropped_hallucinated_call name=capture_blocker "
+                                "transcript=%r", cleaned[:80])
+                    continue
+                if name == "capture_risk" and not _transcript_mentions_risk(cleaned):
+                    logger.info("action=voice_v2_dropped_hallucinated_call name=capture_risk "
+                                "transcript=%r", cleaned[:80])
+                    continue
+                filtered_llm_calls.append(tc)
+            self._dispatch_tool_calls(filtered_llm_calls, state_before)
+            # Update merged + entry to reflect what actually applied
+            merged_tool_calls = list(pre_router_calls) + list(filtered_llm_calls)
+            entry.llm_tool_calls = merged_tool_calls
 
             # 4. STATE TRANSITION (use the MERGED tool calls so router-fired
             # actions count toward transitions too)
@@ -417,10 +507,69 @@ class Session:
             }
             reply_text = sanitized
 
-            # If the LLM produced no text but only tool calls, give it one
-            # acknowledgment phrase so we don't hand silence to TTS
+            # 5.5 DETERMINISTIC REPLY OVERRIDE — Phase 17 iter 9.
+            # When a state transition occurred OR the next action is mechanically
+            # obvious (ask the next missing field), generate the reply text from
+            # a deterministic template instead of trusting the LLM. This kills
+            # the "Got it. <silence>" dead-end the user hit in live testing.
+            #
+            # The override fires when:
+            #   - State changed from state_before to new_state (transitions need
+            #     a forward-driving question, not the OLD state's acknowledgment)
+            #   - We're in TASK_BY_TASK_LOOP and a field was captured this turn
+            #     (LLM might say "Got it" without the next question)
+            #   - We're in TASK_BY_TASK_LOOP and the LLM's reply is too short
+            #     or doesn't end with a question mark
+            fields_this_turn = set()
+            for tc in merged_tool_calls:
+                name = tc.get("name", "")
+                if name == "propose_percent_complete":
+                    fields_this_turn.add("percent_complete")
+                elif name == "capture_blocker":
+                    fields_this_turn.add("blocker_text")
+                elif name == "capture_risk":
+                    fields_this_turn.add("risk_flag")
+
+            state_changed = new_state != state_before
+            ends_with_question = reply_text.rstrip().endswith("?")
+            too_short_for_task_loop = (
+                new_state == State.TASK_BY_TASK_LOOP
+                and len(reply_text.strip()) < 25
+            )
+
+            should_override = (
+                state_changed
+                or (new_state == State.TASK_BY_TASK_LOOP and fields_this_turn)
+                or too_short_for_task_loop
+                or (new_state == State.TASK_BY_TASK_LOOP and not ends_with_question)
+            )
+
+            if should_override:
+                template_reply = reply_templates.reply_for_state(
+                    new_state, self.ctx,
+                    transcript=cleaned,
+                    just_entered=state_changed,
+                    fields_captured_this_turn=list(fields_this_turn),
+                )
+                if template_reply:
+                    logger.info(
+                        "action=voice_v2_reply_overridden state=%s reason=%s",
+                        new_state.value,
+                        "state_change" if state_changed else (
+                            "field_captured" if fields_this_turn else "too_short_or_no_question"
+                        ),
+                    )
+                    reply_text = template_reply
+
+            # Final defensive fallback: never send an empty reply when there's
+            # a state we should be driving from.
             if not reply_text.strip() and result.tool_calls:
-                reply_text = "Got it."
+                fallback = reply_templates.reply_for_state(
+                    new_state, self.ctx, transcript=cleaned,
+                    just_entered=state_changed,
+                    fields_captured_this_turn=list(fields_this_turn),
+                )
+                reply_text = fallback or "Got it. What else can you share?"
 
             # 6. TTS — only synthesize when we have text to say
             tts_result = self._safe_tts(reply_text) if reply_text.strip() else None
