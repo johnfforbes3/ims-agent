@@ -4,6 +4,51 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 16 — Productionization (2026-05-17)
+
+**Summary:** Three production-readiness tracks landed in one phase. (1) Real data on the dashboard — three new endpoints (`/api/sra`, `/api/schedule/summary`, `/api/hrm/history`) plus an EVM block persisted into `cycle_history.json` so `/api/evm/history` finally returns real series; five mock-data panels now hydrate from live backend data. (2) Pipeline resilience — persistent cycle heartbeat with 30-min TTL and stalled-cycle detection (survives process restart, which would have caught yesterday's `20260517T015651Z` stuck cycle in seconds); LLM circuit breaker that trips for 15 min on billing errors (`credit balance too low`) so we don't keep burning failed Anthropic requests; `/health` rolled up to `status: "degraded"` when any of deadman / stalled / breaker-open is true. (3) Auth, audit, approval — append-only SQLite `audit_log` table in `data/ims.db` with per-user attribution via `X-User-Email` header (best-effort, lieu of SSO); new `GET /api/audit` endpoint; every cycle-trigger / admin-purge / approval-approve / approval-reject is logged with actor/IP/tier/target/outcome/detail. **708 / 708 default suite passing + 63 / 63 Phase 15 dashboard tests passing.** Rollback tag `pre-phase16-2026-05-17` (created pre-phase as safety net). Honest about deferred scope: real SSO/OIDC, per-user RBAC, audit retention/rotation, tamper-evidence hash chain (all documented in `docs/PRODUCTIONIZATION.md`).
+
+### Added
+- **`agent/cycle_heartbeat.py`** — persistent state file at `data/cycle_heartbeat.json`. `start()` / `beat()` / `clear()` / `is_stalled()`; TTL default 1800 s; auto-cleared on graceful cycle completion; survives process restart for external stall detection.
+- **`agent/circuit_breaker.py`** — `ErrorCategory` enum (TRANSIENT / TERMINAL / BILLING); `categorize()` recognizes "credit balance", "insufficient quota", "payment required", "billing_hard_limit" + the SDK exception classes (`RateLimitError`, `APIConnectionError`, `APIStatusError`); `open()` / `close()` / `guard()` / `handle_exception()`; state persisted to `data/llm_circuit.json` so a restart doesn't reset.
+- **`agent/audit_log.py`** — SQLite `audit_log` table (id, timestamp_utc, action, actor_user, actor_ip, actor_key_tier, target, outcome, detail) in `data/ims.db`; indexed on ts/action/actor; `log()` / `query()` / `actor_from_request()`; X-User-Email header attribution.
+- **`agent/dashboard/server.py`** — three new endpoints:
+  - `GET /api/sra` — milestone-level SRA results from current cycle (P50/P80/P95/risk_level), 404 when no cycle has run
+  - `GET /api/schedule/summary` — parses latest IMS export with `IMSFileHandler`, returns rows + milestones + program window + critical-path flags
+  - `GET /api/hrm/history?n=24` — companion to `/api/evm/history` for the HRM sparkline
+  - `GET /api/audit?limit=200&action=…&actor_user=…&target=…&since=…` — recent audit rows, capped at 1000
+- **`docs/PRODUCTIONIZATION.md`** — describes all three tracks; operator quick-ref for resetting stalled heartbeat / closing circuit breaker / pulling audit trail; honest about what's NOT in this phase.
+
+### Changed
+- **`agent/cycle_runner.py`** — `_update_dashboard()` now persists `{evm:{program:{spi,cpi,bei,sv,cv,completion_pct}}, high_risk_milestones}` into each `cycle_history.json` entry, so `/api/evm/history` and `/api/hrm/history` return real series after the next cycle. Heartbeat wired into `run()`: `cycle_heartbeat.start(cycle_id)` at cycle entry, `cycle_heartbeat.clear()` in the finally block (graceful exit).
+- **`agent/llm_interface.py`** — `_call_with_retry()` now calls `circuit_breaker.guard()` before every Anthropic request; billing errors trip the breaker for 15 min instead of being retried. Categorization log lines: `action=llm_billing_error` / `action=llm_terminal_error`.
+- **`agent/dashboard/server.py::health()`** — adds `cycle_stalled`, `cycle_heartbeat`, `llm_circuit_open`, `llm_circuit`; overall `status` rolls up to `"degraded"` when any failure indicator is true.
+- **`agent/dashboard/server.py::api_trigger / api_admin_purge / api_approve / api_reject`** — each now writes an audit row (`cycle.trigger` / `admin.purge` / `approval.approve` / `approval.reject`) with the X-User-Email attribution. `api_reject` signature gained a `request: Request` parameter (FastAPI-safe, no breaking change to callers).
+- **`agent/dashboard/static/atlas/api.js`** — hydration now fetches `/api/sra`, `/api/schedule/summary`, `/api/hrm/history`, and `/api/interview-sessions` in parallel; each override only fires when the endpoint returns usable data. `SCHED_CURRENT`, `SCHED_PRIOR`, `PROGRAM_START`, `PROGRAM_END`, `HRM_HIST`, `window.__IMS_SRA_REAL`, `window.__IMS_CAM_PROGRESS` all populated from real backend when available.
+- **`agent/dashboard/static/atlas/AgentControls.jsx`** — per-CAM live progress now polls `/api/interview-sessions` every 5 s when real sessions exist; falls back to the simulated jitter loop only when no real cycle is running.
+- **`.gitignore`** — adds `data/cycle_heartbeat.json` and `data/llm_circuit.json` (runtime state, regenerated per cycle).
+- **`TEST_RESULTS.md`** — Phase 16 entry appended with new endpoints, new modules, pytest result table, and explicit roadmap items deferred.
+
+### Tests
+- 708 / 708 default suite passing (4m 56s) — no new failures from any Phase 16 change
+- 63 / 63 Phase 15 dashboard tests passing
+- All 5 new/changed endpoints verified via in-process FastAPI TestClient
+- X-User-Email attribution round-trip verified end-to-end into the audit log
+- Circuit breaker categorization unit-verified against billing markers ("credit balance" etc.)
+
+### Deferred (intentional — documented in `docs/PRODUCTIONIZATION.md`)
+- Real SSO/OIDC against M365 tenant (today identity is self-declared via header)
+- Per-user RBAC (today still 2 roles keyed by API key tier)
+- Audit log retention/rotation + WORM export
+- Tamper-evidence hash chain on the audit log
+- Monte-Carlo SRA per-day histogram endpoint (`/api/sra` returns milestone anchors only)
+
+### Commits
+- `5b5b95b` feat(phase16): productionization — real data + resilience + audit
+- `c353cac` chore(ims): persist CAM-update edits from real cycle 20260517T104629Z (data artifact)
+
+---
+
 ## Phase 15 — Dashboard Rebuild from Zip (2026-05-08)
 
 **Summary:** Complete dashboard rebuild from a user-supplied design zip. New design is a React 18 + Babel Standalone single-page app with a terminal/aerospace aesthetic (IBM Plex fonts, sky-blue/lime accent, sticky ticker bar, full SVG Gantt + SRA + line charts). All third-party deps vendored locally (no CDN). Core agent functionality unchanged — server.py, cycle_runner, interview agent, LLM interface, all backend modules untouched. Phase 12/12.1/14 dashboard tests marked `@pytest.mark.legacy` and skipped by default. **770 / 770 non-legacy unit tests passing** (1 pre-existing flake), 63 new Phase 15 tests, 407 legacy tests skipped (intentional). Rollback tag `pre-dashboard-zip-rebuild-2026-05-08`.

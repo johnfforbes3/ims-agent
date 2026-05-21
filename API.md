@@ -67,21 +67,32 @@ Health check. Unauthenticated. Safe to poll from load balancers and uptime monit
   "status": "healthy",
   "uptime_seconds": 3601,
   "cycle_active": false,
+  "cycle_stalled": false,
+  "cycle_heartbeat": null,
   "state_file_present": true,
   "auth_enabled": true,
   "last_cycle_age_seconds": 7200,
-  "ims_last_write_at": "2026-05-03T19:13:37Z",
+  "ims_last_write_at": "2026-05-17T11:01:25Z",
   "deadman_alert": false,
   "key_age_days": 45,
-  "key_age_warning": false
+  "key_age_warning": false,
+  "llm_circuit_open": false,
+  "llm_circuit": {
+    "status": "closed",
+    "opened_at": null,
+    "reason": null,
+    "opens_until": null
+  }
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `status` | string | Always `"healthy"` if the process is up |
+| `status` | string | `"healthy"` normally; `"degraded"` when any of `deadman_alert / cycle_stalled / llm_circuit_open` is true (Phase 16) |
 | `uptime_seconds` | integer | Seconds since process start |
 | `cycle_active` | boolean | `true` if a cycle is currently running |
+| `cycle_stalled` | boolean | **(Phase 16)** `true` when a heartbeat file exists but `now - last_heartbeat > ttl_seconds` (default 1800 s = 30 min). Survives process restart so an external monitor can detect a stuck cycle that the in-memory `_active` flag would have lost. |
+| `cycle_heartbeat` | object\|null | **(Phase 16)** Snapshot of `data/cycle_heartbeat.json` when present — `cycle_id`, `phase`, `started_at`, `last_heartbeat`, `age_seconds`, `process_id`, `host`. |
 | `state_file_present` | boolean | `false` before the first cycle completes |
 | `auth_enabled` | boolean | `true` if `DASHBOARD_API_KEY` is set |
 | `last_cycle_age_seconds` | integer\|null | Seconds since last cycle completed |
@@ -89,6 +100,10 @@ Health check. Unauthenticated. Safe to poll from load balancers and uptime monit
 | `deadman_alert` | boolean | `true` if no cycle in `DEADMAN_PERIOD_HOURS` (default 168h) |
 | `key_age_days` | integer\|null | Days since `KEY_CREATED_AT`; null if env var not set |
 | `key_age_warning` | boolean | `true` if `key_age_days > 90` (SC.3.187 rotation reminder) |
+| `llm_circuit_open` | boolean | **(Phase 16)** `true` when the LLM circuit breaker has been tripped (typically by a billing error). All LLM calls fail fast while open. |
+| `llm_circuit` | object | **(Phase 16)** `status` ("closed" / "open"), `opened_at` (ISO), `opens_until` (ISO; auto-closes after this), `reason`, `duration_seconds`. Tunable via `LLM_CIRCUIT_OPEN_SECONDS` (default 900 = 15 min). |
+
+> **Operator override:** delete `data/cycle_heartbeat.json` to manually clear a stuck stall after restarting the responder; delete `data/llm_circuit.json` to reset the breaker after topping up Anthropic credit.
 
 ---
 
@@ -466,6 +481,145 @@ Answer a natural language question about the schedule. The engine first tries to
 
 **Response 200:** `Content-Type: text/html`
 **Response 404:** No state available.
+
+---
+
+## GET /api/sra
+
+*(Phase 16)* Returns milestone-level SRA results (P50/P80/P95/prob_on_baseline/risk_level) from the current cycle. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "cycle_id": "20260517T104629Z",
+  "generated_at": "2026-05-17T11:01:25+00:00",
+  "milestones": [
+    {
+      "task_id": "52", "milestone_name": "MS-02 PDR Complete",
+      "baseline_date": "2026-05-29", "p50_date": "2026-05-30",
+      "p80_date": "2026-06-01", "p95_date": "2026-06-02",
+      "prob_on_baseline": 0.225, "risk_level": "HIGH"
+    }
+  ]
+}
+```
+
+**Response 404:** `{"error": "No SRA results yet. Run a cycle first."}`
+
+> **Note:** This endpoint returns the milestone P50/P80/P95 anchors from the cycle's SRA run. A full per-day Monte-Carlo histogram (every finish date in the distribution) is **not** yet exposed — would require persisting MC bucket counts in `dashboard_state.json`, scoped for a future phase.
+
+---
+
+## GET /api/schedule/summary
+
+*(Phase 16)* Parses the latest IMS export and returns a compact summary the dashboard Gantt chart can render. Requires read API key.
+
+**Response 200:**
+```json
+{
+  "cycle_id": "20260517T104629Z",
+  "generated": "2026-05-17T11:01:25+00:00",
+  "program_start": "2026-01-05",
+  "program_end": "2026-06-25",
+  "label": "v20260517T",
+  "rows": [
+    {
+      "id": "1", "name": "Power Subsystem Design",
+      "start": "2026-01-05", "end": "2026-02-14",
+      "complete": 0.85, "critical": true, "cam": "Alice Nguyen"
+    }
+  ],
+  "milestones": [
+    {
+      "id": "52", "name": "MS-02 PDR Complete",
+      "date": "2026-05-29", "met": false, "critical": true,
+      "risk_level": "HIGH", "p80_date": "2026-06-01"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `program_start` / `program_end` | string | Min/max of task start/finish dates (ISO yyyy-mm-dd) |
+| `rows` | array | Non-milestone tasks (duration > 0); capped at 30 for payload bounds |
+| `milestones` | array | Tasks with duration_days = 0; capped at 20; enriched with SRA P80 + risk_level when present in state |
+| `complete` | number | Percent complete as 0.0–1.0 (note: API.md uses fraction, not percent) |
+| `critical` | boolean | `true` when task_id appears in `dashboard_state.critical_path_task_ids` |
+
+**Response 404:** `{"error": "IMS export not found at <path>. Run a cycle first."}` or `{"error": "IMS parsed but contains no tasks."}`
+**Response 500:** `{"detail": "IMS parse failed: <error>"}` — surfaces XML parse errors from `IMSFileHandler`.
+
+---
+
+## GET /api/hrm/history
+
+*(Phase 16)* Companion to `/api/evm/history`. Returns last N cycles' high-risk-milestone counts for the HRM sparkline. Requires read API key.
+
+**Query params:**
+| Param | Default | Description |
+|---|---|---|
+| `n` | 24 | Max cycles to return; capped at 100 |
+
+**Response 200:**
+```json
+{
+  "history": [
+    {"cycle_id": "20260510T060000Z", "timestamp": "2026-05-10T06:14:22Z", "high_risk_milestones": 6},
+    {"cycle_id": "20260517T104629Z", "timestamp": "2026-05-17T11:01:25Z", "high_risk_milestones": 5}
+  ],
+  "n": 2
+}
+```
+
+> **Note:** Cycles persisted **before** Phase 16 don't have `high_risk_milestones` in their history row and are omitted from the response. The first few cycles after the Phase 16 upgrade will return a shorter series until enough cycles have run.
+
+---
+
+## GET /api/audit
+
+*(Phase 16)* Returns rows from the immutable `audit_log` SQLite table. Requires read API key.
+
+**Query params:**
+| Param | Default | Description |
+|---|---|---|
+| `limit` | 200 | Max rows to return; capped at 1000 |
+| `action` | — | Filter by action name (e.g. `cycle.trigger`, `approval.approve`) |
+| `actor_user` | — | Filter by X-User-Email value |
+| `target` | — | Filter by target (typically a `cycle_id`) |
+| `since` | — | ISO timestamp; only rows newer than this |
+
+**Response 200:**
+```json
+{
+  "rows": [
+    {
+      "id": 42,
+      "timestamp_utc": "2026-05-17T11:02:00.123456+00:00",
+      "action": "cycle.trigger",
+      "actor_user": "alice@program.mil",
+      "actor_ip": "10.0.0.42",
+      "actor_key_tier": "admin",
+      "target": "manual",
+      "outcome": "success",
+      "detail": "{\"force\": true, \"transport\": \"teams_chat\"}"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Recognized action names:**
+| Action | Triggered by |
+|---|---|
+| `cycle.trigger` | POST /api/trigger |
+| `admin.purge` | POST /api/admin/purge |
+| `approval.approve` | POST /api/approvals/{id}/approve |
+| `approval.reject` | POST /api/approvals/{id}/reject |
+
+**Per-user attribution:** clients pass `X-User-Email: alice@program.mil` on any request; the value is captured into `actor_user` without being trusted for authorization (still comes from the API key / JWT tier). When absent, `actor_user: "anonymous"`. Production roadmap swaps the header for SSO/OIDC claims from a verified JWT.
+
+> **Operator note:** the table is append-only by application convention (no UPDATE/DELETE in the codebase). Tamper-evidence via a hash chain is on the Phase 16+ roadmap, not yet implemented.
 
 ---
 

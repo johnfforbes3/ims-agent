@@ -7,20 +7,23 @@
 
 ---
 
-## Current State (2026-05-08)
+## Current State (2026-05-17)
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 15 complete — Dashboard rebuild from zip (React 18 + Babel Standalone, terminal aesthetic, vendored deps, core agent untouched) + PM Portal pill-alignment fix |
-| **Tests** | **771 / 771 non-legacy passing** (0 failed; includes 63 Phase 15 tests) + 407 legacy tests skipped (intentional via @pytest.mark.legacy) + 42 integration deselected |
-| **Last procedure run** | 2026-05-08 (Phase 12.1 — TD resolution + polish + full unit suite) |
-| **Last production cycle** | 2026-05-07 — `20260507T222726Z`, health=RED, 5/5 CAMs responded (Teams chat relay), no approval required |
+| **Phase** | Phase 16 complete — Productionization (real-data endpoints + cycle heartbeat + LLM circuit breaker + immutable audit log) |
+| **Tests** | **708 / 708 default suite passing** + 63 / 63 Phase 15 dashboard suite + 407 legacy skipped (`@pytest.mark.legacy`) + 42 integration deselected |
+| **Last procedure run** | 2026-05-17 (Phase 16 — full doc + endpoint sweep) |
+| **Last production cycle** | 2026-05-17 — `20260517T104629Z`, 5/5 CAMs (Teams chat relay), 99 turns, 16m 53s, real `.mpp` rewritten as `IMS_2026-05-17_1101z.mpp` via COM bridge |
 | **Open FAILs** | None |
 | **Transport mode tested** | `simulated` (integration tests); `teams_chat` (live Teams relay, last production) |
 | **IMS** | AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs |
 | **Python** | 3.13.3 |
-| **MPP backend** | MPXJ (COM BLOCKED — C2R AppV isolation; SEH catch added) |
-| **Next phase** | Phase 7.5 (First Customer Pilot) — awaiting customer engagement |
+| **MPP backend** | COM (working — verified 2026-05-17 cycle) — MPXJ still configured as fallback |
+| **New runtime state files** | `data/cycle_heartbeat.json`, `data/llm_circuit.json` (both gitignored — regenerated per cycle) |
+| **New audit table** | `data/ims.db` → `audit_log` (append-only, indexed on ts/action/actor_user) |
+| **Rollback tags** | `pre-phase16-2026-05-17` (Phase 16 entry point); `pre-phase17-voice-upgrade-2026-05-17` (next, before Phase 17 begins) |
+| **Next phase** | Phase 17 — major voice agent upgrade (high-complexity, break-glass possible — see `docs/PHASE-17-PLAN.md`) |
 
 ---
 
