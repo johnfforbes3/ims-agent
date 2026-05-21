@@ -35,8 +35,8 @@ from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, WebSocket
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1950,6 +1950,102 @@ async def api_portfolio_register(
         return JSONResponse({"error": "Registration failed"}, status_code=500)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Missing required field: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 17 — Voice Agent v2 (chained pipeline, OpenAI Whisper + GPT-4o + ElevenLabs/OpenAI TTS)
+#
+# All routes here are gated behind VOICE_AGENT_V2_TESTER=true (default OFF).
+# When the env flag is off, requests get 404 — the new pipeline is invisible
+# to production traffic.
+#
+# Rollback: `git reset --hard pre-phase17-voice-upgrade-2026-05-17`
+# Soft rollback: unset the env flag, restart server.
+# ---------------------------------------------------------------------------
+
+_VOICE_V2_TESTER_ENABLED = os.getenv("VOICE_AGENT_V2_TESTER", "").lower() in ("1", "true", "yes")
+
+
+@app.get("/voice/test")
+async def voice_tester_page():
+    """Serve the voice-tester HTML page. Gated behind VOICE_AGENT_V2_TESTER env flag."""
+    if not _VOICE_V2_TESTER_ENABLED:
+        raise HTTPException(status_code=404, detail="Voice tester not enabled. Set VOICE_AGENT_V2_TESTER=true.")
+    path = Path(__file__).parent / "static" / "voice_tester" / "index.html"
+    if not path.exists():
+        raise HTTPException(status_code=500, detail="voice_tester/index.html missing — Phase 17 not deployed correctly")
+    return FileResponse(path)
+
+
+@app.websocket("/api/voice/stream")
+async def voice_stream_ws(websocket: WebSocket):
+    """WebSocket bridge between browser mic + voice_v2 pipeline."""
+    if not _VOICE_V2_TESTER_ENABLED:
+        # Can't 404 a WebSocket — accept + immediately close with a reason.
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "detail": "Voice tester not enabled (VOICE_AGENT_V2_TESTER=true)."})
+        await websocket.close()
+        return
+    from agent.voice_v2.transport_web import serve_websocket
+    await serve_websocket(websocket)
+
+
+@app.post("/api/voice/replay/{turn_id}")
+async def voice_replay(turn_id: str, _auth: None = Depends(_require_admin_key)):
+    """Re-run a logged turn against the CURRENT pipeline config.
+
+    Returns side-by-side comparison: original turn vs replayed turn.
+    Useful for A/B testing prompt or state-machine changes.
+    """
+    if not _VOICE_V2_TESTER_ENABLED:
+        raise HTTPException(status_code=404, detail="Voice tester not enabled.")
+    from agent.voice_v2 import turn_log, pipeline as v2pipe
+    original = turn_log.find_turn(turn_id)
+    if not original:
+        raise HTTPException(status_code=404, detail=f"turn_id not found: {turn_id}")
+    # Spin up a one-shot session with the original CAM context — note that
+    # cam_tasks won't be available in the log, so the replay is text-only
+    # (state-machine + LLM + guards) without IMS-context grounding for
+    # hallucination checks. Good enough for prompt-change A/B tests.
+    session = v2pipe.start_session(
+        cycle_id=original.cycle_id + "-replay",
+        cam_email=original.cam_email,
+        cam_name=original.cam_name,
+        cam_tasks=[],
+        transport="replay",
+    )
+    replayed = session.replay_with_transcript(
+        transcript=original.stt_transcript,
+        state_before=original.state_before,
+    )
+    return JSONResponse({
+        "original": {
+            "turn_id": original.turn_id,
+            "state_before": original.state_before,
+            "state_after": original.state_after,
+            "transcript": original.stt_transcript,
+            "reply_text": original.llm_text_out,
+            "tool_calls": original.llm_tool_calls,
+            "llm_cost_usd": original.llm_cost_usd,
+            "timestamp_utc": original.timestamp_utc,
+        },
+        "replayed": {
+            "turn_id": replayed.turn_id,
+            "state_before": replayed.state_before.value,
+            "state_after": replayed.state_after.value,
+            "transcript": replayed.transcript,
+            "reply_text": replayed.reply_text,
+            "tool_calls": replayed.tool_calls,
+            "llm_cost_usd": replayed.llm_cost_usd,
+        },
+    })
+
+
+@app.get("/api/voice/spend")
+async def voice_spend(_auth: None = Depends(_require_api_key)):
+    """Return cumulative voice agent v2 spend + cap headroom."""
+    from agent.voice_v2 import llm_openai
+    return JSONResponse(llm_openai.current_spend())
 
 
 # ---------------------------------------------------------------------------
