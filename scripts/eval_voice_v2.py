@@ -500,7 +500,7 @@ def main(argv: list[str]) -> int:
         by_tier.setdefault(r.tier, []).append(r)
 
     print(f"{'Tier':<12} {'N':>4} {'State pass':>11} {'Tools pass':>11} {'Avg p50':>9} {'Total $':>9}")
-    for tier in ["happy", "edge", "error", "adversarial"]:
+    for tier in ["happy", "edge", "error", "human", "adversarial"]:
         if tier not in by_tier:
             continue
         rs = by_tier[tier]
@@ -540,7 +540,7 @@ def _render_report(results: list[ScenarioResult], elapsed: int, spend: dict) -> 
         "| Tier | N | State pass | Tools pass | Avg p50 LLM | Total cost |",
         "|---|---|---|---|---|---|",
     ]
-    for tier in ["happy", "edge", "error", "adversarial"]:
+    for tier in ["happy", "edge", "error", "human", "adversarial"]:
         if tier not in by_tier:
             continue
         rs = by_tier[tier]
