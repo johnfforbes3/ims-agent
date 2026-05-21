@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agent.voice_v2 import guards, llm_openai, stt_openai, tts, turn_log
+from agent.voice_v2 import guards, llm_openai, small_talk, stt_openai, tts, turn_log
 from agent.voice_v2.state_machine import (
     ESCALATION_PHRASE,
     State,
@@ -188,6 +188,71 @@ class Session:
                     input_guard=in_guard,
                     turn_id=entry.turn_id,
                 )
+
+            # 1.5 SMALL-TALK GATE — Phase 17 iteration 2.
+            # Article §11 #6: "Build the small-talk gate before you build
+            # retrieval. 'Hi' is the cheapest 200ms win in the system."
+            # For GREETING state with a simple "Hi" / "Alice here." / etc.,
+            # skip the LLM entirely and use a deterministic reply.
+            if state_before == State.GREETING and small_talk.is_small_talk_greeting(cleaned):
+                reply_text = small_talk.greeting_reply(
+                    cam_first_name=self.cam_name,
+                    task_count=len(self.ctx.cam_tasks),
+                )
+                tts_result = self._safe_tts(reply_text)
+                new_state = State.OPEN_QUESTION
+                self.ctx.state = new_state
+                entry.state_after = new_state.value
+                entry.llm_model = "small_talk_gate"
+                entry.llm_text_out = reply_text
+                if tts_result:
+                    entry.tts_first_audio_ms = tts_result.first_audio_ms
+                    entry.tts_full_audio_ms = tts_result.total_ms
+                    entry.tts_voice_id = tts_result.voice_id
+                self._history.append({"role": "user",      "content": cleaned})
+                self._history.append({"role": "assistant", "content": reply_text})
+                return OrchestratedTurn(
+                    transcript=transcript,
+                    state_before=state_before,
+                    state_after=new_state,
+                    reply_text=reply_text,
+                    audio_bytes=tts_result.audio_bytes if tts_result else None,
+                    audio_first_byte_ms=entry.tts_first_audio_ms,
+                    audio_total_ms=entry.tts_full_audio_ms,
+                    voice_id=tts_result.voice_id if tts_result else "",
+                    input_guard=in_guard,
+                    turn_id=entry.turn_id,
+                )
+
+            # And for OPEN_QUESTION turns that are just "OK ready", deterministic too.
+            if state_before == State.OPEN_QUESTION and small_talk.is_ready_acknowledgment(cleaned):
+                first_task = self.ctx.cam_tasks[0] if self.ctx.cam_tasks else None
+                if first_task:
+                    reply_text = small_talk.open_question_reply(first_task.get("name", "your first task"))
+                    tts_result = self._safe_tts(reply_text)
+                    new_state = State.TASK_BY_TASK_LOOP
+                    self.ctx.state = new_state
+                    entry.state_after = new_state.value
+                    entry.llm_model = "small_talk_gate"
+                    entry.llm_text_out = reply_text
+                    if tts_result:
+                        entry.tts_first_audio_ms = tts_result.first_audio_ms
+                        entry.tts_full_audio_ms = tts_result.total_ms
+                        entry.tts_voice_id = tts_result.voice_id
+                    self._history.append({"role": "user",      "content": cleaned})
+                    self._history.append({"role": "assistant", "content": reply_text})
+                    return OrchestratedTurn(
+                        transcript=transcript,
+                        state_before=state_before,
+                        state_after=new_state,
+                        reply_text=reply_text,
+                        audio_bytes=tts_result.audio_bytes if tts_result else None,
+                        audio_first_byte_ms=entry.tts_first_audio_ms,
+                        audio_total_ms=entry.tts_full_audio_ms,
+                        voice_id=tts_result.voice_id if tts_result else "",
+                        input_guard=in_guard,
+                        turn_id=entry.turn_id,
+                    )
 
             # 2. LLM CALL (with state-scoped tools)
             messages = self._build_messages(state_before, cleaned)

@@ -378,6 +378,10 @@ class TestPipelineMocked:
                 assert turn.input_guard.passed is False
 
     def test_spend_cap_returns_escalation(self):
+        """Spend cap should trip on any LLM-bound turn. Greetings bypass via
+        the small-talk gate (Phase 17 iter 2) so we use a content transcript
+        that requires LLM processing."""
+        from agent.voice_v2.state_machine import State
         self.L._record_spend(200.0)  # blow past cap
         with patch("agent.voice_v2.tts.synthesize") as mock_tts:
             mock_tts.return_value = MagicMock(
@@ -385,7 +389,10 @@ class TestPipelineMocked:
                 first_audio_ms=0, total_ms=0, cost_usd=0,
             )
             sess = self._make_session()
-            turn = sess.process_transcript("Hello.")
+            # Skip past GREETING (which would hit the small-talk gate) to
+            # TASK_BY_TASK_LOOP so the LLM is definitely involved.
+            sess.ctx.state = State.TASK_BY_TASK_LOOP
+            turn = sess.process_transcript("Task one is at sixty percent, blocker is vendor delay.")
             assert "flag this for your PM" in turn.reply_text or turn.error is not None
 
     def test_confirm_all_writes_pending_cam_inputs(self):
