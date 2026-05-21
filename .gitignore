@@ -82,3 +82,5 @@ Thumbs.db
 *.suo
 *.user
 .scratch/
+server.log
+data/conversation_test_runs/
