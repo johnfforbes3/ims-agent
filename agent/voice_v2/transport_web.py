@@ -169,6 +169,10 @@ async def serve_websocket(websocket) -> None:
                 # Pick a filename extension that matches the MIME so Whisper detects format
                 ext = "webm" if "webm" in mime else "wav" if "wav" in mime else "mp3"
                 filename = f"utt.{ext}"
+                # Phase 17 iter 7 — emit a "thinking" event immediately so the
+                # UI can show a spinner during STT + LLM + TTS round-trip.
+                await websocket.send_text(json.dumps({"type": "thinking",
+                                                      "stage": "transcribing"}))
                 turn = session.process_audio_bytes(audio_bytes, filename=filename)
                 await _emit_turn(websocket, turn)
                 continue
@@ -178,8 +182,17 @@ async def serve_websocket(websocket) -> None:
                 if not text:
                     await websocket.send_text(json.dumps({"type": "error", "detail": "empty text"}))
                     continue
+                # Phase 17 iter 7 — echo the user's transcript IMMEDIATELY
+                # so the UI shows their message before pipeline processing.
+                # This is the single biggest perceived-latency win.
+                await websocket.send_text(json.dumps({"type": "transcript",
+                                                      "text": text}))
+                await websocket.send_text(json.dumps({"type": "thinking",
+                                                      "stage": "processing"}))
                 turn = session.process_transcript(text)
-                await _emit_turn(websocket, turn, transcript_echo=text)
+                # Skip the duplicate transcript echo since we already sent it
+                await _emit_turn(websocket, turn, transcript_echo=None,
+                                 skip_transcript=True)
                 continue
 
             await websocket.send_text(json.dumps({
@@ -199,13 +212,20 @@ async def serve_websocket(websocket) -> None:
 
 
 async def _emit_turn(websocket, turn: pipeline.OrchestratedTurn,
-                     transcript_echo: Optional[str] = None) -> None:
-    """Serialize an OrchestratedTurn into WS frames."""
+                     transcript_echo: Optional[str] = None,
+                     skip_transcript: bool = False) -> None:
+    """Serialize an OrchestratedTurn into WS frames.
+
+    Phase 17 iter 7 — `skip_transcript=True` when the transcript was already
+    sent (e.g. text input emits the transcript immediately for low perceived
+    latency, then the pipeline processes asynchronously).
+    """
     # Transcript first so the UI shows what we heard
-    if transcript_echo is not None:
-        await websocket.send_text(json.dumps({"type": "transcript", "text": transcript_echo}))
-    elif turn.transcript:
-        await websocket.send_text(json.dumps({"type": "transcript", "text": turn.transcript}))
+    if not skip_transcript:
+        if transcript_echo is not None:
+            await websocket.send_text(json.dumps({"type": "transcript", "text": transcript_echo}))
+        elif turn.transcript:
+            await websocket.send_text(json.dumps({"type": "transcript", "text": turn.transcript}))
 
     # Tool calls (informational — UI shows them in a side panel)
     for tc in (turn.tool_calls or []):

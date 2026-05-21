@@ -103,6 +103,10 @@
       case "transcript":
         logMsg("CAM", m.text, "vt-cam");
         break;
+      case "thinking":
+        // Show a transient indicator that the agent is processing.
+        showThinking(m.stage || "thinking");
+        break;
       case "tool":
         logMsg("TOOL", `${m.name}(${JSON.stringify(m.args)})`, "vt-tool");
         updateProposedFromTool(m.name, m.args);
@@ -111,6 +115,7 @@
         setStatus("state-pill", "info", m.state);
         break;
       case "reply_text":
+        hideThinking();
         logMsg("ATLAS", m.text, "vt-atlas");
         break;
       case "reply_audio":
@@ -188,6 +193,22 @@
   }
 
   function logSys(text) { logMsg("SYS", text, "vt-sys"); }
+
+  // Phase 17 iter 7 — transient "thinking" indicator while the pipeline runs.
+  let thinkingEl = null;
+  function showThinking(stage) {
+    hideThinking();
+    const div = document.createElement("div");
+    div.className = "vt-msg vt-sys vt-thinking";
+    div.innerHTML = `<span class="vt-msg-who">ATLAS</span><span class="vt-msg-body">▸ ${escapeHtml(stage)}<span class="vt-dots">…</span></span>`;
+    els.transcript.appendChild(div);
+    els.transcript.scrollTop = els.transcript.scrollHeight;
+    thinkingEl = div;
+  }
+  function hideThinking() {
+    if (thinkingEl && thinkingEl.parentNode) thinkingEl.parentNode.removeChild(thinkingEl);
+    thinkingEl = null;
+  }
 
   function setStatus(elId, tone, text) {
     const el = document.getElementById(elId);

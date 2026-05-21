@@ -224,6 +224,50 @@ def build_scenarios() -> list[Scenario]:
                 expected_tool_calls=set(),
             ))
 
+    # ──── DRIP-FED (iter 7 — fields one-at-a-time, the way real CAMs actually talk) ────
+    # Caught in live testing: when CAM gives info field-by-field instead of
+    # all at once, the agent must drive the conversation forward proactively.
+    drip_scenarios = [
+        ("one_field_per_turn", [
+            "Hi.", "Ready.",
+            "Task one is at sixty percent.",   # only %, agent should ask for blocker
+            "No blocker.",                      # only blocker, agent should ask for risk
+            "No risk.",                         # task 1 complete; agent should move to task 2
+            "Task two is at thirty percent.",   # only %, agent should ask for blocker
+            "Blocker is the vendor.",           # only blocker, agent should ask for risk
+            "No risk.",                         # task 2 complete; we have 2 tasks total here
+            "Yes.",                             # confirm
+        ]),
+        ("forgetful_cam", [
+            "Hi.", "Ready.",
+            "Task one is at seventy.",
+            "I already told you.",              # cam thinks they gave more — agent re-asks gently
+            "No blocker, no risk.",             # finishes task 1
+            "Task two at twenty.",
+            "No blocker, no risk.",
+            "Yes.",
+        ]),
+        ("misordered_fields", [
+            "Hi.", "Ready.",
+            "The blocker is vendor delay.",     # gives blocker FIRST, no percent
+            "Sixty percent.",                   # then percent
+            "No risk.",                         # then risk → task 1 done
+            "Task two at thirty, no blocker, no risk.",
+            "Yes.",
+        ]),
+    ]
+    for cam_name, cam_email in _CAMS[:3]:
+        for ename, transcripts in drip_scenarios:
+            out.append(Scenario(
+                name=f"drip.{cam_name.split()[0]}.{ename}",
+                tier="drip",
+                cam_name=cam_name, cam_email=cam_email,
+                cam_tasks=_tasks(2),
+                transcripts=transcripts,
+                expected_final_state="WRAPUP",
+                expected_tool_calls={"propose_percent_complete", "capture_blocker", "capture_risk"},
+            ))
+
     # ──── REAL-HUMAN MESSY (12 — added in iter 6) ────
     # Patterns that real CAMs actually exhibit on phone calls — false starts,
     # filler words, mid-sentence corrections, asking the agent to repeat.
@@ -446,7 +490,7 @@ def run_scenario(s: Scenario) -> ScenarioResult:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--small", action="store_true", help="Run 5-scenario smoke test")
-    ap.add_argument("--tier", choices=["happy", "edge", "error", "adversarial"],
+    ap.add_argument("--tier", choices=["happy", "edge", "error", "drip", "human", "adversarial"],
                     help="Run only one tier")
     ap.add_argument("--out", default="docs/PHASE-17-EVAL-RESULTS.md",
                     help="Markdown report output path")
@@ -500,7 +544,7 @@ def main(argv: list[str]) -> int:
         by_tier.setdefault(r.tier, []).append(r)
 
     print(f"{'Tier':<12} {'N':>4} {'State pass':>11} {'Tools pass':>11} {'Avg p50':>9} {'Total $':>9}")
-    for tier in ["happy", "edge", "error", "human", "adversarial"]:
+    for tier in ["happy", "edge", "error", "drip", "human", "adversarial"]:
         if tier not in by_tier:
             continue
         rs = by_tier[tier]
@@ -540,7 +584,7 @@ def _render_report(results: list[ScenarioResult], elapsed: int, spend: dict) -> 
         "| Tier | N | State pass | Tools pass | Avg p50 LLM | Total cost |",
         "|---|---|---|---|---|---|",
     ]
-    for tier in ["happy", "edge", "error", "human", "adversarial"]:
+    for tier in ["happy", "edge", "error", "drip", "human", "adversarial"]:
         if tier not in by_tier:
             continue
         rs = by_tier[tier]

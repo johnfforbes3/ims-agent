@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agent.voice_v2 import guards, judge, llm_openai, small_talk, stt_openai, tts, turn_log
+from agent.voice_v2 import field_router, guards, judge, llm_openai, small_talk, stt_openai, tts, turn_log
 from agent.voice_v2.state_machine import (
     ESCALATION_PHRASE,
     State,
@@ -309,19 +309,60 @@ class Session:
                         turn_id=entry.turn_id,
                     )
 
-            # 2. LLM CALL (with state-scoped tools)
+            # 1.7 FIELD ROUTER — Phase 17 iter 7.
+            # When in TASK_BY_TASK_LOOP, run a deterministic Python classifier
+            # to extract obvious field answers (numbers, "no blocker", "no
+            # risk") BEFORE the LLM call. This way the LLM's prompt sees the
+            # updated field state and can't ask a question we already have an
+            # answer to. Live testing caught the LLM forgetting to fire
+            # capture_blocker on "No blocker" responses — this is the safety
+            # net.
+            pre_router_calls: list[dict] = []
+            if state_before == State.TASK_BY_TASK_LOOP and self.ctx.current_task:
+                tid = str(self.ctx.current_task["task_id"])
+                missing = self.ctx.next_missing_field(tid)
+                # Snapshot which fields are already captured for this task so
+                # the router doesn't fire duplicates.
+                already_set: set = set()
+                cur_upd = self.ctx.proposed_updates.get(tid, {})
+                if "percent_complete" in cur_upd: already_set.add("percent_complete")
+                if "blocker_text"     in cur_upd: already_set.add("blocker_text")
+                if "risk_flag"        in cur_upd: already_set.add("risk_flag")
+                routed = field_router.route_field_answer(
+                    cleaned, missing, tid, already_captured=already_set,
+                )
+                for name, args in routed:
+                    pre_router_calls.append({"name": name, "args": args})
+                # Apply IMMEDIATELY so the LLM's prompt reflects new state
+                if pre_router_calls:
+                    self._dispatch_tool_calls(pre_router_calls, state_before)
+                    # If the auto-routed call completed the current task, also
+                    # auto-advance the index so the next prompt is about the
+                    # next task.
+                    if self.ctx.task_complete(tid) and self.ctx.current_task_idx < len(self.ctx.cam_tasks) - 1:
+                        self.ctx.current_task_idx += 1
+
+            # 2. LLM CALL (with state-scoped tools).
+            # Phase 17 iter 7 — allowed_tools now takes ctx so it can hide
+            # ready_for_confirmation until the LAST task is actually complete.
             messages = self._build_messages(state_before, cleaned)
-            tools = allowed_tools(state_before)
+            tools = allowed_tools(state_before, self.ctx)
             model = self._choose_model(state_before, cleaned)
             entry.llm_model = model
 
             try:
+                # Phase 17 iter 7 — tighter max_tokens for interview turns.
+                # Article: "Cap the system prompt at 800 tokens... shorter
+                # replies feel faster." TASK_BY_TASK_LOOP turns are one
+                # sentence + one question = ~60 tokens. CONFIRM_BLOCK reads
+                # back all updates = ~250 tokens. Other states are short.
+                _max_tokens = 250 if state_before == State.CONFIRM_BLOCK else 120
                 result = llm_openai.chat(
                     messages=messages,
                     model=model,
                     tools=tools,
-                    max_tokens=300,
-                    temperature=0.3,
+                    max_tokens=_max_tokens,
+                    temperature=0.2,
                 )
             except llm_openai.SpendCapExceeded as exc:
                 # Hard stop — fail fast, do not retry
@@ -347,14 +388,20 @@ class Session:
             entry.llm_input_tokens = result.input_tokens
             entry.llm_output_tokens = result.output_tokens
             entry.llm_cost_usd = result.cost_usd
-            entry.llm_tool_calls = result.tool_calls
+            # Phase 17 iter 7 — merge router-fired calls (deterministic Python
+            # extraction) with the LLM's calls so the audit trail shows the
+            # full set of tools that fired.
+            merged_tool_calls = list(pre_router_calls) + list(result.tool_calls or [])
+            entry.llm_tool_calls = merged_tool_calls
             entry.llm_text_out = result.text
 
-            # 3. TOOL CALL DISPATCH — update StateContext from tool calls
+            # 3. TOOL CALL DISPATCH — update StateContext from tool calls.
+            # Router calls already applied above; just apply the LLM's now.
             self._dispatch_tool_calls(result.tool_calls, state_before)
 
-            # 4. STATE TRANSITION
-            new_state = next_state(state_before, result.tool_calls, cleaned, self.ctx)
+            # 4. STATE TRANSITION (use the MERGED tool calls so router-fired
+            # actions count toward transitions too)
+            new_state = next_state(state_before, merged_tool_calls, cleaned, self.ctx)
             self.ctx.state = new_state
             entry.state_after = new_state.value
 
@@ -401,13 +448,13 @@ class Session:
             # Each triggers the same write.
             terminal_names = {"write_pending_cam_inputs", "confirm_all"}
             should_write = (
-                any(tc.get("name") in terminal_names for tc in result.tool_calls)
-                or safety_transition_triggered(state_before, new_state, result.tool_calls)
+                any(tc.get("name") in terminal_names for tc in merged_tool_calls)
+                or safety_transition_triggered(state_before, new_state, merged_tool_calls)
             )
             if should_write and self.ctx.proposed_updates:
                 self._write_pending_inputs()
                 # Override reply text when safety fired so user hears the close
-                if safety_transition_triggered(state_before, new_state, result.tool_calls):
+                if safety_transition_triggered(state_before, new_state, merged_tool_calls):
                     if not reply_text or "Updates submitted" not in reply_text:
                         reply_text = (
                             "Updates submitted to your PM for approval. "
@@ -433,7 +480,7 @@ class Session:
                     turn_id=entry.turn_id,
                     transcript=cleaned,
                     reply_text=reply_text,
-                    tool_calls=result.tool_calls,
+                    tool_calls=merged_tool_calls,
                     cam_tasks=self.ctx.cam_tasks,
                 )
 
@@ -471,12 +518,17 @@ class Session:
         return msgs
 
     def _choose_model(self, state: State, transcript: str) -> str:
-        """Article §4: small fast model for normal turns, big for hard ones.
+        """Article §4: small fast model for ALL voice turns.
 
-        CONFIRM_BLOCK and ESCALATE are the high-stakes turns; everything else
-        is a fast turn.
+        Phase 17 iter 7 — defaulted CONFIRM_BLOCK to gpt-4o-mini too. Live
+        latency testing showed gpt-4o adds 500-1500ms vs gpt-4o-mini with
+        no meaningful quality gain on a read-back task. The user can opt
+        back into gpt-4o via VOICE_AGENT_V2_HARD_MODEL_STATES env if a
+        specific state benefits from it later.
         """
-        if state in (State.CONFIRM_BLOCK, State.ESCALATE):
+        hard_states_raw = os.getenv("VOICE_AGENT_V2_HARD_MODEL_STATES", "")
+        hard_states = {s.strip().upper() for s in hard_states_raw.split(",") if s.strip()}
+        if state.value in hard_states:
             return os.getenv("VOICE_AGENT_V2_HARD_MODEL", "gpt-4o")
         return os.getenv("VOICE_AGENT_V2_MODEL", "gpt-4o-mini")
 

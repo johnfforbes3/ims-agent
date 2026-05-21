@@ -115,10 +115,24 @@ class TestStateMachine:
         tc = [{"name": "start_task_loop", "args": {}}]
         assert next_state(State.OPEN_QUESTION, tc, "ok", ctx) == State.TASK_BY_TASK_LOOP
 
-    def test_next_state_loop_to_confirm_on_tool_call(self):
+    def test_next_state_loop_to_confirm_only_when_all_tasks_complete(self):
+        """Phase 17 iter 7 — ready_for_confirmation is HONORED only when every
+        task has all 3 fields. Otherwise the state machine ignores it so an
+        early-firing LLM call can't collapse the interview prematurely."""
         from agent.voice_v2.state_machine import State, StateContext, next_state
-        ctx = StateContext(state=State.TASK_BY_TASK_LOOP, cam_email="a", cam_name="A")
+        ctx = StateContext(
+            state=State.TASK_BY_TASK_LOOP, cam_email="a", cam_name="A",
+            cam_tasks=[{"task_id": "1"}, {"task_id": "2"}],
+        )
+        # No proposed updates yet — should NOT advance.
         tc = [{"name": "ready_for_confirmation", "args": {}}]
+        assert next_state(State.TASK_BY_TASK_LOOP, tc, "done", ctx) == State.TASK_BY_TASK_LOOP
+
+        # Capture all 3 fields for both tasks — NOW it advances.
+        for tid in ("1", "2"):
+            ctx.proposed_updates[tid] = {
+                "percent_complete": 50, "blocker_text": "", "risk_flag": False,
+            }
         assert next_state(State.TASK_BY_TASK_LOOP, tc, "done", ctx) == State.CONFIRM_BLOCK
 
     def test_confirm_all_advances_to_wrapup(self):
@@ -464,6 +478,168 @@ class TestServerRoutesGated:
 # ──────────────────────────────────────────────────────────────────────────
 # TTS text preparation
 # ──────────────────────────────────────────────────────────────────────────
+
+
+class TestFieldRouter:
+    """Phase 17 iter 7 — deterministic Python field extractor.
+
+    Bug that prompted this: live trace showed router extracting 1 from
+    'Task one is at sixty percent' (it picked up the 'one' from 'task one').
+    Fix verified here: 'task N' patterns are stripped before percent search.
+    """
+
+    def test_percent_with_explicit_unit(self):
+        from agent.voice_v2.field_router import _extract_percent
+        assert _extract_percent("Task one is at sixty percent.") == 60
+        assert _extract_percent("60%") == 60
+        assert _extract_percent("about 75 percent") == 75
+
+    def test_percent_word_with_unit(self):
+        from agent.voice_v2.field_router import _extract_percent
+        assert _extract_percent("sixty percent") == 60
+        assert _extract_percent("about fifty percent") == 50
+
+    def test_percent_does_not_eat_task_id(self):
+        """'Task one' must NOT become percent=1."""
+        from agent.voice_v2.field_router import _extract_percent
+        # No explicit percent unit; task ref stripped; nothing else → None
+        assert _extract_percent("Task one") is None
+        assert _extract_percent("task two") is None
+        # But with the percent stated → still extracts it correctly
+        assert _extract_percent("Task one is at fifty percent.") == 50
+        assert _extract_percent("Task two at thirty.") == 30
+
+    def test_compound_word(self):
+        from agent.voice_v2.field_router import _extract_percent
+        assert _extract_percent("sixty-five") == 65
+        assert _extract_percent("thirty five percent") == 35
+
+    def test_special_phrases(self):
+        from agent.voice_v2.field_router import _extract_percent
+        assert _extract_percent("about half") == 50
+        assert _extract_percent("mostly done") == 80
+        assert _extract_percent("just started") == 10
+        assert _extract_percent("not started") == 0
+
+    def test_no_blocker_routes_empty_string(self):
+        from agent.voice_v2.field_router import route_field_answer
+        calls = route_field_answer("No blocker.", "blocker_text", "1")
+        assert len(calls) == 1
+        name, args = calls[0]
+        assert name == "capture_blocker"
+        assert args["blocker_text"] == ""
+
+    def test_blocker_text_routes_verbatim(self):
+        from agent.voice_v2.field_router import route_field_answer
+        calls = route_field_answer("Blocker is vendor delay on parts.",
+                                   "blocker_text", "1")
+        assert calls[0][0] == "capture_blocker"
+        assert "vendor delay" in calls[0][1]["blocker_text"]
+
+    def test_no_risk_routes_false(self):
+        from agent.voice_v2.field_router import route_field_answer
+        calls = route_field_answer("No risk.", "risk_flag", "1")
+        assert calls[0][0] == "capture_risk"
+        assert calls[0][1]["risk_flag"] is False
+
+    def test_routes_out_of_order_fields(self):
+        """Phase 17 iter 7 — when CAM gives blocker before percent, route the
+        blocker even though percent is the 'next missing' field. Real CAMs
+        give info in their own order."""
+        from agent.voice_v2.field_router import route_field_answer
+        calls = route_field_answer(
+            "Vendor delay on parts.", next_missing_field="percent_complete",
+            current_task_id="1",
+        )
+        # Blocker content → fires capture_blocker even though percent was "next"
+        assert any(c[0] == "capture_blocker" for c in calls)
+
+    def test_already_captured_prevents_duplicate(self):
+        """Don't fire capture_blocker twice if the field is already set."""
+        from agent.voice_v2.field_router import route_field_answer
+        calls = route_field_answer(
+            "Vendor delay.", next_missing_field="risk_flag",
+            current_task_id="1", already_captured={"blocker_text"},
+        )
+        assert all(c[0] != "capture_blocker" for c in calls)
+
+
+class TestPerTaskFieldTracking:
+    """Phase 17 iter 7 — agent drives field-by-field, task-by-task."""
+
+    def _ctx(self, n_tasks=2):
+        from agent.voice_v2.state_machine import State, StateContext
+        return StateContext(
+            state=State.TASK_BY_TASK_LOOP,
+            cam_tasks=[{"task_id": str(i+1), "name": f"Task {i+1}",
+                        "percent_complete": 50, "baseline_finish": "2026-06-01"}
+                       for i in range(n_tasks)],
+        )
+
+    def test_field_captured_recognizes_each_field(self):
+        ctx = self._ctx(1)
+        assert not ctx.field_captured("1", "percent_complete")
+        assert not ctx.field_captured("1", "blocker_text")
+        assert not ctx.field_captured("1", "risk_flag")
+        ctx.proposed_updates["1"] = {"percent_complete": 60}
+        assert ctx.field_captured("1", "percent_complete")
+        assert not ctx.field_captured("1", "blocker_text")
+        # Empty string blocker counts as captured (explicit "no blocker")
+        ctx.proposed_updates["1"]["blocker_text"] = ""
+        assert ctx.field_captured("1", "blocker_text")
+        # False risk_flag counts as captured (explicit "no risk")
+        ctx.proposed_updates["1"]["risk_flag"] = False
+        assert ctx.field_captured("1", "risk_flag")
+
+    def test_next_missing_field_returns_in_order(self):
+        ctx = self._ctx(1)
+        assert ctx.next_missing_field("1") == "percent_complete"
+        ctx.proposed_updates["1"] = {"percent_complete": 60}
+        assert ctx.next_missing_field("1") == "blocker_text"
+        ctx.proposed_updates["1"]["blocker_text"] = "vendor"
+        assert ctx.next_missing_field("1") == "risk_flag"
+        ctx.proposed_updates["1"]["risk_flag"] = False
+        assert ctx.next_missing_field("1") is None
+
+    def test_task_complete_and_all_tasks_complete(self):
+        ctx = self._ctx(2)
+        assert not ctx.task_complete("1")
+        assert not ctx.all_tasks_complete()
+        ctx.proposed_updates["1"] = {"percent_complete": 60, "blocker_text": "", "risk_flag": False}
+        assert ctx.task_complete("1")
+        assert not ctx.all_tasks_complete()  # task 2 still missing
+        ctx.proposed_updates["2"] = {"percent_complete": 30, "blocker_text": "delay", "risk_flag": True}
+        assert ctx.all_tasks_complete()
+
+    def test_auto_advance_current_task_idx_when_complete(self):
+        """When task 1 has all 3 fields, the next_state call advances ctx
+        to task 2 even without an explicit move_to_next_task tool call."""
+        from agent.voice_v2.state_machine import State, next_state
+        ctx = self._ctx(2)
+        ctx.proposed_updates["1"] = {"percent_complete": 60, "blocker_text": "", "risk_flag": False}
+        # No tool calls, transcript with just an ack
+        new = next_state(State.TASK_BY_TASK_LOOP, [], "got it", ctx)
+        assert new == State.TASK_BY_TASK_LOOP
+        assert ctx.current_task_idx == 1, "should auto-advance to task 2"
+
+    def test_allowed_tools_hides_ready_for_confirmation_until_last_task_complete(self):
+        """ready_for_confirmation is physically absent from the OpenAI call
+        unless we're on the last task AND that task has all 3 fields."""
+        from agent.voice_v2.state_machine import State, allowed_tools
+        ctx = self._ctx(2)
+        # On task 1 — should be hidden
+        names = {t["name"] for t in allowed_tools(State.TASK_BY_TASK_LOOP, ctx)}
+        assert "ready_for_confirmation" not in names
+
+        # Advance to task 2 but no fields captured — still hidden
+        ctx.current_task_idx = 1
+        names = {t["name"] for t in allowed_tools(State.TASK_BY_TASK_LOOP, ctx)}
+        assert "ready_for_confirmation" not in names
+
+        # Task 2 fully captured — now allowed
+        ctx.proposed_updates["2"] = {"percent_complete": 40, "blocker_text": "", "risk_flag": False}
+        names = {t["name"] for t in allowed_tools(State.TASK_BY_TASK_LOOP, ctx)}
+        assert "ready_for_confirmation" in names
 
 
 class TestSmallTalkGate:

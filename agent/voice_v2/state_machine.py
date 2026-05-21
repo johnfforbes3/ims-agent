@@ -260,42 +260,54 @@ _PROMPT_BY_STATE: dict[State, str] = {
         "Then call start_task_loop. ONE QUESTION PER TURN. SHORT REPLIES."
     ),
     State.TASK_BY_TASK_LOOP: (
-        "You are walking through tasks one at a time. The current task "
-        "context is in the most recent system message. EXTRACT EVERYTHING "
-        "the CAM says into tool calls — don't wait for clean separation. If "
-        "they give percent + blocker + risk in ONE utterance, call all three "
-        "tool functions in the same turn. "
-        "TOOL CALL RULES (call EVERY one that applies, in the same response):"
-        "\n  • Percent stated (any form: '60', 'sixty percent', 'about half') → "
-        "    propose_percent_complete with the extracted integer. "
-        "    'about half' → 50. 'mostly done' → 80. 'just started' → 10. "
-        "    'not started' → 0."
-        "\n  • CAM SAID 'I DON'T KNOW' or 'I'M NOT SURE' for percent → still "
-        "    call propose_percent_complete with the CURRENT IMS value from "
-        "    the task context (no change), and say 'OK, leaving that at "
-        "    [current]% then.' MOVE ON to blocker/risk for that task — don't "
-        "    re-ask the percent. We never get stuck on one question."
-        "\n  • Blocker mentioned (any form: 'blocked by', 'waiting on', "
-        "    'stuck on') → capture_blocker with verbatim text. If CAM said "
-        "    'no blocker' explicitly, call capture_blocker with empty string."
-        "\n  • Risk mentioned (any form: 'risk is', 'concerned about', "
-        "    'might slip') → capture_risk with risk_flag=true. If CAM said "
-        "    'no risk', call capture_risk with risk_flag=false."
-        "\n  • CAM said 'next task' / 'move on' / 'next one' / 'task two' → "
-        "    call move_to_next_task."
-        "\n  • CAM said 'that's everything' / 'all done' / 'done' / 'that's "
-        "    all' / 'finished' / 'no more' / 'we're good' → IMMEDIATELY call "
-        "    ready_for_confirmation. Do not ask another task question."
-        "\nOFF-TOPIC HANDLING: if the CAM brings up unrelated topics (news, "
-        "weather, other people, complaints), say one short acknowledgment "
-        "('I hear you') then redirect: 'Let's stay focused on your task "
-        "status — what's the percent complete on [current task]?'"
-        "\nHOSTILE / IMPATIENT: if the CAM is hostile or rushed, stay calm. "
-        "Acknowledge their feelings briefly ('I know this takes time') and "
-        "keep moving through the tasks — short questions only."
-        "\nNEVER paraphrase blockers — keep the CAM's exact wording. "
-        "Use SHORT acknowledgment phrases ('got it', 'understood'). "
-        "ONE QUESTION PER TURN."
+        "Drive a structured task-by-task status interview. You ALWAYS end "
+        "EVERY reply with a question that drives to the next missing field. "
+        "NEVER end a turn with just 'Got it' — that's a dead end."
+        "\n\n"
+        "PER-TASK STATE (see CURRENT TASK CONTEXT below): each task needs "
+        "exactly THREE pieces of info — percent_complete, blocker, risk. "
+        "When you have all three for the current task, you MUST acknowledge "
+        "and immediately ask the FIRST question about the NEXT task. The "
+        "system message tells you which fields are still missing — ask "
+        "about those, in order."
+        "\n\n"
+        "TOOL CALLS (call all that apply in the same response):"
+        "\n  • CAM gives a percent (any form: '60', 'sixty', 'about half'→50, "
+        "    'mostly done'→80, 'just started'→10, 'not started'→0) → "
+        "    propose_percent_complete."
+        "\n  • CAM says 'I don't know' for percent → call "
+        "    propose_percent_complete with the current IMS value (no change). "
+        "    Move on, never re-ask."
+        "\n  • CAM mentions a blocker → capture_blocker with their verbatim "
+        "    text. If they say 'no blocker' / 'nothing blocking' / 'no "
+        "    issues' explicitly → capture_blocker with empty string \"\"."
+        "\n  • CAM mentions a risk OR says 'no risk' → capture_risk with "
+        "    risk_flag and risk_description set. Default empty description "
+        "    when no risk."
+        "\n  • All three fields captured for current task AND there are more "
+        "    tasks → call move_to_next_task and ask the percent question for "
+        "    the next task in the SAME reply."
+        "\n\n"
+        "REPLY FORMAT (every single turn must end with a question):"
+        "\n  After percent captured, blocker still missing →"
+        "\n    'Got it, [N] percent. Any blockers on this task?'"
+        "\n  After blocker captured, risk still missing →"
+        "\n    'OK. Any risks I should flag?'"
+        "\n  After risk captured AND there's a next task →"
+        "\n    'Got it. Moving to [next task name] — what's the percent "
+        "    complete on that one?'"
+        "\n  After all fields captured AND THIS IS THE LAST TASK →"
+        "\n    Do NOT call ready_for_confirmation yourself — the system will "
+        "    advance you automatically. Just acknowledge briefly."
+        "\n\n"
+        "DO NOT call ready_for_confirmation until the system tells you "
+        "IS_LAST_TASK is true AND that task has all three fields captured. "
+        "Calling it early loses information."
+        "\n\n"
+        "OFF-TOPIC: brief acknowledgment ('I hear you'), then redirect with "
+        "the next missing-field question. HOSTILE: stay calm, ask the next "
+        "missing-field question anyway. NEVER paraphrase blockers — verbatim "
+        "only. NO MARKDOWN. NO BULLETS. Short sentences. ONE QUESTION."
     ),
     State.CONFIRM_BLOCK: (
         "All updates are captured. The proposed updates are in the system "
@@ -348,11 +360,68 @@ class StateContext:
             return self.cam_tasks[self.current_task_idx]
         return None
 
+    # Phase 17 iter 7 — per-task field completion tracking.
+    # Each task needs THREE fields captured before we can move on:
+    #   - percent_complete (a number 0-100)
+    #   - blocker_text (any string including empty "" meaning explicit "no blocker")
+    #   - risk_flag (boolean set, even if False)
+    # The pipeline checks `field_captured()` after every tool dispatch and
+    # auto-advances when all three are set.
 
-def allowed_tools(state: State) -> list[dict]:
-    """Return the OpenAI tools array for the given state. Scoped — others are absent."""
+    def field_captured(self, task_id: str, field_name: str) -> bool:
+        """True iff a specific field has been explicitly captured for this task."""
+        upd = self.proposed_updates.get(str(task_id), {})
+        if field_name == "percent_complete":
+            return upd.get("percent_complete") is not None
+        if field_name == "blocker_text":
+            # Even empty string counts — that's an explicit "no blocker"
+            return "blocker_text" in upd
+        if field_name == "risk_flag":
+            return "risk_flag" in upd
+        return False
+
+    def task_complete(self, task_id: str) -> bool:
+        """True iff all three required fields are captured for this task."""
+        return (
+            self.field_captured(task_id, "percent_complete")
+            and self.field_captured(task_id, "blocker_text")
+            and self.field_captured(task_id, "risk_flag")
+        )
+
+    def next_missing_field(self, task_id: str) -> Optional[str]:
+        """Return the next field we still need from the CAM for this task.
+        None when all three are captured."""
+        for f in ("percent_complete", "blocker_text", "risk_flag"):
+            if not self.field_captured(task_id, f):
+                return f
+        return None
+
+    def all_tasks_complete(self) -> bool:
+        """True iff every CAM task has all three fields captured."""
+        if not self.cam_tasks:
+            return False
+        return all(self.task_complete(str(t["task_id"])) for t in self.cam_tasks)
+
+
+def allowed_tools(state: State, ctx: Optional[StateContext] = None) -> list[dict]:
+    """Return the OpenAI tools array for the given state. Scoped — others are absent.
+
+    Phase 17 iter 7 — for TASK_BY_TASK_LOOP, also gate `ready_for_confirmation`
+    so the LLM can't end the interview prematurely. The tool only appears when
+    we're on the last task AND all three fields are captured for it.
+    """
     specs = tool_specs()
-    return [specs[name] for name in _ALLOWED_BY_STATE.get(state, []) if name in specs]
+    names = list(_ALLOWED_BY_STATE.get(state, []))
+    if state == State.TASK_BY_TASK_LOOP and ctx is not None:
+        is_last = ctx.cam_tasks and ctx.current_task_idx == len(ctx.cam_tasks) - 1
+        last_complete = (
+            is_last
+            and ctx.current_task
+            and ctx.task_complete(str(ctx.current_task["task_id"]))
+        )
+        if not last_complete and "ready_for_confirmation" in names:
+            names.remove("ready_for_confirmation")
+    return [specs[name] for name in names if name in specs]
 
 
 def system_prompt(state: State, ctx: StateContext) -> str:
@@ -365,34 +434,84 @@ def system_prompt(state: State, ctx: StateContext) -> str:
         )
     if state == State.TASK_BY_TASK_LOOP and ctx.current_task:
         t = ctx.current_task
+        tid = str(t.get("task_id", "?"))
         total = len(ctx.cam_tasks)
         is_last = ctx.current_task_idx == total - 1
+        # Phase 17 iter 7 — explicit per-task field state injected into prompt
+        cur_upd = ctx.proposed_updates.get(tid, {})
+        pct_state = (
+            f"CAPTURED: {cur_upd['percent_complete']}%"
+            if "percent_complete" in cur_upd else "MISSING — ask first"
+        )
+        blocker_state = (
+            f"CAPTURED: {cur_upd.get('blocker_text', '')!r}"
+            if "blocker_text" in cur_upd else "MISSING — ask after percent"
+        )
+        risk_state = (
+            f"CAPTURED: risk={cur_upd.get('risk_flag', False)} "
+            f"desc={cur_upd.get('risk_description', '')!r}"
+            if "risk_flag" in cur_upd else "MISSING — ask after blocker"
+        )
+        next_task_name = ""
+        if not is_last:
+            try:
+                next_task_name = ctx.cam_tasks[ctx.current_task_idx + 1].get("name", "next task")
+            except Exception:
+                next_task_name = "next task"
+        next_field = ctx.next_missing_field(tid)
         base += (
             f"\n\nCURRENT TASK CONTEXT (task {ctx.current_task_idx + 1} of {total}):\n"
-            f"  task_id: {t.get('task_id', '?')}\n"
+            f"  task_id: {tid}\n"
             f"  name:    {t.get('name', '?')}\n"
             f"  current percent_complete (per IMS): {t.get('percent_complete', 0)}\n"
             f"  baseline finish: {t.get('baseline_finish', '?')}\n"
             f"  IS_LAST_TASK: {is_last}\n"
             f"\n"
-            f"PROGRESS: covered {ctx.current_task_idx} / {total} tasks so far.\n"
-            f"Updates captured so far: {list(ctx.proposed_updates.keys()) or 'none'}\n"
+            f"FIELD STATE for current task {tid}:\n"
+            f"  percent_complete: {pct_state}\n"
+            f"  blocker_text:     {blocker_state}\n"
+            f"  risk_flag:        {risk_state}\n"
+            f"  NEXT MISSING FIELD: {next_field or '(all captured)'}\n"
         )
-        if is_last:
+        if next_field is None and not is_last:
             base += (
-                "\nThis is the LAST task. Once you've captured the percent/"
-                "blocker/risk for it, OR when the CAM signals they're done "
-                "('that's everything', 'all done', etc.), call "
-                "ready_for_confirmation IMMEDIATELY.\n"
+                f"\nALL THREE FIELDS CAPTURED for task {tid}. In your next "
+                f"reply you MUST: (a) call move_to_next_task, (b) briefly "
+                f"acknowledge, (c) ask the percent question for the next "
+                f"task '{next_task_name}'.\n"
+            )
+        elif next_field is None and is_last:
+            base += (
+                "\nALL THREE FIELDS CAPTURED for the LAST task. Call "
+                "ready_for_confirmation now and acknowledge you're moving to "
+                "confirmation.\n"
             )
     if state == State.CONFIRM_BLOCK and ctx.proposed_updates:
         lines = []
-        for tid, upd in ctx.proposed_updates.items():
+        # Iterate in cam_tasks order so the readback matches the order the
+        # CAM gave them. dict iteration order is insertion order in Python
+        # 3.7+ but explicit order is clearer + ordered-by-task is what users expect.
+        ordered_ids = [str(t["task_id"]) for t in ctx.cam_tasks if str(t["task_id"]) in ctx.proposed_updates]
+        for tid in ordered_ids:
+            upd = ctx.proposed_updates[tid]
             tname = next((t["name"] for t in ctx.cam_tasks if str(t["task_id"]) == str(tid)), tid)
-            lines.append(f"  - {tname}: {upd.get('percent_complete', 'no change')}% complete; "
-                         f"blocker={upd.get('blocker_text', 'none')!r}; "
-                         f"risk={upd.get('risk_flag', False)}")
-        base += "\n\nPROPOSED UPDATES TO READ BACK:\n" + "\n".join(lines)
+            blocker = upd.get("blocker_text", "")
+            blocker_str = "no blocker" if not blocker else f"blocker {blocker!r}"
+            risk_flag = upd.get("risk_flag", False)
+            risk_str = "no risk" if not risk_flag else (
+                f"risk {upd.get('risk_description', '')!r}"
+            )
+            lines.append(
+                f"  - {tname} (task_id {tid}): "
+                f"{upd.get('percent_complete', 'no change')}% complete · "
+                f"{blocker_str} · {risk_str}"
+            )
+        base += (
+            "\n\nPROPOSED UPDATES TO READ BACK (you MUST mention each task by "
+            "name AND only the facts shown below — do NOT invent blockers, "
+            "do NOT carry a blocker from one task onto another):\n"
+            + "\n".join(lines)
+        )
     return base
 
 
@@ -516,19 +635,40 @@ def next_state(
 
     if current == State.TASK_BY_TASK_LOOP:
         if "ready_for_confirmation" in called_names:
-            return State.CONFIRM_BLOCK
-        if "move_to_next_task" in called_names and ctx:
-            ctx.current_task_idx += 1
-            if ctx.current_task_idx >= len(ctx.cam_tasks):
+            # Only honor the LLM's call when all tasks are actually complete.
+            # Otherwise treat as a mistake and stay put — prompt + tool scoping
+            # should have prevented this but defense-in-depth.
+            if ctx and ctx.all_tasks_complete():
                 return State.CONFIRM_BLOCK
-        # SAFETY: user signaled "done" AND we have data — advance.
-        if _transcript_matches(transcript, _DONE_PHRASES) and _has_enough_data_to_confirm(ctx):
-            return State.CONFIRM_BLOCK
-        # SAFETY: standalone done/finished/next as a whole utterance, with data
-        if _is_standalone_done(transcript) and _has_enough_data_to_confirm(ctx):
-            return State.CONFIRM_BLOCK
-        # SAFETY: every task has at least one captured update — advance.
-        if ctx and len(ctx.proposed_updates) >= len(ctx.cam_tasks) and len(ctx.cam_tasks) > 0:
+            # Else stay in loop — don't let early ready_for_confirmation
+            # collapse the interview.
+            return State.TASK_BY_TASK_LOOP
+        # Phase 17 iter 7 — auto-advance the per-task pointer when the current
+        # task has all three fields captured. This fires WHETHER OR NOT the LLM
+        # remembered to call move_to_next_task. Safety rail.
+        if ctx and ctx.current_task:
+            cur_tid = str(ctx.current_task["task_id"])
+            if ctx.task_complete(cur_tid):
+                if ctx.current_task_idx < len(ctx.cam_tasks) - 1:
+                    ctx.current_task_idx += 1
+                elif ctx.all_tasks_complete():
+                    return State.CONFIRM_BLOCK
+        # Honor explicit move_to_next_task too (LLM-driven)
+        if "move_to_next_task" in called_names and ctx:
+            # Only advance if not already past end
+            if ctx.current_task_idx < len(ctx.cam_tasks) - 1:
+                # Already auto-advanced above if task complete; this catches
+                # the case where LLM moved on without all fields (rare).
+                pass
+            elif ctx.all_tasks_complete():
+                return State.CONFIRM_BLOCK
+        # SAFETY: user clearly signaled "done" with whole-conversation
+        # finality AND every task has all fields → advance.
+        done_signal = (
+            _transcript_matches(transcript, _DONE_PHRASES)
+            or _is_standalone_done(transcript)
+        )
+        if done_signal and ctx and ctx.all_tasks_complete():
             return State.CONFIRM_BLOCK
         return State.TASK_BY_TASK_LOOP
 
