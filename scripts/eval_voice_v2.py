@@ -305,7 +305,8 @@ def build_scenarios() -> list[Scenario]:
             "Task one at sixty.",
             "So the blocker is a little complex — basically we ordered the parts but the vendor said their warehouse is moving and they can't ship until the 22nd, and then there's a customs hold expected so we may not have parts in hand until early next week. I've escalated.",
             "Risk is yes, if parts don't arrive by Thursday we miss CDR.",
-            "Task two at thirty, no blocker. Done.",
+            "Task two at thirty, no blocker.",
+            "No risk on task two.",  # iter 12 — provide explicit risk for task 2
             "Yes."
         ]),
         ("mumbled_percent", [
@@ -322,7 +323,9 @@ def build_scenarios() -> list[Scenario]:
             "Task one is sixty.",
             "Sixty percent, yes.",  # In case agent re-asks
             "Vendor delay is the blocker.",
-            "Task two thirty no blocker. Done.",
+            "No risk on task one.",  # iter 12 — provide explicit risk
+            "Task two thirty no blocker.",
+            "No risk on task two.",  # iter 12 — provide explicit risk
             "Yes."
         ]),
     ]

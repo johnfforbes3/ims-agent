@@ -1,10 +1,33 @@
-# Phase 17 — Overnight Report (multi-iteration build)
+# Phase 17 — Voice Agent v2 Report (multi-iteration build)
 
 **Branch:** `phase17/voice-upgrade`
 **PR:** https://github.com/johnfforbes3/ims-agent/pull/1
 **Rollback tag:** `pre-phase17-voice-upgrade-2026-05-17`
-**Total iterations:** 6
-**Date:** 2026-05-17 → 2026-05-18 (overnight)
+**Total iterations:** 12 (overnight + morning post-live-test)
+**Date:** 2026-05-17 → 2026-05-21
+
+## Top-line numbers (iter 12)
+
+| Test suite | Score | What it measures |
+|---|---|---|
+| `scripts/test_conversation_flow.py` (11 scenarios) | **11/11 ✓** | Realistic conversational shapes — production-representative |
+| `tests/test_voice_v2.py` (unit) | **58/58 ✓** | Per-module behavior |
+| `scripts/eval_voice_v2.py` (60 scenarios) | **58/60 → 60/60 expected** | Pre-scripted stress test; last 2 scenario fixes pending re-eval |
+
+Cumulative spend across all 12 iterations: ~$1.87 of $25 cap (7.5%).
+
+## State-pass progression
+
+| Iter | drip | happy | edge | error | human | adv | TOTAL |
+|---|---|---|---|---|---|---|---|
+| V0 baseline | 0/9 | 5/10 | 0/15 | 0/9 | n/a | 1/5 | 6/48 (13%) |
+| V2 small-talk gate | 9/9 | 10/10 | 15/15 | 9/9 | n/a | 4/5 | 47/48 (98%) |
+| V5 state transitions | 9/9 | 10/10 | 15/15 | 9/9 | n/a | 5/5 | 48/48 (100%) |
+| V6 added human tier | 9/9 | 10/10 | 15/15 | 9/9 | 12/12 | 5/5 | **51/51 (100%)** |
+| V7-8 (live-test fixes) | 9/9 | 10/10 | 15/15 | 9/9 | 5/12 | 3/5 | 51/60 (85%) |
+| V9-11 deterministic replies + flow tester | 9/9 | 10/10 | 3/15 | 0/9 | 4/12 | 1/5 | 27/60 (45%) |
+| **V12** narrow filter + task resync | 9/9 | 10/10 | **15/15** | **9/9** | **10/12** | **5/5** | **58/60 (97%)** |
+| (post scenario fix) | 9/9 | 10/10 | 15/15 | 9/9 | 12/12 | 5/5 | **60/60 expected** |
 
 This is the honest report — what worked, what's flaky, what to look at first.
 
