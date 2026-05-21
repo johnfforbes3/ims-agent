@@ -40,6 +40,7 @@ from agent.voice_v2.state_machine import (
     StateContext,
     allowed_tools,
     next_state,
+    safety_transition_triggered,
     system_prompt,
 )
 
@@ -272,14 +273,34 @@ class Session:
             self._history = self._history[-(self._max_history_turns * 2):]
 
             # 8. Side effect: terminal write to pending_cam_inputs.
-            # Triggered by EITHER write_pending_cam_inputs (legacy explicit) OR
-            # confirm_all (collapsed CONFIRM_BLOCK→WRAPUP path — Phase 17 eval
-            # discovered the conversation usually ends before a separate COMMIT
-            # turn can run, so the side effect attaches to confirm_all).
+            # Triggered by ANY of:
+            #   (a) write_pending_cam_inputs tool (legacy explicit COMMIT path)
+            #   (b) confirm_all tool (collapsed CONFIRM_BLOCK→WRAPUP path)
+            #   (c) Python safety transition CONFIRM_BLOCK→WRAPUP from user's
+            #       clear "yes" / "correct" / "looks good" without LLM tool call
+            # Each triggers the same write.
             terminal_names = {"write_pending_cam_inputs", "confirm_all"}
-            if any(tc.get("name") in terminal_names for tc in result.tool_calls):
-                if self.ctx.proposed_updates:
-                    self._write_pending_inputs()
+            should_write = (
+                any(tc.get("name") in terminal_names for tc in result.tool_calls)
+                or safety_transition_triggered(state_before, new_state, result.tool_calls)
+            )
+            if should_write and self.ctx.proposed_updates:
+                self._write_pending_inputs()
+                # Override reply text when safety fired so user hears the close
+                if safety_transition_triggered(state_before, new_state, result.tool_calls):
+                    if not reply_text or "Updates submitted" not in reply_text:
+                        reply_text = (
+                            "Updates submitted to your PM for approval. "
+                            "Talk to you next cycle."
+                        )
+                        # Re-synthesize TTS for the override
+                        tts_result = self._safe_tts(reply_text)
+                        if tts_result:
+                            audio_bytes = tts_result.audio_bytes
+                            voice_id = tts_result.voice_id
+                            entry.tts_first_audio_ms = tts_result.first_audio_ms
+                            entry.tts_full_audio_ms = tts_result.total_ms
+                            entry.tts_voice_id = tts_result.voice_id
 
             return OrchestratedTurn(
                 transcript=transcript,

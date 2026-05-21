@@ -382,6 +382,68 @@ def system_prompt(state: State, ctx: StateContext) -> str:
     return base
 
 
+# Phase 17.1 — Python safety transitions for clear user signals.
+#
+# Baseline eval (V0) showed the LLM correctly extracts data into tool calls
+# (33/39 tools-pass) but fails to call the advancing tool (ready_for_confirmation
+# / confirm_all) on the same turn the user signals they're done. Result: only
+# 6/39 conversations completed cleanly.
+#
+# Fix: when the LLM didn't advance but the user transcript contains clear
+# advance-signals AND the StateContext shows we have enough data captured to
+# warrant advancing, the state machine auto-advances. The article's "state
+# machine is the safety rail" applies in BOTH directions — refuse bad transitions
+# AND apply obvious-but-missed transitions. This is intent detection over LLM
+# output, NOT data parsing, so it doesn't violate the article's "Python is the
+# parser" rule (which is about data extraction).
+
+_DONE_PHRASES = (
+    "that's everything", "that's it", "that's all", "that is all",
+    "that is everything", "all done", "we're done", "we are done",
+    "nothing else", "no more tasks", "no more", "finished", "i'm done",
+    "i am done", "go to confirmation", "ready to confirm",
+    "let's wrap", "let us wrap", "wrap it up", "ready for confirmation",
+)
+_YES_PHRASES = (
+    "yes", "yeah", "yep", "correct", "that's right", "that is right",
+    "looks good", "looks right", "looks correct", "confirmed", "confirm",
+    "all good", "go ahead", "proceed", "approved", "approve",
+    "sounds good", "perfect", "right",
+)
+# Negative — explicit reject in CONFIRM_BLOCK
+_NO_PHRASES = (
+    "no, it's wrong", "no it's wrong", "no that's wrong", "start over",
+    "redo it", "redo this", "scrap that", "abort", "cancel",
+)
+# Edit signals — partial reject
+_EDIT_PHRASES = (
+    "wait", "change", "actually", "let me fix", "let me change",
+    "correction", "not quite", "wrong on",
+)
+
+
+def _transcript_matches(transcript: str, phrases: tuple[str, ...]) -> bool:
+    """Substring + word-boundary lite match. Case-insensitive, strips punctuation."""
+    if not transcript:
+        return False
+    t = transcript.lower().strip()
+    # Strip leading/trailing punctuation that interferes with substring matching
+    t = t.strip(".,!?;:'\"")
+    return any(p in t for p in phrases)
+
+
+def _has_enough_data_to_confirm(ctx: Optional[StateContext]) -> bool:
+    """True when at least one task has a captured update (any field).
+
+    Stricter heuristics (every task has percent_complete + blocker) over-fit
+    the happy path. We accept any captured update — the CONFIRM_BLOCK turn
+    will read everything back, and the user can correct anything missing.
+    """
+    if not ctx or not ctx.proposed_updates:
+        return False
+    return len(ctx.proposed_updates) >= 1
+
+
 def next_state(
     current: State,
     tool_calls: list[dict],
@@ -390,24 +452,24 @@ def next_state(
 ) -> State:
     """Pure function: compute the next state given the current state + LLM output.
 
-    The transition rules are encoded here, NOT in the prompt. This is the
-    "safety rail" the article talks about: even if the LLM gets confused
-    and tries to call write_pending_cam_inputs from the GREETING state,
-    that tool isn't in `allowed_tools(GREETING)` so the call wouldn't have
-    been generated. And if it ever IS generated (e.g. via prompt injection),
-    this function refuses to transition.
+    Transitions in priority order:
+      1. Explicit LLM tool call (primary)
+      2. Python safety transition on clear user signal (V1 — eval feedback)
+      3. Stay in current state
     """
     called_names = {tc.get("name") for tc in (tool_calls or [])}
 
     if current == State.GREETING:
-        # CAM acknowledged → move to open question. No tool call needed; we
-        # transition on the next user turn after greeting.
         if transcript:
             return State.OPEN_QUESTION
         return State.GREETING
 
     if current == State.OPEN_QUESTION:
         if "start_task_loop" in called_names:
+            return State.TASK_BY_TASK_LOOP
+        # SAFETY: user is giving status content directly, skip the "what would
+        # you like to update?" loop and go to task processing.
+        if transcript and len(transcript.split()) > 5:
             return State.TASK_BY_TASK_LOOP
         return State.OPEN_QUESTION
 
@@ -418,30 +480,57 @@ def next_state(
             ctx.current_task_idx += 1
             if ctx.current_task_idx >= len(ctx.cam_tasks):
                 return State.CONFIRM_BLOCK
+        # SAFETY: user signaled "done" AND we have data — advance.
+        if _transcript_matches(transcript, _DONE_PHRASES) and _has_enough_data_to_confirm(ctx):
+            return State.CONFIRM_BLOCK
+        # SAFETY: every task has at least one captured update — advance.
+        if ctx and len(ctx.proposed_updates) >= len(ctx.cam_tasks) and len(ctx.cam_tasks) > 0:
+            return State.CONFIRM_BLOCK
         return State.TASK_BY_TASK_LOOP
 
     if current == State.CONFIRM_BLOCK:
         if "confirm_all" in called_names:
-            # Auto-advance through COMMIT to WRAPUP — write_pending_cam_inputs
-            # is a pure side-effect handled by the pipeline when it sees this
-            # transition. Conversationally, the LLM's reply text on this same
-            # turn IS the "updates submitted" goodbye, so the user hears one
-            # smooth closing instead of waiting through an empty COMMIT turn.
             return State.WRAPUP
         if "reject_all" in called_names:
             return State.ESCALATE
         if "edit_one" in called_names:
             return State.TASK_BY_TASK_LOOP
+        # SAFETY: explicit edit signal — go back to task loop
+        if _transcript_matches(transcript, _EDIT_PHRASES):
+            return State.TASK_BY_TASK_LOOP
+        # SAFETY: explicit no — escalate
+        if _transcript_matches(transcript, _NO_PHRASES):
+            return State.ESCALATE
+        # SAFETY: clear affirmative AND no negative — advance to WRAPUP.
+        # Order matters: check negatives first so "no, change task one" goes
+        # to TASK_BY_TASK_LOOP via _EDIT_PHRASES above, not WRAPUP.
+        if _transcript_matches(transcript, _YES_PHRASES):
+            return State.WRAPUP
         return State.CONFIRM_BLOCK
 
     if current == State.COMMIT:
-        # Vestigial — kept so any LLM that DID call write_pending_cam_inputs
-        # still advances correctly. Normal path skips COMMIT entirely.
         if "write_pending_cam_inputs" in called_names:
             return State.WRAPUP
-        return State.WRAPUP  # auto-advance after one turn regardless
+        return State.WRAPUP
 
     return current  # WRAPUP / ESCALATE are terminal
+
+
+def safety_transition_triggered(
+    current: State,
+    new: State,
+    tool_calls: list[dict],
+) -> bool:
+    """True when the transition was forced by a safety rule, not the LLM.
+
+    Used by the pipeline to fire the write_pending_cam_inputs side-effect
+    when a safety transition advanced past CONFIRM_BLOCK without the LLM
+    calling confirm_all.
+    """
+    called_names = {tc.get("name") for tc in (tool_calls or [])}
+    if current == State.CONFIRM_BLOCK and new == State.WRAPUP:
+        return "confirm_all" not in called_names
+    return False
 
 
 # Hardcoded escalation phrase — article §5. Never let the LLM improvise this.
