@@ -7,23 +7,25 @@
 
 ---
 
-## Current State (2026-05-17)
+## Current State (2026-05-21)
 
 | Field | Value |
 |---|---|
-| **Phase** | Phase 16 complete — Productionization (real-data endpoints + cycle heartbeat + LLM circuit breaker + immutable audit log) |
-| **Tests** | **708 / 708 default suite passing** + 63 / 63 Phase 15 dashboard suite + 407 legacy skipped (`@pytest.mark.legacy`) + 42 integration deselected |
-| **Last procedure run** | 2026-05-17 (Phase 16 — full doc + endpoint sweep) |
+| **Phase** | Phase 17 complete — voice added as a channel on the existing Teams text path. Phase 16 productionization features unchanged. |
+| **Tests** | 708 / 708 default suite + 63 / 63 Phase 15 dashboard + 58 / 58 voice_v2 + 25 / 25 teams_voice_io + 11 / 11 conversation flow + 60 / 60 voice eval (stress) — total **925 passing across 6 suites**; 407 legacy skipped; 42 integration deselected |
+| **Last procedure run** | 2026-05-21 — voice integration smoke (in-process + WebSocket round-trip both green) |
 | **Last production cycle** | 2026-05-17 — `20260517T104629Z`, 5/5 CAMs (Teams chat relay), 99 turns, 16m 53s, real `.mpp` rewritten as `IMS_2026-05-17_1101z.mpp` via COM bridge |
 | **Open FAILs** | None |
-| **Transport mode tested** | `simulated` (integration tests); `teams_chat` (live Teams relay, last production) |
+| **Transport mode tested** | `simulated` (integration tests); `teams_chat` (live Teams relay, last production); `teams_voice` (Phase 17 — voice IN via Whisper, voice OUT via TTS attachment — verified by smoke, needs first live cycle to validate end-to-end) |
 | **IMS** | AI Agent Server Rack — 100 tasks (92 work + 8 milestones), 5 CAMs |
 | **Python** | 3.13.3 |
 | **MPP backend** | COM (working — verified 2026-05-17 cycle) — MPXJ still configured as fallback |
-| **New runtime state files** | `data/cycle_heartbeat.json`, `data/llm_circuit.json` (both gitignored — regenerated per cycle) |
-| **New audit table** | `data/ims.db` → `audit_log` (append-only, indexed on ts/action/actor_user) |
-| **Rollback tags** | `pre-phase16-2026-05-17` (Phase 16 entry point); `pre-phase17-voice-upgrade-2026-05-17` (next, before Phase 17 begins) |
-| **Next phase** | Phase 17 — major voice agent upgrade (high-complexity, break-glass possible — see `docs/PHASE-17-PLAN.md`) |
+| **Phase 16 runtime state** | `data/cycle_heartbeat.json`, `data/llm_circuit.json` (gitignored), `data/ims.db::audit_log` table |
+| **Phase 17 runtime state** | `data/voice_turns/`, `data/voice_v2_spend.json`, `data/voice_judge/`, `data/voice_sessions/`, `data/conversation_test_runs/` (all gitignored) |
+| **Voice spend (cumulative across all of Phase 17)** | $2.01 of $25 cap (8%) — hard ceiling enforced via `agent/voice_v2/llm_openai.py::SpendCapExceeded` |
+| **Rollback tags** | `pre-phase16-2026-05-17`, `pre-phase17-voice-upgrade-2026-05-17` (both pushed) |
+| **Branches** | `master` (active); `phase17/voice-upgrade` + `phase17/voice-integration` retained on origin for reference; `backup/pre-phase17-voice-upgrade` for hard rollback |
+| **Next phase** | TBD — Phase 17 followups documented in `docs/PHASE-17-FOLLOWUPS.md` (off-topic guard, Deepgram Flux STT migration, etc.); project on pause to work other priorities |
 
 ---
 

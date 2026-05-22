@@ -623,6 +623,73 @@ Answer a natural language question about the schedule. The engine first tries to
 
 ---
 
+## GET /teams/audio/{audio_id}
+
+*(Phase 17.3)* Serves a single-use MP3 audio clip for a Teams chat audio attachment. Unauthenticated (audio_id is an unguessable UUID handed out once).
+
+The voice-out shim in `agent/voice/teams_voice_io.py` registers TTS bytes under a UUID and posts the resulting URL as a Bot Framework attachment when ATLAS replies to a CAM. Teams clients then fetch this URL to play the ATLAS reply inline alongside the text bubble.
+
+**Response 200:** `Content-Type: audio/mpeg` — raw MP3 bytes.
+**Response 404:** `{"detail": "Audio not found or expired"}` — already consumed (one-shot) or older than `TEAMS_VOICE_OUT_TTL_SECONDS` (default 300s).
+
+> **Operator note:** the URL is only useful when the server is publicly reachable. Set `DASHBOARD_PUBLIC_URL=https://<your-ngrok>.ngrok.io` (or your prod domain) in `.env`. When the URL detects `localhost`, voice-out auto-falls-back to text-only to avoid posting unreachable attachment URLs.
+
+---
+
+## GET /voice/test  (Phase 17.4, gated)
+
+Browser-based voice tester that drives the production `ChatInterviewSession` + `InterviewAgent` end-to-end. Gated behind `VOICE_AGENT_V2_TESTER=true`. The tester is the developer's preview of what real CAMs experience in Teams — both code paths run identical interview logic.
+
+UI: mic capture (push-to-talk), audio playback, CAM dropdown, live state telemetry, per-turn cost / latency / guard pills. See `/api/voice/stream` for the WebSocket protocol.
+
+**Response 200:** HTML
+**Response 404:** when env flag is off
+
+---
+
+## WebSocket /api/voice/stream  (Phase 17.4, gated)
+
+WebSocket bridge between browser mic + text input and the production `ChatInterviewSession`. Same gating as `/voice/test`.
+
+**Client → server messages:**
+- `{"type":"select_cam","email":"alice@program.mil"}`
+- `{"type":"audio","mime":"audio/webm","b64":"..."}`
+- `{"type":"text","text":"..."}`
+- `{"type":"reset"}`
+
+**Server → client messages:**
+- `{"type":"hello","cycle_id":"...","cams":[...]}`
+- `{"type":"session_started","cam":{...},"tasks":[...],"state":"greeting"}` (state names from production `InterviewAgent`)
+- `{"type":"transcript","text":"..."}`
+- `{"type":"thinking","stage":"transcribing|processing"}`
+- `{"type":"state","state":"...","previous":"..."}`
+- `{"type":"reply_text","text":"..."}`
+- `{"type":"reply_audio","mime":"audio/mpeg","b64":"...","voice":"..."}`
+- `{"type":"turn_summary","turn_id":"...","llm_cost_usd":...,"llm_total_ms":...,"tts_first_audio_ms":...}`
+- `{"type":"reset_ack","cycle_id":"..."}`
+- `{"type":"error","detail":"..."}`
+
+---
+
+## Voice configuration  (Phase 17)
+
+Environment variables that govern voice IN/OUT through Teams `/bot/messages` and the standalone tester:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TEAMS_VOICE_IN` | `true` | When `true`, audio attachments on incoming Teams messages are downloaded via Bot Framework auth and transcribed via Whisper. When `false`, attachments are ignored — text-only path runs. |
+| `TEAMS_VOICE_OUT` | `true` | When `true`, ATLAS text replies are also sent as TTS audio attachments alongside the text. When `false`, only text is sent. |
+| `TEAMS_VOICE_OUT_MIN_CHARS` | `20` | Skip TTS synthesis on replies shorter than this. ("Got it." etc. stay text-only.) |
+| `TEAMS_VOICE_OUT_TTL_SECONDS` | `300` | How long outbound audio is cached for `/teams/audio/{audio_id}` retrieval. |
+| `DASHBOARD_PUBLIC_URL` | `""` | Public-facing base URL of this server. Required for voice-out attachments to be reachable by Teams. Localhost URLs auto-detect and fall back to text-only. |
+| `VOICE_AGENT_V2_TESTER` | `""` (off) | Enables the `/voice/test` browser tester + `/api/voice/stream` WebSocket. Not needed for production Teams operation. |
+| `VOICE_AGENT_V2_MAX_SPEND_USD` | `25.00` | Hard cap on cumulative Whisper + TTS + LLM-as-judge OpenAI spend. Tripped → `SpendCapExceeded` raised. |
+| `OPENAI_API_KEY` | required | For Whisper STT (voice-IN) and OpenAI TTS fallback (when ElevenLabs is rate-limited or quota-exhausted). |
+
+All voice flags are independent. Setting all three (`TEAMS_VOICE_IN`, `TEAMS_VOICE_OUT`, `VOICE_AGENT_V2_TESTER`) to `false` returns server behavior to Phase 16.
+
+---
+
 ## GET /api/portfolio
 
 *(Phase 9.6)* Returns the multi-program portfolio health summary. Requires read API key.

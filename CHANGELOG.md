@@ -4,6 +4,101 @@ All notable changes to the IMS Agent are documented here. Entries are organized 
 
 ---
 
+## Phase 17 — Voice as a channel on the existing flow (2026-05-21)
+
+**Summary:** Voice capability added as an additive channel on the existing text-via-Teams workflow. CAMs can now reply by typing OR by sending a Teams voice message — both routes hit the same `ChatInterviewSession` → `InterviewAgent` → `cycle_runner` pipeline. ATLAS replies are sent as text AND TTS audio attachment (CAMs pick which modality to listen to / read). The standalone `/voice/test` web tester drives the production `ChatInterviewSession` (no parallel conversation engine). **Zero changes to production interview behavior, `cycle_runner.py`, `interview_agent.py`, `teams_chat_connector.py`, `cam_inputs` shape, or any dashboard endpoint.** 83/83 unit tests + smoke verified against live server.
+
+This phase shipped in two PRs that landed together:
+- **PR #1** (`phase17/voice-upgrade`, closed in favor of #2) — standalone tester + conversation engine + 12 iterations + 60-scenario eval at 60/60 (100%). All this code remains on disk under `agent/voice_v2/` for reference; the conversation engine components are marked DEPRECATED with banner headers.
+- **PR #2** (`phase17/voice-integration`, merged to master) — integration of voice as a channel on the production text path, plus realignment of the tester onto the production `InterviewAgent`.
+
+### What CAMs see now
+
+| Channel | Behavior |
+|---|---|
+| Type text in Teams chat | Unchanged from Phase 16 — text → `InterviewAgent` → text reply |
+| Send Teams voice message | NEW — audio → Whisper STT → same `InterviewAgent` → text reply + TTS audio attachment |
+| ATLAS reply | NEW — text bubble + audio attachment (CAM listens or reads); short acks stay text-only |
+
+CAM "switches" modalities implicitly: typing always works, sending a voice memo always works. No per-CAM preference flag.
+
+### Added
+
+- **`agent/voice/teams_voice_io.py`** (~280 LOC) — edge shim for both directions:
+  - `is_voice_message(body)`, `download_voice_attachment(body)`, `transcribe_voice_attachment(body)`
+  - `register_outbound_audio(bytes, content_type)`, `consume_outbound_audio(audio_id)` (one-shot serve-and-discard)
+  - `synthesize_reply_audio(text, cam_name, cam_email)` with per-CAM voice from `ELEVENLABS_CAM_VOICES`
+  - `bf_reply_with_audio(...)` — combined text + audio Teams Bot Framework activity, falls back to text-only on any failure
+- **`agent/voice_v2/` package** (~3500 LOC across 13 modules) — Phase 17 standalone work. The conversation engine (`pipeline.py`, `state_machine.py`, `field_router.py`, `reply_templates.py`, `small_talk.py`) is deprecated in favor of production `InterviewAgent`; the audio/observability modules (`stt_openai.py`, `tts.py`, `turn_log.py`, `llm_openai.py` with $25 spend cap, `judge.py`) remain in active use.
+- **`/voice/test`** browser tester (`agent/dashboard/static/voice_tester/`) — vanilla JS, no framework, drives the production `ChatInterviewSession` end-to-end. Mic capture, audio playback, CAM dropdown, live state + cost + guard telemetry.
+- **3 new FastAPI routes** in `agent/dashboard/server.py` (all gated behind `VOICE_AGENT_V2_TESTER=true`):
+  - `GET /voice/test` — tester page
+  - `WebSocket /api/voice/stream` — bridges browser mic ↔ production InterviewAgent
+  - `GET /teams/audio/{audio_id}` — serves cached TTS audio for Teams attachments (one-shot)
+- **`scripts/eval_voice_v2.py`** — 60-scenario stress eval covering happy / edge / error / drip-fed / human-messy / adversarial tiers. Final result: 60/60 (100%) state-pass.
+- **`scripts/test_conversation_flow.py`** — automated conversation flow tester (11 realistic scenarios including the exact user-reported "you lead → 3 tasks" flow). Final result: 11/11 (100%).
+- **`tests/test_voice_v2.py`** — 58 unit tests covering all voice_v2 modules.
+- **`tests/test_teams_voice_io.py`** — 25 unit tests covering the integration shim (attachment detection, STT happy path + failure modes, audio cache one-shot semantics, voice-out disabled / localhost / failed-post fallbacks, /teams/audio route).
+- **`docs/PHASE-17-PLAN.md`** — original scope.
+- **`docs/PHASE-17-DAY1-REPORT.md`** — iteration progression (V0 baseline 13% → V12b 100%) with per-tier breakdown.
+- **`docs/PHASE-17-FOLLOWUPS.md`** — captured live-test observations (off-topic guard, markdown stripper, deferred items).
+- **`docs/PHASE-17-INTEGRATION-PLAN.md`** — concrete integration plan including which voice_v2 modules to keep vs deprecate.
+
+### Changed
+
+- **`agent/dashboard/server.py`** — `/bot/messages` route gained two thin shims:
+  - Voice-IN pre-process: detect audio attachment → Whisper transcribe → use transcript as `message_text`. Text path entirely unchanged.
+  - Voice-OUT post-process via local `_bf_reply_with_voice` helper that wraps the 5 existing `_bf_reply` call sites; sends text + audio attachment when `TEAMS_VOICE_OUT=true` (default on).
+- **`.env.example`** — documented `TEAMS_VOICE_IN`, `TEAMS_VOICE_OUT`, `TEAMS_VOICE_OUT_MIN_CHARS`, `TEAMS_VOICE_OUT_TTL_SECONDS`, `DASHBOARD_PUBLIC_URL`.
+- **`.gitignore`** — voice_v2 runtime artifacts (`server.log`, `data/conversation_test_runs/`, `data/voice_turns/`, `data/voice_v2_spend.json`, `data/voice_judge/`, `data/voice_sessions/`).
+
+### Deprecated (kept on disk for rollback / reference)
+
+The Phase 17 standalone conversation engine in `agent/voice_v2/` — these modules are NOT imported by production or by the rewired tester. Each has a `[DEPRECATED in Phase 17.4]` banner header:
+- `pipeline.py` (Session orchestrator)
+- `state_machine.py` (parallel FSM)
+- `field_router.py` (Python field extractor)
+- `reply_templates.py` (deterministic state-entry templates)
+- `small_talk.py` (small-talk gate)
+
+The production interview engine is `agent/voice/interview_agent.py` — unchanged.
+
+### Unchanged (Phase 17 contract: existing flow preserved)
+
+`agent/cycle_runner.py`, `agent/voice/interview_agent.py`, `agent/voice/teams_chat_connector.py` (except for the audio-aware `_bf_reply_with_voice` helper local to `/bot/messages`), `cam_inputs` format, all `/api/*` endpoints, all dashboard panels, all downstream analysis (CPM / SRA / EVM / DCMA / variance / executive briefing / dashboard). Production cycles run identically to Phase 16 when voice flags are off.
+
+### Rollback paths
+
+| Layer | How |
+|---|---|
+| Voice IN off | `TEAMS_VOICE_IN=false` in `.env`, restart |
+| Voice OUT off | `TEAMS_VOICE_OUT=false` in `.env`, restart |
+| Standalone tester off | unset `VOICE_AGENT_V2_TESTER`, restart |
+| All voice off | unset all three flags — server runs Phase 16 behavior |
+| Hard revert to pre-voice | `git reset --hard pre-phase17-voice-upgrade-2026-05-17` |
+| Branch | `master` is the new baseline; `phase17/voice-upgrade` retained on origin for reference; `pre-phase17-voice-upgrade-2026-05-17` and `backup/pre-phase17-voice-upgrade` tags still pushed |
+
+### Tests
+
+- 58/58 voice_v2 unit tests
+- 25/25 teams_voice_io shim tests
+- 11/11 conversation flow scenarios (production-representative)
+- 60/60 voice eval scenarios (stress)
+- In-process smoke: ChatInterviewSession drove a multi-task interview to `complete` with `TaskResult` data captured correctly (`pct=60`, `eac=2026-06-15`, etc.)
+- WebSocket round-trip smoke: hello → select_cam → text turn → state transition → reply_text + 164KB MP3 audio attachment → turn_summary
+
+### Spend across the 14-iteration build
+
+OpenAI Whisper + TTS + LLM-as-judge cumulative spend during all of Phase 17 (development + eval + manual testing): **$2.01 of $25 cap** (8%). Hard ceiling enforcement verified.
+
+### Commits on master
+
+- `eba279c` fix(phase17.4): synthetic test tasks must use datetime objects, not strings (post-merge smoke catch)
+- `9b9cec2` Merge pull request #2 from johnfforbes3/phase17/voice-integration
+- (Full iteration history under `git log --oneline phase17/voice-upgrade ^pre-phase17-voice-upgrade-2026-05-17`)
+
+---
+
 ## Phase 16 — Productionization (2026-05-17)
 
 **Summary:** Three production-readiness tracks landed in one phase. (1) Real data on the dashboard — three new endpoints (`/api/sra`, `/api/schedule/summary`, `/api/hrm/history`) plus an EVM block persisted into `cycle_history.json` so `/api/evm/history` finally returns real series; five mock-data panels now hydrate from live backend data. (2) Pipeline resilience — persistent cycle heartbeat with 30-min TTL and stalled-cycle detection (survives process restart, which would have caught yesterday's `20260517T015651Z` stuck cycle in seconds); LLM circuit breaker that trips for 15 min on billing errors (`credit balance too low`) so we don't keep burning failed Anthropic requests; `/health` rolled up to `status: "degraded"` when any of deadman / stalled / breaker-open is true. (3) Auth, audit, approval — append-only SQLite `audit_log` table in `data/ims.db` with per-user attribution via `X-User-Email` header (best-effort, lieu of SSO); new `GET /api/audit` endpoint; every cycle-trigger / admin-purge / approval-approve / approval-reject is logged with actor/IP/tier/target/outcome/detail. **708 / 708 default suite passing + 63 / 63 Phase 15 dashboard tests passing.** Rollback tag `pre-phase16-2026-05-17` (created pre-phase as safety net). Honest about deferred scope: real SSO/OIDC, per-user RBAC, audit retention/rotation, tamper-evidence hash chain (all documented in `docs/PRODUCTIONIZATION.md`).
