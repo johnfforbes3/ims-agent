@@ -94,26 +94,33 @@ def _load_test_cams() -> list[dict]:
 
 
 def _sample_tasks_for(name: str) -> list[dict]:
-    """Synthesized but consistent (hashable on name) test tasks. Format
-    matches what InterviewAgent expects: at minimum task_id + name +
-    percent_complete + finish."""
+    """Synthesized but consistent (hashable on name) test tasks.
+
+    Phase 17.4 — InterviewAgent expects `finish` and `baseline_finish`
+    as datetime objects (it compares them with datetime.now()), so we
+    parse the ISO strings into datetimes here. This matches the shape
+    that file_handler.IMSFileHandler.parse() produces in production.
+    """
+    from datetime import datetime
+    def _dt(iso: str) -> datetime:
+        return datetime.fromisoformat(iso)
     h = sum(ord(c) for c in name)
     return [
         {"task_id": str(1 + h % 7),
          "name": "Power subsystem design",
          "percent_complete": 50 + h % 30,
-         "finish": "2026-06-15",
-         "baseline_finish": "2026-06-15"},
+         "finish": _dt("2026-06-15T17:00:00"),
+         "baseline_finish": _dt("2026-06-15T17:00:00")},
         {"task_id": str(10 + h % 5),
          "name": "Thermal qualification",
          "percent_complete": 30 + h % 40,
-         "finish": "2026-07-20",
-         "baseline_finish": "2026-07-20"},
+         "finish": _dt("2026-07-20T17:00:00"),
+         "baseline_finish": _dt("2026-07-20T17:00:00")},
         {"task_id": str(20 + h % 3),
          "name": "Integration & test readiness",
          "percent_complete": 10 + h % 25,
-         "finish": "2026-09-01",
-         "baseline_finish": "2026-09-01"},
+         "finish": _dt("2026-09-01T17:00:00"),
+         "baseline_finish": _dt("2026-09-01T17:00:00")},
     ]
 
 
@@ -201,10 +208,21 @@ async def serve_websocket(websocket) -> None:
                     continue
                 tester = TesterSession(cycle_id, selected)
                 greeting = tester.initial_greeting()
+                # JSON can't serialize datetime; emit ISO strings on the wire.
+                # The TesterSession itself still holds datetime objects for
+                # the production InterviewAgent.
+                wire_tasks = []
+                for t in selected["tasks"]:
+                    wt = dict(t)
+                    for k in ("finish", "baseline_finish", "start"):
+                        v = wt.get(k)
+                        if hasattr(v, "isoformat"):
+                            wt[k] = v.isoformat()
+                    wire_tasks.append(wt)
                 await websocket.send_text(json.dumps({
                     "type": "session_started",
                     "cam": {"email": selected["email"], "name": selected["name"]},
-                    "tasks": selected["tasks"],
+                    "tasks": wire_tasks,
                     "state": tester.current_state(),
                 }))
                 # Emit greeting as a normal reply_text + audio
