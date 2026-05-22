@@ -35,8 +35,8 @@ from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, WebSocket
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1129,6 +1129,29 @@ async def graph_serve_audio(audio_id: str):
     return FastAPIResponse(content=wav, media_type="audio/wav")
 
 
+@app.get("/teams/audio/{audio_id}")
+async def teams_serve_audio(audio_id: str):
+    """
+    Phase 17.3 — Serve a single-use MP3 audio clip for a Teams chat audio
+    attachment.
+
+    `agent.voice.teams_voice_io.bf_reply_with_audio` registers TTS bytes
+    under a UUID and posts the resulting URL as a Bot Framework attachment.
+    Teams clients then fetch this URL to play the ATLAS reply inline.
+
+    Audio is served exactly once and dropped from the cache. Stale entries
+    expire automatically (TEAMS_VOICE_OUT_TTL_SECONDS, default 300 s).
+    """
+    from fastapi import HTTPException
+    from fastapi.responses import Response as FastAPIResponse
+    from agent.voice.teams_voice_io import consume_outbound_audio
+    pair = consume_outbound_audio(audio_id)
+    if pair is None:
+        raise HTTPException(status_code=404, detail="Audio not found or expired")
+    audio_bytes, content_type = pair
+    return FastAPIResponse(content=audio_bytes, media_type=content_type)
+
+
 # ---------------------------------------------------------------------------
 # Bot Framework chat endpoint — Teams text interviews
 # ---------------------------------------------------------------------------
@@ -1166,6 +1189,27 @@ async def bot_messages(request: Request):
         conversation_id = conversation.get("id", "")
         activity_id   = body.get("id", "")
 
+        # Phase 17.2 — VOICE-IN SHIM.
+        # If the message has an audio attachment (CAM sent a voice memo
+        # instead of typing), transcribe via Whisper and use the transcript
+        # as message_text. The text path downstream is untouched. When the
+        # CAM types a reply, message_text is already populated and we skip
+        # the STT path. Per-cycle the CAM can switch modalities at will.
+        if not message_text:
+            try:
+                from agent.voice.teams_voice_io import is_voice_message, transcribe_voice_attachment
+                if is_voice_message(body):
+                    logger.info("action=voice_in_attachment_detected user=%s", user_id[:8] + "...")
+                    transcript = transcribe_voice_attachment(body)
+                    if transcript:
+                        message_text = transcript
+                        logger.info(
+                            "action=voice_in_used_transcript user=%s text_len=%d",
+                            user_id[:8] + "...", len(transcript),
+                        )
+            except Exception as _voice_exc:
+                logger.warning("action=voice_in_shim_error error=%s", _voice_exc)
+
         if not message_text or not user_id:
             return JSONResponse({"status": "ok"})
 
@@ -1198,6 +1242,30 @@ async def bot_messages(request: Request):
             ChatInterviewManager, _bf_reply, _bf_typing, save_cam_session,
         )
 
+        # Phase 17.3 — VOICE-OUT SHIM.
+        # Local helper that sends the text reply AND (when TEAMS_VOICE_OUT
+        # is enabled, which is the default) also attaches a TTS audio clip
+        # so the CAM can either read or listen. The existing text-only
+        # behavior is preserved 1:1 — text is always sent, audio is purely
+        # additive. CAM "switches" to text by just typing — no flag.
+        def _bf_reply_with_voice(reply_text: str,
+                                 cam_name: str = "", cam_email: str = "") -> None:
+            try:
+                from agent.voice.teams_voice_io import (
+                    voice_out_enabled, synthesize_reply_audio, bf_reply_with_audio,
+                )
+            except Exception:
+                _bf_reply(service_url, conversation_id, activity_id, reply_text)
+                return
+            if not voice_out_enabled():
+                _bf_reply(service_url, conversation_id, activity_id, reply_text)
+                return
+            audio = synthesize_reply_audio(reply_text, cam_name, cam_email)
+            bf_reply_with_audio(
+                service_url, conversation_id, activity_id,
+                reply_text, audio, cam_name, cam_email,
+            )
+
         manager = ChatInterviewManager.get()
         session = manager.get_or_start_session(user_id, user_email)
 
@@ -1209,8 +1277,7 @@ async def bot_messages(request: Request):
                     logger.info("action=cam_session_saved_idle email=%s", user_email)
                 except Exception as _e:
                     logger.debug("action=session_persist_failed error=%s", _e)
-            _bf_reply(
-                service_url, conversation_id, activity_id,
+            _bf_reply_with_voice(
                 "Hey! No status check scheduled right now — I'll reach out when it's time. "
                 "You're all set until then!",
             )
@@ -1236,7 +1303,7 @@ async def bot_messages(request: Request):
         if not session.started:
             # First contact — send the opening greeting
             greeting = session.start()
-            _bf_reply(service_url, conversation_id, activity_id, greeting)
+            _bf_reply_with_voice(greeting, session.cam_name, session.email or user_email)
             logger.info("action=interview_started cam=%s user=%s", session.cam_name, user_id[:8])
             # Register session and push bot greeting event
             _relay.register_session(session.email or user_email, session.cam_name, _sid)
@@ -1260,7 +1327,7 @@ async def bot_messages(request: Request):
                 # Interview already finished — handle final wrap-up message gracefully
                 if session.is_in_grace_period():
                     ack = session.accept_final_message(message_text)
-                    _bf_reply(service_url, conversation_id, activity_id, ack)
+                    _bf_reply_with_voice(ack, session.cam_name, session.email or user_email)
                     logger.info("action=grace_reply_sent cam=%s", session.cam_name)
                     _relay.push_bot_turn(
                         cam_name=session.cam_name,
@@ -1280,12 +1347,12 @@ async def bot_messages(request: Request):
                         f"Hey {first_name} — I think we already wrapped up earlier. "
                         f"You're all set! I'll be in touch for the next cycle."
                     )
-                    _bf_reply(service_url, conversation_id, activity_id, closing)
+                    _bf_reply_with_voice(closing, session.cam_name, session.email or user_email)
             else:
                 # Normal mid-interview message
                 next_msg = session.process(message_text)
                 if next_msg:
-                    _bf_reply(service_url, conversation_id, activity_id, next_msg)
+                    _bf_reply_with_voice(next_msg, session.cam_name, session.email or user_email)
                     _relay.push_bot_turn(
                         cam_name=session.cam_name,
                         cam_email=session.email or user_email,
@@ -1950,6 +2017,102 @@ async def api_portfolio_register(
         return JSONResponse({"error": "Registration failed"}, status_code=500)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Missing required field: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 17 — Voice Agent v2 (chained pipeline, OpenAI Whisper + GPT-4o + ElevenLabs/OpenAI TTS)
+#
+# All routes here are gated behind VOICE_AGENT_V2_TESTER=true (default OFF).
+# When the env flag is off, requests get 404 — the new pipeline is invisible
+# to production traffic.
+#
+# Rollback: `git reset --hard pre-phase17-voice-upgrade-2026-05-17`
+# Soft rollback: unset the env flag, restart server.
+# ---------------------------------------------------------------------------
+
+_VOICE_V2_TESTER_ENABLED = os.getenv("VOICE_AGENT_V2_TESTER", "").lower() in ("1", "true", "yes")
+
+
+@app.get("/voice/test")
+async def voice_tester_page():
+    """Serve the voice-tester HTML page. Gated behind VOICE_AGENT_V2_TESTER env flag."""
+    if not _VOICE_V2_TESTER_ENABLED:
+        raise HTTPException(status_code=404, detail="Voice tester not enabled. Set VOICE_AGENT_V2_TESTER=true.")
+    path = Path(__file__).parent / "static" / "voice_tester" / "index.html"
+    if not path.exists():
+        raise HTTPException(status_code=500, detail="voice_tester/index.html missing — Phase 17 not deployed correctly")
+    return FileResponse(path)
+
+
+@app.websocket("/api/voice/stream")
+async def voice_stream_ws(websocket: WebSocket):
+    """WebSocket bridge between browser mic + voice_v2 pipeline."""
+    if not _VOICE_V2_TESTER_ENABLED:
+        # Can't 404 a WebSocket — accept + immediately close with a reason.
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "detail": "Voice tester not enabled (VOICE_AGENT_V2_TESTER=true)."})
+        await websocket.close()
+        return
+    from agent.voice_v2.transport_web import serve_websocket
+    await serve_websocket(websocket)
+
+
+@app.post("/api/voice/replay/{turn_id}")
+async def voice_replay(turn_id: str, _auth: None = Depends(_require_admin_key)):
+    """Re-run a logged turn against the CURRENT pipeline config.
+
+    Returns side-by-side comparison: original turn vs replayed turn.
+    Useful for A/B testing prompt or state-machine changes.
+    """
+    if not _VOICE_V2_TESTER_ENABLED:
+        raise HTTPException(status_code=404, detail="Voice tester not enabled.")
+    from agent.voice_v2 import turn_log, pipeline as v2pipe
+    original = turn_log.find_turn(turn_id)
+    if not original:
+        raise HTTPException(status_code=404, detail=f"turn_id not found: {turn_id}")
+    # Spin up a one-shot session with the original CAM context — note that
+    # cam_tasks won't be available in the log, so the replay is text-only
+    # (state-machine + LLM + guards) without IMS-context grounding for
+    # hallucination checks. Good enough for prompt-change A/B tests.
+    session = v2pipe.start_session(
+        cycle_id=original.cycle_id + "-replay",
+        cam_email=original.cam_email,
+        cam_name=original.cam_name,
+        cam_tasks=[],
+        transport="replay",
+    )
+    replayed = session.replay_with_transcript(
+        transcript=original.stt_transcript,
+        state_before=original.state_before,
+    )
+    return JSONResponse({
+        "original": {
+            "turn_id": original.turn_id,
+            "state_before": original.state_before,
+            "state_after": original.state_after,
+            "transcript": original.stt_transcript,
+            "reply_text": original.llm_text_out,
+            "tool_calls": original.llm_tool_calls,
+            "llm_cost_usd": original.llm_cost_usd,
+            "timestamp_utc": original.timestamp_utc,
+        },
+        "replayed": {
+            "turn_id": replayed.turn_id,
+            "state_before": replayed.state_before.value,
+            "state_after": replayed.state_after.value,
+            "transcript": replayed.transcript,
+            "reply_text": replayed.reply_text,
+            "tool_calls": replayed.tool_calls,
+            "llm_cost_usd": replayed.llm_cost_usd,
+        },
+    })
+
+
+@app.get("/api/voice/spend")
+async def voice_spend(_auth: None = Depends(_require_api_key)):
+    """Return cumulative voice agent v2 spend + cap headroom."""
+    from agent.voice_v2 import llm_openai
+    return JSONResponse(llm_openai.current_spend())
 
 
 # ---------------------------------------------------------------------------
